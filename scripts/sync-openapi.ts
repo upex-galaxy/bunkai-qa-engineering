@@ -18,8 +18,8 @@
  *   bun run api:sync --config                     # Use saved config
  */
 
-import { $ } from 'bun';
 import { createInterface } from 'node:readline';
+import { $ } from 'bun';
 
 // ============================================
 // Configuration
