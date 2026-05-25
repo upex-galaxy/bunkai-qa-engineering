@@ -419,4 +419,17 @@ In order of severity:
 
 ---
 
+## 14. GIT STRATEGY
+
+<!-- git-flow-master:strategy:github-flow -->
+
+This project uses a **`github-flow` variant** with a documented owner exception:
+
+- **Code, test code, framework changes** (`tests/`, `api/`, `cli/`, `scripts/`, `config/`, KATA bases, fixtures, OpenAPI pipeline) → create a `test/*`, `feat/*`, `fix/*`, `refactor/*`, or `chore/*` branch → open a PR targeting `main` → review → merge.
+- **Docs, `.context/` files, `CLAUDE.md`, `README.md`, `.agents/` config, skill prose, and other non-code maintenance** → repo owner (`saiotest` / Ely) pushes directly to `main`.
+
+When the change type is ambiguous, default to branch + PR. `/git-flow-master` enforces this split automatically (auto-detects from changed paths and proposes the right route).
+
+---
+
 *AI persistent memory. Update when behaviors / skills / rules change.*
