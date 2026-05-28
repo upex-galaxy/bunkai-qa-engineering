@@ -70,8 +70,7 @@
       "Skill(business-feature-map)",
       "Skill(business-api-map)",
       "Skill(master-test-plan)",
-      "Skill(break-down-tests)",
-      "playwright-cli *"
+      "Skill(break-down-tests)"
     ],
     "deny": [
       "Bash(rm -rf *)",
