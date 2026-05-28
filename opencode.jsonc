@@ -11,7 +11,6 @@
   //   - Missing env vars resolve to empty string (no hard failure) — see CLAUDE.md
   //     Critical Reminder about stopping immediately when MCP credentials fail.
   "$schema": "https://opencode.ai/config.json",
-
   // Plugins:
   //   - @warp-dot-dev/opencode-warp: Warp terminal integration — surfaces
   //     OpenCode agent activity as native Warp notifications. Auto-installed
@@ -20,12 +19,18 @@
   //   - opencode-subagent-statusline: Cosmetic UX — shows the active subagent
   //     in the OpenCode status line so you can see which agent is running at
   //     a glance. Pure polish, no behavioral side effects.
-  "plugin": ["@warp-dot-dev/opencode-warp", "opencode-subagent-statusline"],
-
+  "plugin": [
+    "@warp-dot-dev/opencode-warp",
+    "opencode-subagent-statusline"
+  ],
   "mcp": {
     "context7": {
       "type": "local",
-      "command": ["npx", "-y", "@upstash/context7-mcp"],
+      "command": [
+        "npx",
+        "-y",
+        "@upstash/context7-mcp"
+      ],
       "enabled": true
     },
     "tavily": {
@@ -56,12 +61,24 @@
     },
     "dbhub": {
       "type": "local",
-      "command": ["bunx", "-y", "@bytebase/dbhub@latest", "--config", "dbhub.toml"],
+      "command": [
+        "bunx",
+        "-y",
+        "@bytebase/dbhub@latest",
+        "--config",
+        "dbhub.toml"
+      ],
       "enabled": true
     },
     "openapi": {
       "type": "local",
-      "command": ["bunx", "-y", "@ivotoby/openapi-mcp-server", "--tools", "dynamic"],
+      "command": [
+        "bunx",
+        "-y",
+        "@ivotoby/openapi-mcp-server",
+        "--tools",
+        "dynamic"
+      ],
       "enabled": true,
       "environment": {
         "API_BASE_URL": "{env:API_BASE_URL}",
@@ -78,7 +95,6 @@
       }
     }
   },
-
   // Permissions — mirrors .claude/settings.json 1:1.
   // Rule precedence: last matching pattern wins, so deny entries are placed
   // AFTER the broad allows they override (e.g. `git *` allow, then
@@ -89,7 +105,6 @@
     "websearch": "allow",
     "bash": {
       "*": "ask",
-
       "bun *": "allow",
       "bunx *": "allow",
       "npm *": "allow",
@@ -97,10 +112,8 @@
       "pnpm *": "allow",
       "yarn *": "allow",
       "node *": "allow",
-
       "git *": "allow",
       "gh *": "allow",
-
       "ls *": "allow",
       "cat *": "allow",
       "echo *": "allow",
@@ -121,11 +134,10 @@
       "diff *": "allow",
       "jq *": "allow",
       "curl *": "allow",
-
       "playwright *": "allow",
+      "playwright-cli *": "allow",
       "allure *": "allow",
       "acli *": "allow",
-
       "rm -rf *": "deny",
       "wget *": "deny",
       "sudo rm *": "deny",

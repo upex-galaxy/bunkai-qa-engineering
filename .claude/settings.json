@@ -41,6 +41,7 @@
       "Bash(jq *)",
       "Bash(curl *)",
       "Bash(playwright *)",
+      "Bash(playwright-cli *)",
       "Bash(allure *)",
       "Bash(acli *)",
       "mcp__context7__*",
@@ -69,7 +70,8 @@
       "Skill(business-feature-map)",
       "Skill(business-api-map)",
       "Skill(master-test-plan)",
-      "Skill(break-down-tests)"
+      "Skill(break-down-tests)",
+      "playwright-cli *"
     ],
     "deny": [
       "Bash(rm -rf *)",
