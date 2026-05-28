@@ -48,6 +48,7 @@ Thumbs.db
 # ===========================================
 .context/
 .claude/skills/
+.claude/settings.local.json
 .agents/skills/
 
 # ===========================================
@@ -71,5 +72,7 @@ docs/mcp/
 # Saved auth state and Playwright session output are regenerated every QA run
 # and are already gitignored. Prettier honors only .prettierignore (not
 # .gitignore), so without these globs format:check fails on transient output.
+# .playwright/cli.config.json is tracked config — keep it formatted (negated).
 .auth/
 .playwright/
+!.playwright/cli.config.json
