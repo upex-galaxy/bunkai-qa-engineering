@@ -23,8 +23,8 @@
 
 import type { ApiState } from '@data/types';
 
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 
 // ============================================
 // Logging (must be defined early for validation errors)
@@ -75,27 +75,47 @@ const ENV_FILE = resolve(PROJECT_ROOT, '.env');
 const ENV_TOKEN_KEY = 'API_TOKEN';
 
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║  PROJECT-SPECIFIC AUTHENTICATION CONFIGURATION                  ║
-// ║  Adapt this section to match YOUR project's auth mechanism.     ║
-// ║  The boilerplate default uses POST /auth/login with             ║
-// ║  { email, password } → { access_token }.                       ║
-// ║  Your project may use OAuth2, API keys, or a different format.  ║
+// ║  PROJECT-SPECIFIC AUTHENTICATION — Bunkai TMS                   ║
+// ║  Stack: Next.js 15 + Supabase Auth + custom PAT layer.          ║
+// ║  Flow (per /qa testability guide + Epic BK-29):                 ║
+// ║    1. POST /api/v1/auth/signin { email, password }              ║
+// ║       → { user, session, pat: { token: "bk_pat_..." } }         ║
+// ║    2. If signin returns 401 → POST /api/v1/auth/signup with     ║
+// ║       same credentials, then retry signin. Magic-link UI users  ║
+// ║       have no password — signup forces a password-bearing user. ║
+// ║    3. Token consumed by MCP servers = the PAT (Bearer-          ║
+// ║       compatible, long-lived, scoped). NOT the Supabase JWT.    ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
-/**
- * Build the request body for the auth endpoint.
- * Override this for different auth formats (e.g., { username, password }, OAuth2 form data).
- */
-function buildAuthPayload(email: string, password: string): Record<string, string> {
+const SIGNUP_PATH = '/auth/signup';
+const DEFAULT_PAT_SCOPES = ['atc:read', 'atc:write', 'run:execute', 'workspace:admin'];
+
+function buildAuthPayload(email: string, password: string): Record<string, unknown> {
   return { email, password };
 }
 
+function buildSignupPayload(email: string, password: string): Record<string, unknown> {
+  return {
+    email,
+    password,
+    pat_name: `api-login-${env.current}-${new Date().toISOString().slice(0, 10)}`,
+    pat_scopes: DEFAULT_PAT_SCOPES,
+  };
+}
+
 /**
- * Extract token fields from the auth response.
- * Override this if your API returns tokens in a different shape.
+ * Extract token fields from the Bunkai auth response.
  *
- * Expected response format (default):
- *   { access_token: string, token_type: string, expires_in: number, refresh_token?: string }
+ * Response shape (signin + signup both):
+ *   {
+ *     user: { id, email },
+ *     session: { access_token, refresh_token, expires_at },
+ *     pat: { token, id, scopes, expires_at }   <- token shown ONCE
+ *   }
+ *
+ * We persist the PAT (bk_pat_<prefix>.<secret>) — it is the canonical
+ * Bearer credential for headless agents and CLIs. The Supabase JWT in
+ * session.access_token is short-lived and cookie-flow oriented.
  */
 function extractTokenFromResponse(body: Record<string, unknown>): {
   accessToken: string
@@ -103,11 +123,17 @@ function extractTokenFromResponse(body: Record<string, unknown>): {
   expiresIn: number
   refreshToken: string | null
 } {
+  const pat = (body.pat ?? {}) as Record<string, unknown>;
+  const session = (body.session ?? {}) as Record<string, unknown>;
+  const expiresAt = pat.expires_at ?? session.expires_at;
+  const expiresIn = typeof expiresAt === 'number'
+    ? Math.max(0, expiresAt - Math.floor(Date.now() / 1000))
+    : 86400 * 30; // PATs default to no expiry → cache hint of 30 days
   return {
-    accessToken: String(body.access_token ?? ''),
-    tokenType: String(body.token_type ?? 'Bearer'),
-    expiresIn: Number(body.expires_in ?? 86400),
-    refreshToken: body.refresh_token ? String(body.refresh_token) : null,
+    accessToken: String(pat.token ?? ''),
+    tokenType: 'Bearer',
+    expiresIn,
+    refreshToken: session.refresh_token ? String(session.refresh_token) : null,
   };
 }
 
@@ -119,8 +145,37 @@ function extractTokenFromResponse(body: Record<string, unknown>): {
 // Authentication
 // ============================================
 
+async function postJson(url: string, payload: Record<string, unknown>): Promise<Response> {
+  return fetch(url, {
+    method: 'POST',
+    headers: {
+      'Accept': '*/*',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+function buildApiState(responseBody: Record<string, unknown>): ApiState | null {
+  const tokenData = extractTokenFromResponse(responseBody);
+  if (!tokenData.accessToken) {
+    log('Auth response did not contain a PAT token (body.pat.token).', 'error');
+    log(`Response keys: ${Object.keys(responseBody).join(', ')}`, 'error');
+    return null;
+  }
+  return {
+    token: tokenData.accessToken,
+    tokenType: tokenData.tokenType,
+    expiresIn: tokenData.expiresIn,
+    refreshToken: tokenData.refreshToken,
+    source: 'api-login',
+    createdAt: new Date().toISOString(),
+  };
+}
+
 async function authenticate(): Promise<ApiState | null> {
-  const url = `${config.apiUrl}${config.auth.loginEndpoint}`;
+  const signinUrl = `${config.apiUrl}${config.auth.loginEndpoint}`;
+  const signupUrl = `${config.apiUrl}${SIGNUP_PATH}`;
   const { email, password } = config.testUser;
 
   if (!email || !password) {
@@ -132,44 +187,47 @@ async function authenticate(): Promise<ApiState | null> {
     return null;
   }
 
-  log(`Authenticating against ${url}...`);
+  log(`Signing in at ${signinUrl}...`);
 
   try {
-    const payload = buildAuthPayload(email, password);
+    const signinRes = await postJson(signinUrl, buildAuthPayload(email, password));
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Accept': '*/*',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+    if (signinRes.ok) {
+      const body = (await signinRes.json()) as Record<string, unknown>;
+      return buildApiState(body);
+    }
 
-    if (!response.ok) {
-      const body = await response.text();
-      log(`Authentication failed with status ${response.status}`, 'error');
+    // 401 = user does not exist OR magic-link-only user (no password set).
+    // Try to provision via signup, which also returns a session + fresh PAT.
+    if (signinRes.status === 401) {
+      log(`Signin returned 401 — provisioning QA user via ${signupUrl}...`, 'warn');
+      const signupRes = await postJson(signupUrl, buildSignupPayload(email, password));
+
+      if (signupRes.ok) {
+        log('Signup succeeded — using PAT from signup response.', 'success');
+        const body = (await signupRes.json()) as Record<string, unknown>;
+        return buildApiState(body);
+      }
+
+      // 409 = user already exists with a different password → cannot recover blindly.
+      if (signupRes.status === 409) {
+        const body = await signupRes.text();
+        log('Signup returned 409 (user exists) but signin failed — password in .env likely wrong.', 'error');
+        log(`Response: ${body}`, 'error');
+        log('Rotate the password manually or update LOCAL_USER_PASSWORD / STAGING_USER_PASSWORD in .env.', 'info');
+        return null;
+      }
+
+      const body = await signupRes.text();
+      log(`Signup failed with status ${signupRes.status}`, 'error');
       log(`Response: ${body}`, 'error');
       return null;
     }
 
-    const responseBody = (await response.json()) as Record<string, unknown>;
-    const tokenData = extractTokenFromResponse(responseBody);
-
-    if (!tokenData.accessToken) {
-      log('Authentication response did not contain an access token.', 'error');
-      log(`Response keys: ${Object.keys(responseBody).join(', ')}`, 'error');
-      return null;
-    }
-
-    return {
-      token: tokenData.accessToken,
-      tokenType: tokenData.tokenType,
-      expiresIn: tokenData.expiresIn,
-      refreshToken: tokenData.refreshToken,
-      source: 'api-login',
-      createdAt: new Date().toISOString(),
-    };
+    const body = await signinRes.text();
+    log(`Signin failed with status ${signinRes.status}`, 'error');
+    log(`Response: ${body}`, 'error');
+    return null;
   }
   catch (error) {
     log('Connection failed. Is the server running?', 'error');
@@ -184,6 +242,7 @@ async function authenticate(): Promise<ApiState | null> {
 
 function saveApiState(apiState: ApiState): void {
   const apiStatePath = config.auth.apiStatePath;
+  mkdirSync(dirname(apiStatePath), { recursive: true });
   writeFileSync(apiStatePath, JSON.stringify(apiState, null, 2));
   log(`Token saved to ${apiStatePath}`, 'success');
 }
