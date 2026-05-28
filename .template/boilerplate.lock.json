@@ -4,20 +4,25 @@
   "templateCommit": "",
   "perComponentCommit": {
     "claude-config": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
-    "scripts": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
+    "scripts": "92478af0100187cddace8618a427a7e3b4860b90",
     "docs": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
     "cli": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
     "vscode": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
     "husky": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
     "agents-docs": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
-    "tooling": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
+    "tooling": "92478af0100187cddace8618a427a7e3b4860b90",
     "commands": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
-    "skills": "12f869d346cc4bc05df88f61a12e18c75e9c9b43"
+    "skills": "92478af0100187cddace8618a427a7e3b4860b90"
   },
   "syncedComponents": [],
-  "ignoreFileSync": {},
+  "ignoreFileSync": {
+    ".prettierignore": {
+      "lastSyncedSha": "42b33c566bfa2bf9ae5a0364c9a1e430ef1b262e",
+      "appendedLines": []
+    }
+  },
   "packageJsonSync": {},
   "cliVersion": "7.0",
-  "lastSyncedAt": "2026-05-25T10:20:48.937Z",
+  "lastSyncedAt": "2026-05-28T00:20:02.324Z",
   "variableSystemVersion": 1
 }
