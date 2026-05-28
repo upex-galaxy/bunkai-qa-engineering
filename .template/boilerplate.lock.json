@@ -12,7 +12,7 @@
     "agents-docs": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
     "tooling": "92478af0100187cddace8618a427a7e3b4860b90",
     "commands": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
-    "skills": "92478af0100187cddace8618a427a7e3b4860b90"
+    "skills": "7e2a3a4dbfbcc798b6ae8a39989cc303d4725931"
   },
   "syncedComponents": [],
   "ignoreFileSync": {
@@ -23,6 +23,6 @@
   },
   "packageJsonSync": {},
   "cliVersion": "7.0",
-  "lastSyncedAt": "2026-05-28T00:20:02.324Z",
+  "lastSyncedAt": "2026-05-28T20:33:37.942Z",
   "variableSystemVersion": 1
 }
