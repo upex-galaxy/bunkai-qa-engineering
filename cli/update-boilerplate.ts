@@ -23,7 +23,7 @@ const TEMPLATE_REPO = 'upex-galaxy/agentic-qa-boilerplate';
 const TEMP_DIR = path.join(os.tmpdir(), 'kata-boilerplate-update');
 const VERSION_FILE = '.template/boilerplate.lock.json';
 
-const TOOLING_FILES = ['.editorconfig', '.prettierrc', '.prettierignore'];
+const TOOLING_FILES = ['.editorconfig', '.prettierrc', '.gitattributes'];
 const AGENTS_DOCS_FILES = ['README.md'];
 const CLAUDE_CONFIG_FILES = ['settings.json'];
 
@@ -56,6 +56,7 @@ interface ParsedArgs {
   dryRun: boolean
   rollback: boolean
   auto: boolean
+  force: boolean
 }
 
 function parseArgs(args: string[]): ParsedArgs {
@@ -67,6 +68,7 @@ function parseArgs(args: string[]): ParsedArgs {
     dryRun: false,
     rollback: false,
     auto: false,
+    force: false,
   };
   const valid = new Set(COMPONENTS.map(c => c.name).concat(['all', 'help', 'rollback']));
   for (let i = 0; i < args.length; i++) {
@@ -75,6 +77,7 @@ function parseArgs(args: string[]): ParsedArgs {
     else if (a === '--auto') { out.auto = true; }
     else if (a === '--dry-run') { out.dryRun = true; }
     else if (a === '--rollback' || a === 'rollback') { out.rollback = true; }
+    else if (a === '--force') { out.force = true; }
     else if (a === '--list') { out.listSkills = true; }
     else if (a === '--skill' || a === '--skills') {
       const next = args[i + 1];
@@ -90,7 +93,7 @@ function parseArgs(args: string[]): ParsedArgs {
       i++;
     }
     else if (valid.has(a)) { out.commands.push(a); }
-    else if (!a.startsWith('-')) { tui.log.warn(`Comando desconocido: ${a}`); }
+    else if (!a.startsWith('-')) { tui.log.error(`Comando/componente desconocido: ${a}. Usa --help para ver los validos.`); process.exit(1); }
   }
   return out;
 }
@@ -378,7 +381,7 @@ function buildSink(): ReportSink {
         if (abortOnCancel<boolean>(openExternal)) {
           const tmp = path.join(os.tmpdir(), `upex-diff-${process.pid}-${Date.now()}.txt`);
           fs.writeFileSync(tmp, plain);
-          const editor = process.env.EDITOR || process.env.VISUAL || 'less';
+          const editor = process.env.EDITOR || process.env.VISUAL || (process.platform === 'win32' ? 'notepad' : 'less');
           try { spawnSync(editor, [tmp], { stdio: 'inherit' }); }
           catch { tui.log.warn(`No se pudo abrir ${editor}. Contenido en: ${tmp}`); return; }
           finally {
@@ -449,6 +452,7 @@ async function main(): Promise<void> {
     auto: parsed.auto,
     dryRun: parsed.dryRun,
     rollback: false,
+    force: parsed.force,
   });
 
   process.stdout.write(`${tui.successBox([
