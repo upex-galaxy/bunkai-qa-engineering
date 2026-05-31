@@ -4,25 +4,27 @@
   "templateCommit": "",
   "perComponentCommit": {
     "claude-config": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
-    "scripts": "57a2dfdfc1ecaf50b569114e328908e14e211aea",
-    "docs": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
-    "cli": "57a2dfdfc1ecaf50b569114e328908e14e211aea",
+    "scripts": "bbc6ed56dfdddfc042cdb894e27c3215b449d4d9",
+    "docs": "bbc6ed56dfdddfc042cdb894e27c3215b449d4d9",
+    "cli": "bbc6ed56dfdddfc042cdb894e27c3215b449d4d9",
     "vscode": "57a2dfdfc1ecaf50b569114e328908e14e211aea",
     "husky": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
-    "agents-docs": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
+    "agents-docs": "bbc6ed56dfdddfc042cdb894e27c3215b449d4d9",
     "tooling": "57a2dfdfc1ecaf50b569114e328908e14e211aea",
     "commands": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
-    "skills": "57a2dfdfc1ecaf50b569114e328908e14e211aea"
+    "skills": "bbc6ed56dfdddfc042cdb894e27c3215b449d4d9"
   },
   "syncedComponents": [],
   "ignoreFileSync": {
     ".prettierignore": {
-      "lastSyncedSha": "42b33c566bfa2bf9ae5a0364c9a1e430ef1b262e",
-      "appendedLines": []
+      "lastSyncedSha": "1e3f9500969ad5ea6ac33eb186773d0daf90633d",
+      "appendedLines": [
+        ".claude/worktrees/"
+      ]
     }
   },
   "packageJsonSync": {},
   "cliVersion": "7.0",
-  "lastSyncedAt": "2026-05-29T09:21:00.325Z",
+  "lastSyncedAt": "2026-05-31T03:35:04.324Z",
   "variableSystemVersion": 1
 }
