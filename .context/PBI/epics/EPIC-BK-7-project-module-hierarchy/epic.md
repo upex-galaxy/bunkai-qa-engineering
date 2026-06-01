@@ -3,7 +3,7 @@
 **Jira Key:** [BK-7](https://upexgalaxy67.atlassian.net/browse/BK-7)
 **Priority:** Medium
 **Status:** Planning
-**Total Story Points:** 0
+**Total Story Points:** 5
 
 ---
 
@@ -105,10 +105,10 @@ See per-story `story.md` for Gherkin acceptance criteria.
 
 | Key | Story | Points | Priority | Status |
 | --- | ----- | ------ | -------- | ------ |
-| [BK-8](https://upexgalaxy67.atlassian.net/browse/BK-8) | Create a Project inside a Workspace | - | Medium | Shift-Left QA |
-| [BK-9](https://upexgalaxy67.atlassian.net/browse/BK-9) | Create Modules (with nested sub-modules) inside a Project | - | Medium | Shift-Left QA |
-| [BK-10](https://upexgalaxy67.atlassian.net/browse/BK-10) | Rename and soft-delete a Module (with cascade) | - | Medium | Shift-Left QA |
-| [BK-11](https://upexgalaxy67.atlassian.net/browse/BK-11) | Move a Module to a different parent (with cycle-detection + path rebuild) | - | Medium | Shift-Left QA |
+| [BK-8](https://upexgalaxy67.atlassian.net/browse/BK-8) | TMS-Project | Create a project inside a workspace | 5 | Medium | Ready For Dev |
+| [BK-9](https://upexgalaxy67.atlassian.net/browse/BK-9) | TMS-Module | Create modules with nested sub-modules | - | Medium | Shift-Left QA |
+| [BK-10](https://upexgalaxy67.atlassian.net/browse/BK-10) | TMS-Module | Rename and soft-delete a module | - | Medium | Estimation |
+| [BK-11](https://upexgalaxy67.atlassian.net/browse/BK-11) | TMS-Module | Move a module to a different parent | - | Medium | Shift-Left QA |
 
 ---
 
@@ -123,4 +123,4 @@ See per-story `story.md` for Gherkin acceptance criteria.
 ---
 
 _Synced from Jira by sync-jira-issues_
-_Last sync: 2026-05-24T23:31:38.244Z_
+_Last sync: 2026-06-01T14:52:50.057Z_
