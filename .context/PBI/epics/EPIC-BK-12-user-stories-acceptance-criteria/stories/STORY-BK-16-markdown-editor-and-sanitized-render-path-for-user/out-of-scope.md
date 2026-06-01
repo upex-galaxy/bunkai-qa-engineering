@@ -8,4 +8,4 @@
 - Diagram rendering (for example Mermaid) — tracked separately
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:51.306Z_
+_Synced from Jira by sync-jira-issues_

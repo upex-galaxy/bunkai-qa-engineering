@@ -37,4 +37,4 @@ Invitee:
 7. Redirects to /home.
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:48.544Z_
+_Synced from Jira by sync-jira-issues_

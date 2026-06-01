@@ -32,4 +32,4 @@ Then the system returns 403 with code NOT*A*MEMBER
 ```
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:50.058Z_
+_Synced from Jira by sync-jira-issues_

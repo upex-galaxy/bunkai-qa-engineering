@@ -56,4 +56,4 @@ Scenario: A defect filed while the integration is disabled is not synced
 ```
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:57.545Z_
+_Synced from Jira by sync-jira-issues_

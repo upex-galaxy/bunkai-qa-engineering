@@ -8,4 +8,4 @@
 - Description is optional but if present must be <=5KB Markdown.
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:50.059Z_
+_Synced from Jira by sync-jira-issues_

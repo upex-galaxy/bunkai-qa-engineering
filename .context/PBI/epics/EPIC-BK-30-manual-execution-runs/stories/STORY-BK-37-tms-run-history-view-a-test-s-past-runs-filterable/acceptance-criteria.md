@@ -41,4 +41,4 @@ Scenario: Clearing the filter restores the full list
 ```
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:56.426Z_
+_Synced from Jira by sync-jira-issues_

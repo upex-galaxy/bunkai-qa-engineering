@@ -8,4 +8,4 @@
 - See, on save, how many Tests were affected by the change
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:52.944Z_
+_Synced from Jira by sync-jira-issues_

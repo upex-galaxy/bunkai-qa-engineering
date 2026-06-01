@@ -8,4 +8,4 @@
 - Cross-workspace usage
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:52.945Z_
+_Synced from Jira by sync-jira-issues_

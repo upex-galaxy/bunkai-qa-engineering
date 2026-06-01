@@ -8,4 +8,4 @@
 - Keep the copy independent — editing it does not change the original
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:52.946Z_
+_Synced from Jira by sync-jira-issues_

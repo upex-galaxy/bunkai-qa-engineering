@@ -9,4 +9,4 @@
 - Surface the newly started run in the Test's run history for teammates
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:56.421Z_
+_Synced from Jira by sync-jira-issues_

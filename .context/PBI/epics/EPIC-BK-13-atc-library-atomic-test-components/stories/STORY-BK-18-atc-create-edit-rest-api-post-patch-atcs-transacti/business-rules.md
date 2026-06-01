@@ -11,4 +11,4 @@
 - version integer is monotonically increasing per ATC; PATCH increments by 1
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:52.938Z_
+_Synced from Jira by sync-jira-issues_

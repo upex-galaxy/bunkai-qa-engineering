@@ -11,4 +11,4 @@
 - Auto-suggesting or enforcing a controlled vocabulary for custom tags
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:54.128Z_
+_Synced from Jira by sync-jira-issues_

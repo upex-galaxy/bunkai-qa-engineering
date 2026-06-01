@@ -37,4 +37,4 @@ Scenario: Two teammates reorder the same Test at the same time
 ```
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:54.126Z_
+_Synced from Jira by sync-jira-issues_

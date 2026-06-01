@@ -47,4 +47,3 @@ As a QA Lead, I want to see the acceptance criteria and modules that have no tes
 ---
 
 _Synced from Jira by sync-jira-issues_
-_Last sync: 2026-06-01T14:52:59.080Z_

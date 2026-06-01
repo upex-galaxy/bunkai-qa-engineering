@@ -56,4 +56,4 @@ Scenario: Try to open a Test that no longer exists
 ```
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:54.127Z_
+_Synced from Jira by sync-jira-issues_

@@ -45,4 +45,4 @@ And shows a clear copy explaining the fallback
 ```
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:48.540Z_
+_Synced from Jira by sync-jira-issues_

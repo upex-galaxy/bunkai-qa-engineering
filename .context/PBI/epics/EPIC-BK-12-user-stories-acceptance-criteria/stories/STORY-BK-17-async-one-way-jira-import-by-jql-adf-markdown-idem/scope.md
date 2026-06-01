@@ -13,4 +13,4 @@
 - Per-issue error capture into errors[] without aborting the whole job
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:51.307Z_
+_Synced from Jira by sync-jira-issues_

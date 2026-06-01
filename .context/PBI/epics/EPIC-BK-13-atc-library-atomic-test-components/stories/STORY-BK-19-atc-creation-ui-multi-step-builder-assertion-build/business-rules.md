@@ -13,4 +13,4 @@
 | Tags | Up to 10 |
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:52.941Z_
+_Synced from Jira by sync-jira-issues_

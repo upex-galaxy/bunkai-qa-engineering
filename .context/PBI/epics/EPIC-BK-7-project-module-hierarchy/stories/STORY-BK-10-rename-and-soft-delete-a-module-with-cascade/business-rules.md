@@ -11,4 +11,4 @@
 | Scope | Only members of the owning Workspace can rename or delete a Module |
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:50.062Z_
+_Synced from Jira by sync-jira-issues_

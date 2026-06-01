@@ -85,4 +85,3 @@ Implements ***FR-003***.
 ---
 
 _Synced from Jira by sync-jira-issues_
-_Last sync: 2026-06-01T14:52:48.545Z_

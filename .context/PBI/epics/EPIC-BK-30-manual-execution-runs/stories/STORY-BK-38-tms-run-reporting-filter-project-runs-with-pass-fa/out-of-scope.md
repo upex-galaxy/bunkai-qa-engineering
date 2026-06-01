@@ -10,4 +10,4 @@
 - Cross-Project run review spanning the whole workspace
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:56.428Z_
+_Synced from Jira by sync-jira-issues_

@@ -46,4 +46,4 @@ Scenario: Run records who executed it
 ```
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:56.420Z_
+_Synced from Jira by sync-jira-issues_

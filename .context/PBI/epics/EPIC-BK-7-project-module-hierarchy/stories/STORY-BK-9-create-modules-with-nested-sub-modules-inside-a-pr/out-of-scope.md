@@ -8,4 +8,4 @@
 - Per-Module permissions — a Module inherits Workspace and Project membership
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:50.061Z_
+_Synced from Jira by sync-jira-issues_

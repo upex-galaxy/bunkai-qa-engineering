@@ -10,4 +10,4 @@
 - Bulk-filing multiple defects at once
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:57.543Z_
+_Synced from Jira by sync-jira-issues_

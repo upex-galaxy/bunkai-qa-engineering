@@ -7,4 +7,4 @@
 - Stories that have never failed have no cycle and are excluded from cycle-time reporting.
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:59.080Z_
+_Synced from Jira by sync-jira-issues_

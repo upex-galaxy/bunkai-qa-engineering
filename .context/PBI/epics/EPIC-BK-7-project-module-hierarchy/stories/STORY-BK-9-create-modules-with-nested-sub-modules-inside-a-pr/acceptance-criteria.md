@@ -43,4 +43,4 @@ Scenario: Nesting beyond the maximum depth is blocked
 ```
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:50.060Z_
+_Synced from Jira by sync-jira-issues_

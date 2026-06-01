@@ -9,4 +9,4 @@
 5. She picks an ATC from the ranked results to reuse it.
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:52.943Z_
+_Synced from Jira by sync-jira-issues_

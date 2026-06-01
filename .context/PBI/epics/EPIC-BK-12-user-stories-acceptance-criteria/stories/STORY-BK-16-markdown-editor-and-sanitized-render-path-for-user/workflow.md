@@ -9,4 +9,4 @@
 5. When the content is shown later, it is cleaned again and rendered the same way.
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:51.306Z_
+_Synced from Jira by sync-jira-issues_

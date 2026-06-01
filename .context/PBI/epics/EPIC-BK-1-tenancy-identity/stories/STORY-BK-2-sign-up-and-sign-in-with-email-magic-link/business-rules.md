@@ -11,4 +11,4 @@
 - A user who accepted a workspace invite skips the personal-workspace auto-create.
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:48.535Z_
+_Synced from Jira by sync-jira-issues_

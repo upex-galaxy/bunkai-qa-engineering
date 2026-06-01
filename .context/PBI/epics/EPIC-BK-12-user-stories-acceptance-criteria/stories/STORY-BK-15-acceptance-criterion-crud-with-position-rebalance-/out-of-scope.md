@@ -8,4 +8,4 @@
 - Change history / versioning of Acceptance Criteria
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:51.304Z_
+_Synced from Jira by sync-jira-issues_

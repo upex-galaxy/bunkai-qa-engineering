@@ -7,4 +7,4 @@
 - Per-user notification delivery such as email or push.
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:59.083Z_
+_Synced from Jira by sync-jira-issues_

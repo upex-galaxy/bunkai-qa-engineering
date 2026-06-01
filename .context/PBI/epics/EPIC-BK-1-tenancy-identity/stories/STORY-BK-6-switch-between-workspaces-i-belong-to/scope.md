@@ -9,4 +9,4 @@
 - GET /api/v1/me/workspaces endpoint (lists user's memberships)
 
 ---
-_Synced from Jira by sync-jira-issues · 2026-06-01T14:52:48.545Z_
+_Synced from Jira by sync-jira-issues_

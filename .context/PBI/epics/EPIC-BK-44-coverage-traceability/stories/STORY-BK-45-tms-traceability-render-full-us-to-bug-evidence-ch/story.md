@@ -52,4 +52,3 @@ As a QA Lead, I want to open any user story and see its full evidence chain — 
 ---
 
 _Synced from Jira by sync-jira-issues_
-_Last sync: 2026-06-01T14:52:59.078Z_
