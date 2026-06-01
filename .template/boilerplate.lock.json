@@ -4,7 +4,7 @@
   "templateCommit": "",
   "perComponentCommit": {
     "claude-config": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
-    "scripts": "d95e3ddbf0afc561a53c43b8f91d87d29905186d",
+    "scripts": "462ff09c0eace4ead0d6bbe6e716eb67ce65f885",
     "docs": "bbc6ed56dfdddfc042cdb894e27c3215b449d4d9",
     "cli": "bc869c81ae1a9a83c33ffc5840d1d5075213034e",
     "vscode": "57a2dfdfc1ecaf50b569114e328908e14e211aea",
@@ -39,6 +39,6 @@
     }
   },
   "cliVersion": "7.0",
-  "lastSyncedAt": "2026-06-01T03:53:25.273Z",
+  "lastSyncedAt": "2026-06-01T16:54:53.325Z",
   "variableSystemVersion": 1
 }
