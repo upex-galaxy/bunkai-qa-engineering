@@ -8,10 +8,10 @@
 
 | Role | Path | Type |
 |---|---|---|
-| Target (app under test) | `/Users/ely/Desktop/projects/upex/upex-bunkai-tms` | Monorepo (single Next.js fullstack workspace `aicode-starter` in `bun.lock`) |
-| QA Framework | `/Users/ely/Desktop/projects/upex/bunkai-qa-engineering` (this repo) | Boilerplate (KATA + Playwright + Allure + Xray) |
+| Target (app under test) | `/Users/ely/Desktop/projects/bunkai/upex-bunkai-tms` | Monorepo (single Next.js fullstack workspace `aicode-starter` in `bun.lock`) |
+| QA Framework | `/Users/ely/Desktop/projects/bunkai/bunkai-qa-engineering` (this repo) | Boilerplate (KATA + Playwright + Allure + Xray) |
 
-Target is a sibling directory under `/Users/ely/Desktop/projects/upex/`. Discovery is read-only on the target; all writes land in this framework's `.context/` and `.session/`.
+Target is a sibling directory under `/Users/ely/Desktop/projects/bunkai/`. Discovery is read-only on the target; all writes land in this framework's `.context/` and `.session/`.
 
 ---
 

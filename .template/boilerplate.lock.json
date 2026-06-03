@@ -18,9 +18,12 @@
   "syncedComponents": [],
   "ignoreFileSync": {
     ".prettierignore": {
-      "lastSyncedSha": "1e3f9500969ad5ea6ac33eb186773d0daf90633d",
+      "lastSyncedSha": "560d6a347dad1078d475af5e592d717cf8cd12f5",
       "appendedLines": [
-        ".claude/worktrees/"
+        ".claude/worktrees/",
+        "api/openapi*",
+        "api/.openapi-config.json",
+        ".playwright-mcp/"
       ]
     }
   },
@@ -39,6 +42,6 @@
     }
   },
   "cliVersion": "7.0",
-  "lastSyncedAt": "2026-06-01T16:54:53.325Z",
+  "lastSyncedAt": "2026-06-03T00:18:37.341Z",
   "variableSystemVersion": 1
 }

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bunkai TMS — Master Test Plan (Ejecutivo)</title>
+<link rel="stylesheet" href="./assets/fonts.css">
+<link rel="stylesheet" href="./assets/base.css">
+<link rel="stylesheet" href="./assets/animations.css">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body class="tpl-testing-safety-alert">
+<div class="deck">
+
+  <!-- 1. COVER -->
+  <section class="slide is-active">
+    <div class="ts-stripe"></div>
+    <div class="ts-chrome"><span class="ts-alert-tag">qa risk roadmap · bunkai tms</span><span class="ts-page">01 / 08</span></div>
+    <div class="ts-kicker">Master Test Plan · Resumen ejecutivo</div>
+    <h1 class="ts-h1" data-anim="fade-up">Las zonas frágiles<br>no son las pantallas —<br>son <span class="red">auth, credenciales y aislamiento multi-tenant</span></h1>
+    <p class="ts-sub">Bunkai TMS es un sistema cuyo <b>producto es la corrección y la trazabilidad</b>. Casi toda la autorización real vive dentro de RLS en Postgres, alcanzada por 4 helpers <code>SECURITY DEFINER</code>. Una regresión de RLS es una brecha, no un glitch — y es invisible desde la UI.</p>
+    <div class="ts-alert-box">
+      <h3>El moat de anclaje ES la propuesta de valor</h3>
+      <p>Cada ATC debe enlazar a una User Story y ≥1 Acceptance Criterion (<b>INV-1, INV-2</b>). Un bug que deja existir un ATC sin Story no es cosmético: es un hueco en lo que el cliente paga. Trátalo como un cálculo de saldo en un banco.</p>
+    </div>
+    <div class="ts-stripe-b"></div>
+    <div class="ts-footer"><span>bunkai tms · master test plan · 2026.06</span><span>01 / 08</span></div>
+    <div class="notes">Apertura: el reflejo es testear las pantallas, pero el riesgo está en la frontera de autorización y la fontanería de credenciales. Subrayar que RLS = seguridad, no detalle. Y que el anclaje ATC→Story→AC es el diferenciador del producto.</div>
+  </section>
+
+  <!-- 2. EXECUTIVE RISK MAP -->
+  <section class="slide">
+    <div class="ts-stripe"></div>
+    <div class="ts-chrome"><span class="ts-alert-tag amber">executive risk map</span><span class="ts-page">02 / 08</span></div>
+    <h2 class="ts-h2"><span class="red">3 CRÍTICOS</span> · 4 ALTOS</h2>
+    <p class="ts-sub" style="margin-bottom:6px">Lo más frágil no es la lógica de negocio — es la puerta de entrada y el plano de credenciales.</p>
+    <div class="ts-grid-3" data-anim="fade-up">
+      <div class="ts-card" style="border-top:4px solid var(--ts-red)"><div class="lbl">CRITICAL · Flow A / A'</div><h4>Auth gateway</h4><p>Magic-link + headless. Si cae el login, el producto entero es inalcanzable. Puerta a todos los flujos.</p></div>
+      <div class="ts-card" style="border-top:4px solid var(--ts-red)"><div class="lbl">CRITICAL · Flow F</div><h4>Aislamiento tenant + secretos</h4><p>Fuga entre workspaces (INV-3) o exposición de hashes de credenciales (INV-11) = brecha multi-tenant.</p></div>
+      <div class="ts-card" style="border-top:4px solid var(--ts-red)"><div class="lbl">CRITICAL · Flow D / E</div><h4>PAT + Bearer</h4><p>Emisión de credenciales. Scope sin aplicar = escalada de privilegios silenciosa.</p></div>
+    </div>
+    <div class="ts-alert-box amber">
+      <h3>ALTOS (4)</h3>
+      <p><b>ATC authoring</b> (Flow B, <code>bunkai_save_atc</code>) — el trabajo central del producto · <b>Workspace bootstrap</b> (FEAT-003) — sin él, el usuario nuevo queda varado · <b>Invitaciones</b> (Flow C) — superficie de escalada de privilegios · <b>Árbol de módulos</b> (FEAT-011) — path materializado en app, sin trigger.</p>
+    </div>
+    <div class="ts-stripe-b"></div>
+    <div class="ts-footer"><span>risk map · 3 critical + 4 high</span><span>02 / 08</span></div>
+    <div class="notes">Cada prioridad está anclada a un flujo de la data-map, no es hand-wave. Los 3 CRITICAL salieron con score ≥18 en la rúbrica Impacto×Probabilidad×Radio. Todo lo de debajo de HIGH es read-mature pero write-thin.</div>
+  </section>
+
+  <!-- 3. TOP FINDING -->
+  <section class="slide">
+    <div class="ts-stripe"></div>
+    <div class="ts-chrome"><span class="ts-alert-tag">hallazgo #1 · privilegios</span><span class="ts-page">03 / 08</span></div>
+    <div class="ts-kicker">El agujero más caro de cerrar</div>
+    <h2 class="ts-h2">Los scopes de PAT <span class="ts-highlight-red">no se aplican</span></h2>
+    <pre class="ts-codebox"><span class="cm"># control de scope de PAT — grep repo-wide</span>
+<span class="kw">requireScope()</span>            <span class="cm">← definido</span>
+<span class="kw">requireScopeOrCookie()</span>    <span class="cm">← definido</span>
+  llamado en:  <span class="bad">0 endpoints</span>
+
+<span class="cm"># consecuencia (INV-4 solo se valida al emitir, nunca al usar):</span>
+PAT(<span class="st">atc:read</span>)   <span class="bad">==</span>   PAT(<span class="st">workspace:admin</span>)
+
+<span class="cm"># además — Bearer anunciado en spec vs implementado:</span>
+spec OpenAPI:  bearerAuth en <span class="st">11</span> operaciones
+real en codigo: <span class="bad">2</span>  (GET /api/v1/me, GET /api/v1/workspaces)</pre>
+    <div class="ts-alert-box amber">
+      <h3>Drift spec ↔ implementación</h3>
+      <p>Las otras 9 operaciones son cookie-only → devuelven <b>401</b> a un caller solo-Bearer, contradiciendo el contrato publicado. Sin verificar si es aspiracional o bug — confírmalo antes de escribir los contract tests.</p>
+    </div>
+    <div class="ts-stripe-b"></div>
+    <div class="ts-footer"><span>finding · pat scope gap</span><span>03 / 08</span></div>
+    <div class="notes">Este es el test de más valor: emitir un PAT solo atc:read e intentar una escritura/admin. Hoy se espera que pase (= defecto), captúralo como bug, no como pass. Es escalada de privilegios latente.</div>
+  </section>
+
+  <!-- 4. SILENT KILLERS -->
+  <section class="slide">
+    <div class="ts-stripe"></div>
+    <div class="ts-chrome"><span class="ts-alert-tag amber">silent killers · 7</span><span class="ts-page">04 / 08</span></div>
+    <h2 class="ts-h2">Lo que <span class="red">se pudre sin avisar</span></h2>
+    <p class="ts-sub" style="margin-bottom:4px">Procesos automáticos sin camino de feedback. Casi siempre el área menos testeada.</p>
+    <div class="ts-checklist">
+      <div class="ts-check"><div class="box">!</div><div class="txt"><b>modules.path</b> — materializado en código de app, <b>sin trigger en DB</b>. Un move que olvida recomputar deja el árbol roto, sin señal.</div></div>
+      <div class="ts-check"><div class="box">!</div><div class="txt"><b>atcs_refresh_tsv</b> — si el trigger deja de disparar, la búsqueda de ATC devuelve vacío en silencio; el usuario cree que perdió datos.</div></div>
+      <div class="ts-check"><div class="box">!</div><div class="txt"><b>Resend</b> declarado, <b>NO conectado</b> — los emails de invitación nunca se envían. Parece OK; no lo está (URL por clipboard/stdout).</div></div>
+      <div class="ts-check"><div class="box">!</div><div class="txt"><b>Run-execution NO existe</b> — ningún proceso mueve <code>atcs.status</code>. Probar "ejecuta y mira el estado" = testear vapor.</div></div>
+      <div class="ts-check"><div class="box">!</div><div class="txt"><b>Sin CI/CD</b> — <code>.github/workflows</code> vacío, sin gate de test/lint antes de prod. Cada regresión llega a producción callada.</div></div>
+      <div class="ts-check"><div class="box">!</div><div class="txt"><b>.env desde .env.example</b> — arranca en "Invalid environment variables" (key legacy vs nuevas). Trampa de primer arranque, real, no hipotética.</div></div>
+    </div>
+    <div class="ts-stripe-b"></div>
+    <div class="ts-footer"><span>silent killers · no feedback path</span><span>04 / 08</span></div>
+    <div class="notes">Estrategia QA para silent killers: probes sintéticos (crear ATC → buscarlo), auditorías de integridad programadas (modules.path vs cadena de padres), y aserciones de log. El gate CI/CD es el arreglo de proceso de mayor palanca.</div>
+  </section>
+
+  <!-- 5. DEPENDENCY CASCADE -->
+  <section class="slide">
+    <div class="ts-stripe"></div>
+    <div class="ts-chrome"><span class="ts-alert-tag">dependency cascade</span><span class="ts-page">05 / 08</span></div>
+    <h2 class="ts-h2">Probar en aislamiento <span class="red">esconde</span> la rotura</h2>
+    <pre class="ts-codebox"><span class="cm"># Cadena 1 — onboarding hasta el valor</span>
+Supabase (Auth + Postgres + RLS)
+        |
+        v
+Flow A bootstrap  --&gt;  Flow B authoring  --&gt;  anclaje ATC (<span class="st">INV-1/INV-2</span>)
+ sin workspace =        sin save path =          moat roto =
+ <span class="bad">varado en /onboarding</span>   <span class="bad">no se crea el asset</span>     <span class="bad">garantia anulada</span>
+
+<span class="cm"># Cadena 2 — la espina de RLS</span>
+workspace_members(<span class="st">active</span>)  --&gt;  4 helpers SECURITY DEFINER  --&gt;  toda policy RLS
+        |
+        +-- una regresion en UN helper rompe <span class="bad">TODO</span> el aislamiento a la vez</pre>
+    <div class="ts-alert-box">
+      <h3>Testea los helpers, no solo las pantallas</h3>
+      <p>Si el bootstrap medio-falla (workspace creado, owner no inscrito), el authoring parecerá disponible pero toda escritura falla en RLS — una rotura que solo aparece <b>después</b> del login.</p>
+    </div>
+    <div class="ts-stripe-b"></div>
+    <div class="ts-footer"><span>cascade · isolation hides breakage</span><span>05 / 08</span></div>
+    <div class="notes">Tercera cadena: precedencia de token — requireAuth chequea Bearer primero, así una cookie stale no eclipsa un PAT explícito. Probar el caso con ambas credenciales presentes, no una a una.</div>
+  </section>
+
+  <!-- 6. PRE-RELEASE CHECKLIST -->
+  <section class="slide">
+    <div class="ts-stripe"></div>
+    <div class="ts-chrome"><span class="ts-alert-tag green">pre-release · imprescindibles</span><span class="ts-page">06 / 08</span></div>
+    <h2 class="ts-h2">Antes de release: <span class="red">checks obligatorios</span></h2>
+    <div class="ts-checklist">
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">Un miembro de Workspace X NO puede leer/escribir nada de Workspace Y — vía cookie <b>y</b> vía Bearer.</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">Un rol DB read-only ve metadata pero <b>nada</b> de las tablas <code>*_secrets</code>.</div></div>
+      <div class="ts-check"><div class="box">!</div><div class="txt">Un PAT <code>atc:read</code> es rechazado en una acción de escritura/admin (hoy: se espera defecto — captúralo).</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">PAT revocado y PAT expirado: ambos rechazados en el siguiente Bearer.</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">Fallo de signin/signup → <b>401 uniforme</b>, sin filtrar si el email existe.</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt"><code>next=//evil.com</code> rechazado en <code>/auth/callback</code>; solo rutas root-relative (INV-9).</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt"><code>bunkai_save_atc</code> rechaza guardar sin Story / sin ACs / sin título — en el server action.</div></div>
+    </div>
+    <div class="ts-stripe-b"></div>
+    <div class="ts-footer"><span>checklist · pre-release (top)</span><span>06 / 08</span></div>
+    <div class="notes">Lista recortada para ejecutivo (la completa son 15 ítems en master-test-plan.md §8). Los TC IDs viven en el TMS, no aquí. El ítem del PAT atc:read es el que probablemente revele defecto.</div>
+  </section>
+
+  <!-- 7. DISCOVERY GAPS + BLOCKERS -->
+  <section class="slide">
+    <div class="ts-stripe"></div>
+    <div class="ts-chrome"><span class="ts-alert-tag amber">discovery gaps · honestidad</span><span class="ts-page">07 / 08</span></div>
+    <h2 class="ts-h2">Lo que <span class="red">aún no se puede</span> testear</h2>
+    <div class="ts-grid-2" data-anim="fade-up">
+      <div class="ts-card" style="border-top:4px solid var(--ts-amber)"><div class="lbl">No construido todavía</div><h4>Features vapor</h4><p>Run-execution inexistente · scopes PAT sin aplicar (falla por diseño) · handlers de escritura del árbol (projects/modules/stories/ACs) ausentes · idempotency middleware muerto.</p></div>
+      <div class="ts-card" style="border-top:4px solid var(--ts-amber)"><div class="lbl">Sin verificar</div><h4>Confirmar intención</h4><p>Bearer drift 9/11 (¿aspiracional o bug?) · roles <code>qa_inspector</code> solo en comentarios de 0011 (sin CREATE ROLE) · replay de magic-link no aplicado (<code>consumed_at</code> nunca se lee).</p></div>
+    </div>
+    <div class="ts-alert-box">
+      <h3>2 bloqueadores para QA en vivo</h3>
+      <p><b>1.</b> <code>package.json</code> ↔ <code>bun.lock</code> desincronizados (bloquea <code>bun dev</code>). <b>2.</b> Sin usuarios de prueba en el Supabase Auth del target (bloquea E2E con login real). Limpiar ambos antes de <code>/sprint-testing</code>.</p>
+    </div>
+    <div class="ts-stripe-b"></div>
+    <div class="ts-footer"><span>gaps · what we can't verify</span><span>07 / 08</span></div>
+    <div class="notes">"No pude verificar X" es mejor que inventar. La señal de breakage-likelihood fue débil: el git churn de este repo es infra del framework, no del target — el riesgo se puntuó desde las anotaciones de los mapas, no del git del target.</div>
+  </section>
+
+  <!-- 8. NEXT STEPS / THANKS -->
+  <section class="slide">
+    <div class="ts-stripe"></div>
+    <div class="ts-chrome"><span class="ts-alert-tag green">next steps</span><span class="ts-page">08 / 08</span></div>
+    <div class="ts-kicker">de la estrategia a la ejecución</div>
+    <h2 class="ts-h2">Siguiente <span class="ts-highlight-red">paso</span></h2>
+    <div class="ts-grid-3">
+      <div class="ts-card"><div class="lbl">1 · documentar</div><h4>/test-documentation</h4><p>Convertir los flujos CRITICAL/HIGH en Test Cases trazables en el TMS.</p></div>
+      <div class="ts-card"><div class="lbl">2 · desbloquear</div><h4>Limpiar bloqueadores</h4><p>Sync package.json ↔ bun.lock + provisionar usuarios de prueba en Supabase Auth.</p></div>
+      <div class="ts-card"><div class="lbl">3 · ejecutar</div><h4>/sprint-testing</h4><p>QA en vivo contra el target una vez liberados los bloqueadores.</p></div>
+    </div>
+    <div class="ts-alert-box green">
+      <h3>La seguridad real no es la UI — es RLS + el contrato de credenciales</h3>
+      <p>Testea directamente los helpers <code>SECURITY DEFINER</code> y los caminos de credenciales, no solo las pantallas. <b>3 CRITICAL · 4 HIGH · 7 silent killers · 5 integraciones · 11 gaps.</b></p>
+    </div>
+    <div class="ts-stripe-b"></div>
+    <div class="ts-footer"><span>fin · master test plan</span><span>08 / 08</span></div>
+    <div class="notes">Cierre: el plan completo vive en .context/master-test-plan.md. Este deck es la capa ejecutiva. Pulsa S para modo presentador, T para tema, flechas para navegar.</div>
+  </section>
+
+</div>
+<script src="./assets/runtime.js"></script>
+</body>
+</html>
