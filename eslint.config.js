@@ -18,6 +18,8 @@ export default antfu({
     'allure-results',
     'allure-report',
     'reports',
+    // Generated report decks (HTML/CSS/JS artifacts, not hand-edited source)
+    '.context/reports/**',
     'cli/legacy/**',
     '*.min.js',
     // Documentation files (contain code examples that shouldn't be linted)
