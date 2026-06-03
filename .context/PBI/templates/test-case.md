@@ -6,21 +6,21 @@
 
 ## Identity
 
-| Field | Value |
-|---|---|
-| Jira key | [<<TC_KEY>>](https://upexgalaxy67.atlassian.net/browse/<<TC_KEY>>) — fill once created |
-| Status | {{Draft \| In Design \| In Review \| Candidate \| In Automation \| Pull Request \| AUTOMATED \| READY \| MANUAL \| DEPRECATED}} |
-| Layer | {{`UI` \| `API` \| `Unit`}} (mirrors Bunkai `atcs.layer` enum) |
-| Priority | {{P0 \| P1 \| P2 \| P3}} |
-| ROI verdict | {{Candidate (automate) \| Manual (don't automate) \| Deferred (skip for now)}} |
-| Owner (QA) | {{name}} |
-| Owner (Automation, when In Automation) | {{name}} |
+| Field                                  | Value                                                                                                                           |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Jira key                               | [<<TC_KEY>>](https://jira.upexgalaxy.com.net/browse/<<TC_KEY>>) — fill once created                                             |
+| Status                                 | {{Draft \| In Design \| In Review \| Candidate \| In Automation \| Pull Request \| AUTOMATED \| READY \| MANUAL \| DEPRECATED}} |
+| Layer                                  | {{`UI` \| `API` \| `Unit`}} (mirrors Bunkai `atcs.layer` enum)                                                                  |
+| Priority                               | {{P0 \| P1 \| P2 \| P3}}                                                                                                        |
+| ROI verdict                            | {{Candidate (automate) \| Manual (don't automate) \| Deferred (skip for now)}}                                                  |
+| Owner (QA)                             | {{name}}                                                                                                                        |
+| Owner (Automation, when In Automation) | {{name}}                                                                                                                        |
 
 ---
 
 ## Linkage
 
-- **Story** — [{{BK-XXX}}](https://upexgalaxy67.atlassian.net/browse/{{BK-XXX}})
+- **Story** — [{{BK-XXX}}](https://jira.upexgalaxy.com.net/browse/{{BK-XXX}})
 - **Acceptance Criteria** anchored — `AC<<N>>` (Bunkai data-model invariant: every TC must satisfy ≥1 AC; see BR-017 in `<framework>/.context/SRS/functional-specs.md`).
 - **Test Plan** (Modality A: Xray Test Plan; Modality B: Story custom field comment-mirror) — [{{BK-PPP}}]
 - **Bug originated from** (if regression TC) — [{{BK-BBB}}]
@@ -40,11 +40,11 @@
 
 ## Steps (ordered)
 
-| # | Step | Input data | Expected (per-step) |
-|---|---|---|---|
-| 1 | {{Action — verb-first, ≤120 chars}} | {{payload / form value if any}} | {{observable result per step}} |
-| 2 | … | … | … |
-| 3 | … | … | … |
+| #   | Step                                | Input data                      | Expected (per-step)            |
+| --- | ----------------------------------- | ------------------------------- | ------------------------------ |
+| 1   | {{Action — verb-first, ≤120 chars}} | {{payload / form value if any}} | {{observable result per step}} |
+| 2   | …                                   | …                               | …                              |
+| 3   | …                                   | …                               | …                              |
 
 > Mirrors `atc_steps` table (`<target>/supabase/migrations/0004_atcs.sql`). Each row will become one `atc_steps` row when promoted to automation.
 
@@ -71,14 +71,14 @@
 
 ## ROI scoring (`/test-documentation` Stage 4)
 
-| Dimension | Score (1-5) | Note |
-|---|---|---|
-| Business risk if breaks | {{1-5}} | {{rationale}} |
-| Probability of regression | {{1-5}} | {{rationale}} |
-| Frequency of execution (per release) | {{1-5}} | {{rationale}} |
-| Manual cost per execution (mins) | {{1-5}} | {{higher = more value to automate}} |
-| Automation cost (relative) | {{1-5}} | {{higher = harder to automate}} |
-| **Verdict** | Candidate / Manual / Deferred | — |
+| Dimension                            | Score (1-5)                   | Note                                |
+| ------------------------------------ | ----------------------------- | ----------------------------------- |
+| Business risk if breaks              | {{1-5}}                       | {{rationale}}                       |
+| Probability of regression            | {{1-5}}                       | {{rationale}}                       |
+| Frequency of execution (per release) | {{1-5}}                       | {{rationale}}                       |
+| Manual cost per execution (mins)     | {{1-5}}                       | {{higher = more value to automate}} |
+| Automation cost (relative)           | {{1-5}}                       | {{higher = harder to automate}}     |
+| **Verdict**                          | Candidate / Manual / Deferred | —                                   |
 
 Rule of thumb: Verdict = `Candidate` when (risk × frequency × manual cost) > automation cost AND test is deterministic.
 
@@ -88,14 +88,14 @@ Rule of thumb: Verdict = `Candidate` when (risk × frequency × manual cost) > a
 
 Filled by `/test-automation` after writing code.
 
-| KATA artifact | Path in framework |
-|---|---|
-| ATC file | `<framework>/tests/components/{ui\|api}/{Component}/{atcName}.ts` |
-| Component (Page or Api) | `<framework>/tests/components/{ui\|api}/{Component}/index.ts` |
-| Fixture used | {{`api` \| `ui` \| `test`}} (see KATA reference in `<framework>/CLAUDE.md` §10) |
-| Spec file (orchestrator) | `<framework>/tests/{e2e\|integration}/{module}/{spec}.spec.ts` |
-| `@atc('TC-ID')` decorator | `@atc('<<TC_KEY>>')` — must match this Jira key for traceability |
-| PR | [#<<NNN>>](https://github.com/.../pull/<<NNN>>) |
+| KATA artifact             | Path in framework                                                               |
+| ------------------------- | ------------------------------------------------------------------------------- |
+| ATC file                  | `<framework>/tests/components/{ui\|api}/{Component}/{atcName}.ts`               |
+| Component (Page or Api)   | `<framework>/tests/components/{ui\|api}/{Component}/index.ts`                   |
+| Fixture used              | {{`api` \| `ui` \| `test`}} (see KATA reference in `<framework>/CLAUDE.md` §10) |
+| Spec file (orchestrator)  | `<framework>/tests/{e2e\|integration}/{module}/{spec}.spec.ts`                  |
+| `@atc('TC-ID')` decorator | `@atc('<<TC_KEY>>')` — must match this Jira key for traceability                |
+| PR                        | [#<<NNN>>](https://github.com/.../pull/<<NNN>>)                                 |
 
 `kata-manifest.json` will list the new component + ATC after `bun run kata:manifest`.
 

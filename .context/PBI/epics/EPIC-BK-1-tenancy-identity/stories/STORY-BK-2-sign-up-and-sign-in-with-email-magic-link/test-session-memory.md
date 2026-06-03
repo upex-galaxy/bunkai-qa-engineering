@@ -8,7 +8,7 @@
 
 - **Key:** BK-2
 - **Summary:** Sign up and sign in with email (magic-link)
-- **Jira:** https://upexgalaxy67.atlassian.net/browse/BK-2
+- **Jira:** https://jira.upexgalaxy.com.net/browse/BK-2
 - **Type:** Story
 - **Priority:** Medium
 - **Sprint:** Bunkai (67) Sprint 1 (active, 2026-05-11 → 2026-06-08)
@@ -132,13 +132,13 @@ BK-2 is the email side of FR-001 (magic-link sign-up + sign-in). OAuth (BK-3) is
 
 ## Stage state machine
 
-| Stage | Status | Started | Completed | Notes |
-|-------|--------|---------|-----------|-------|
-| Session Start | **completed** | 2026-05-27 | 2026-05-27 | This file written. |
-| Stage 1 — Planning | **completed** | 2026-05-27 | 2026-05-27 | 17 TCs drafted, ATP persisted to Jira customfield + comment, ATR scaffold ready. No transition fired. |
-| Stage 2 — Execution | **completed** | 2026-05-27 first attempt; retry #1 2026-05-28 | 2026-05-28 | Retry #1 against override URL `https://upexbunkai.vercel.app` + inbox `delgri.resend.app`. All 17 ATR rows overwritten. Stage 2 raw result: PASSED 9, KNOWN 5, BLOCKED 3, FAILED 1 (TC-17 cookie security → bug DRAFT, not filed). Smoke 3/3 green. **Recalibrated in Stage 3** (dev review 2026-05-27): TC-17 → PASSED-with-note → final PASSED 10 / KNOWN 4 / BLOCKED 3 / FAILED 0. |
-| Stage 3 — Reporting | **completed** | 2026-05-28 | 2026-05-28 | GO-with-debt; BK-2 transitioned `in_test → qa_approved` (verified status = QA Approved). TC-17 reclassified to Low hardening debt (no bug filed). 4 KNOWN → PO error-code/pre-fill scope question. 3 BLOCKED → manual-pending (Flag L). ATR finalized + mirrored to `acceptance_test_results` (customfield_10284, REST PUT HTTP 204, GET-verified) + QA comment posted (id 12551). Bug draft renamed → `bug-report-draft.NOT-FILED.md` with audit header. |
-| Archive | pending | — | — | Move `.session/sprint-testing/BK-2/` to `.session/.archive/2026-05-27-sprint-testing-BK-2/`. |
+| Stage               | Status        | Started                                       | Completed  | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------- | ------------- | --------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Session Start       | **completed** | 2026-05-27                                    | 2026-05-27 | This file written.                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Stage 1 — Planning  | **completed** | 2026-05-27                                    | 2026-05-27 | 17 TCs drafted, ATP persisted to Jira customfield + comment, ATR scaffold ready. No transition fired.                                                                                                                                                                                                                                                                                                                                                     |
+| Stage 2 — Execution | **completed** | 2026-05-27 first attempt; retry #1 2026-05-28 | 2026-05-28 | Retry #1 against override URL `https://upexbunkai.vercel.app` + inbox `delgri.resend.app`. All 17 ATR rows overwritten. Stage 2 raw result: PASSED 9, KNOWN 5, BLOCKED 3, FAILED 1 (TC-17 cookie security → bug DRAFT, not filed). Smoke 3/3 green. **Recalibrated in Stage 3** (dev review 2026-05-27): TC-17 → PASSED-with-note → final PASSED 10 / KNOWN 4 / BLOCKED 3 / FAILED 0.                                                                     |
+| Stage 3 — Reporting | **completed** | 2026-05-28                                    | 2026-05-28 | GO-with-debt; BK-2 transitioned `in_test → qa_approved` (verified status = QA Approved). TC-17 reclassified to Low hardening debt (no bug filed). 4 KNOWN → PO error-code/pre-fill scope question. 3 BLOCKED → manual-pending (Flag L). ATR finalized + mirrored to `acceptance_test_results` (customfield_10284, REST PUT HTTP 204, GET-verified) + QA comment posted (id 12551). Bug draft renamed → `bug-report-draft.NOT-FILED.md` with audit header. |
+| Archive             | pending       | —                                             | —          | Move `.session/sprint-testing/BK-2/` to `.session/.archive/2026-05-27-sprint-testing-BK-2/`.                                                                                                                                                                                                                                                                                                                                                              |
 
 ---
 

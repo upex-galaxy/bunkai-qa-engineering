@@ -6,10 +6,10 @@
 
 ## Repositories
 
-| Role | Path | Type |
-|---|---|---|
-| Target (app under test) | `/Users/ely/Desktop/projects/bunkai/upex-bunkai-tms` | Monorepo (single Next.js fullstack workspace `aicode-starter` in `bun.lock`) |
-| QA Framework | `/Users/ely/Desktop/projects/bunkai/bunkai-qa-engineering` (this repo) | Boilerplate (KATA + Playwright + Allure + Xray) |
+| Role                    | Path                                                                   | Type                                                                         |
+| ----------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Target (app under test) | `/Users/ely/Desktop/projects/bunkai/upex-bunkai-tms`                   | Monorepo (single Next.js fullstack workspace `aicode-starter` in `bun.lock`) |
+| QA Framework            | `/Users/ely/Desktop/projects/bunkai/bunkai-qa-engineering` (this repo) | Boilerplate (KATA + Playwright + Allure + Xray)                              |
 
 Target is a sibling directory under `/Users/ely/Desktop/projects/bunkai/`. Discovery is read-only on the target; all writes land in this framework's `.context/` and `.session/`.
 
@@ -17,15 +17,15 @@ Target is a sibling directory under `/Users/ely/Desktop/projects/bunkai/`. Disco
 
 ## Project Identity
 
-| Field | Value | Source |
-|---|---|---|
-| `project_name` | Bunkai | `.agents/project.yaml > project.project_name` |
-| `project_key` (Jira) | `BK` | `.agents/project.yaml > project.project_key` |
-| `webapp_domain` | `upexbunkai.vercel.app` | `.agents/project.yaml > project.webapp_domain` |
-| Atlassian site | `https://upexgalaxy67.atlassian.net/` | `.agents/project.yaml > issue_tracker.atlassian_url` |
-| Issue tracker | Jira (CLI: `acli`) | `.agents/project.yaml > issue_tracker` |
-| TMS | Xray on Jira (CLI: `bun xray`) — Modality A | `.agents/project.yaml > testing.tms_cli` |
-| Default test env | `staging` | `.agents/project.yaml > testing.default_env` |
+| Field                | Value                                       | Source                                               |
+| -------------------- | ------------------------------------------- | ---------------------------------------------------- |
+| `project_name`       | Bunkai                                      | `.agents/project.yaml > project.project_name`        |
+| `project_key` (Jira) | `BK`                                        | `.agents/project.yaml > project.project_key`         |
+| `webapp_domain`      | `upexbunkai.vercel.app`                     | `.agents/project.yaml > project.webapp_domain`       |
+| Atlassian site       | `https://jira.upexgalaxy.com.net/`          | `.agents/project.yaml > issue_tracker.atlassian_url` |
+| Issue tracker        | Jira (CLI: `acli`)                          | `.agents/project.yaml > issue_tracker`               |
+| TMS                  | Xray on Jira (CLI: `bun xray`) — Modality A | `.agents/project.yaml > testing.tms_cli`             |
+| Default test env     | `staging`                                   | `.agents/project.yaml > testing.default_env`         |
 
 > `kata-manifest.json` (framework) is the source of truth for KATA Components and ATC IDs. Per Critical Rule #12, always validate against it before proposing new test artifacts.
 
@@ -33,26 +33,26 @@ Target is a sibling directory under `/Users/ely/Desktop/projects/bunkai/`. Disco
 
 ## Tech Stack (target `upex-bunkai-tms`)
 
-| Layer | Tech | Version | Source |
-|---|---|---|---|
-| Runtime | Bun | `>= 1.0` | `bun.lock`, `package.json > engines` (implicit via `bun cli/...` scripts) |
-| Language | TypeScript | `^5.9.3` | `bun.lock > devDependencies` |
-| Framework | Next.js | `^15` (App Router) | `bun.lock > dependencies.next`; `next.config.ts` present |
-| UI | React | `^19` + React DOM `^19` | `bun.lock > dependencies` |
-| UI primitives | Radix UI (`@radix-ui/react-{dialog,dropdown-menu,tabs,tooltip}`) | `1.1.x` / `1.2.x` / `2.1.x` | `bun.lock` |
-| UI utilities | `clsx`, `class-variance-authority`, `tailwind-merge`, `cmdk`, `lucide-react`, `sonner` | latest | `bun.lock` |
-| Styles | Tailwind CSS | `^3.4` | `bun.lock > devDependencies`; `app/globals.css` |
-| Style toolchain | PostCSS + Autoprefixer | `^8.5` / `^10.5` | `bun.lock > devDependencies` |
-| DB / Auth | Supabase (`@supabase/ssr`, `@supabase/supabase-js`) | `^0.10.3` / `^2.106.0` | `bun.lock > dependencies` |
-| Database engine | Supabase Postgres (managed) | — | `.agents/project.yaml > database.db_type`; `supabase/migrations/0001…0008.sql` |
-| Validation | Zod | `^4.4.3` | `bun.lock` |
-| API contract | `@asteasolutions/zod-to-openapi` (codegen) | `^8.5.0` | `bun.lock` + `scripts/openapi-gen.ts`, `scripts/openapi-diff.ts` |
-| API docs | `@scalar/api-reference-react` | `^0.9.38` | `bun.lock`; rendered at `/api/docs` route |
-| Tables | `@tanstack/react-table` | `^8.21.3` | `bun.lock` |
-| Code editor | `@monaco-editor/react` | `^4.7.0` | `bun.lock` (presumed for ATC step authoring UX) |
-| Lint | ESLint 9 + `@antfu/eslint-config` + `@next/eslint-plugin-next` | `^9.28` / `^4.16` / `^16.2.6` | `bun.lock` |
-| Format | Prettier | `^3.7.4` | `bun.lock` |
-| Hooks | Husky + lint-staged | `^9.1.7` / `^16.2.7` | `bun.lock`; `.husky/` present in target |
+| Layer           | Tech                                                                                   | Version                       | Source                                                                         |
+| --------------- | -------------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------ |
+| Runtime         | Bun                                                                                    | `>= 1.0`                      | `bun.lock`, `package.json > engines` (implicit via `bun cli/...` scripts)      |
+| Language        | TypeScript                                                                             | `^5.9.3`                      | `bun.lock > devDependencies`                                                   |
+| Framework       | Next.js                                                                                | `^15` (App Router)            | `bun.lock > dependencies.next`; `next.config.ts` present                       |
+| UI              | React                                                                                  | `^19` + React DOM `^19`       | `bun.lock > dependencies`                                                      |
+| UI primitives   | Radix UI (`@radix-ui/react-{dialog,dropdown-menu,tabs,tooltip}`)                       | `1.1.x` / `1.2.x` / `2.1.x`   | `bun.lock`                                                                     |
+| UI utilities    | `clsx`, `class-variance-authority`, `tailwind-merge`, `cmdk`, `lucide-react`, `sonner` | latest                        | `bun.lock`                                                                     |
+| Styles          | Tailwind CSS                                                                           | `^3.4`                        | `bun.lock > devDependencies`; `app/globals.css`                                |
+| Style toolchain | PostCSS + Autoprefixer                                                                 | `^8.5` / `^10.5`              | `bun.lock > devDependencies`                                                   |
+| DB / Auth       | Supabase (`@supabase/ssr`, `@supabase/supabase-js`)                                    | `^0.10.3` / `^2.106.0`        | `bun.lock > dependencies`                                                      |
+| Database engine | Supabase Postgres (managed)                                                            | —                             | `.agents/project.yaml > database.db_type`; `supabase/migrations/0001…0008.sql` |
+| Validation      | Zod                                                                                    | `^4.4.3`                      | `bun.lock`                                                                     |
+| API contract    | `@asteasolutions/zod-to-openapi` (codegen)                                             | `^8.5.0`                      | `bun.lock` + `scripts/openapi-gen.ts`, `scripts/openapi-diff.ts`               |
+| API docs        | `@scalar/api-reference-react`                                                          | `^0.9.38`                     | `bun.lock`; rendered at `/api/docs` route                                      |
+| Tables          | `@tanstack/react-table`                                                                | `^8.21.3`                     | `bun.lock`                                                                     |
+| Code editor     | `@monaco-editor/react`                                                                 | `^4.7.0`                      | `bun.lock` (presumed for ATC step authoring UX)                                |
+| Lint            | ESLint 9 + `@antfu/eslint-config` + `@next/eslint-plugin-next`                         | `^9.28` / `^4.16` / `^16.2.6` | `bun.lock`                                                                     |
+| Format          | Prettier                                                                               | `^3.7.4`                      | `bun.lock`                                                                     |
+| Hooks           | Husky + lint-staged                                                                    | `^9.1.7` / `^16.2.7`          | `bun.lock`; `.husky/` present in target                                        |
 
 > **Source-of-truth note**: the target's `package.json` is OUT OF SYNC with `bun.lock` — it still shows the boilerplate fingerprint (`agentic-dev-boilerplate`, CLI-only deps). The lock declares the real workspace name (`aicode-starter`) and Next/Supabase deps. See Discovery Gaps below.
 
@@ -71,11 +71,11 @@ Target is a sibling directory under `/Users/ely/Desktop/projects/bunkai/`. Disco
 
 ## Environments
 
-| Env | Web URL | API URL | DB MCP | API MCP | Notes |
-|---|---|---|---|---|---|
-| `local` | `http://localhost:3000` | `http://localhost:3000/api` | `local-dbhub` | `local-openapi` | Requires target `bun install` after fixing `package.json` desync; then `bun dev`. |
-| `staging` (default) | `https://staging-upexbunkai.vercel.app` | `https://staging-upexbunkai.vercel.app/api` | `staging-dbhub` | `staging-openapi` | Vercel preview/staging deploy (presumed auto from Git). |
-| `production` (not in `project.yaml` yet) | `https://upexbunkai.vercel.app` | `https://upexbunkai.vercel.app/api` | — | — | Implied from `project.webapp_domain`; add to `.agents/project.yaml` before testing prod. |
+| Env                                      | Web URL                                 | API URL                                     | DB MCP          | API MCP           | Notes                                                                                    |
+| ---------------------------------------- | --------------------------------------- | ------------------------------------------- | --------------- | ----------------- | ---------------------------------------------------------------------------------------- |
+| `local`                                  | `http://localhost:3000`                 | `http://localhost:3000/api`                 | `local-dbhub`   | `local-openapi`   | Requires target `bun install` after fixing `package.json` desync; then `bun dev`.        |
+| `staging` (default)                      | `https://staging-upexbunkai.vercel.app` | `https://staging-upexbunkai.vercel.app/api` | `staging-dbhub` | `staging-openapi` | Vercel preview/staging deploy (presumed auto from Git).                                  |
+| `production` (not in `project.yaml` yet) | `https://upexbunkai.vercel.app`         | `https://upexbunkai.vercel.app/api`         | —               | —                 | Implied from `project.webapp_domain`; add to `.agents/project.yaml` before testing prod. |
 
 Source: `.agents/project.yaml > environments`. Active env defaults to `staging` per `testing.default_env`.
 

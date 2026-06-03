@@ -1,6 +1,6 @@
 # BK-10 — Acceptance Criteria
 
-> Jira field: `customfield_10141` · [View in Jira](https://upexgalaxy67.atlassian.net/browse/BK-10)
+> Jira field: `customfield_10141` · [View in Jira](https://jira.upexgalaxy.com.net/browse/BK-10)
 
 ```gherkin
 Scenario: Rename a Module

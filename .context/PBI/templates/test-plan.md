@@ -10,13 +10,13 @@
 
 ## Pointers
 
-| Field | Value |
-|---|---|
-| Story | [<<TICKET_KEY>>](https://upexgalaxy67.atlassian.net/browse/<<TICKET_KEY>>) |
-| Xray Test Plan (Modality A) | [{{BK-NNN}}](https://upexgalaxy67.atlassian.net/browse/{{BK-NNN}}) — fill once created |
-| QA owner | {{name}} |
-| Sprint | {{name}} |
-| Target env | {{`staging` (default) \| `local` \| `production`}} |
+| Field                       | Value                                                                               |
+| --------------------------- | ----------------------------------------------------------------------------------- |
+| Story                       | [<<TICKET_KEY>>](https://jira.upexgalaxy.com.net/browse/<<TICKET_KEY>>)             |
+| Xray Test Plan (Modality A) | [{{BK-NNN}}](https://jira.upexgalaxy.com.net/browse/{{BK-NNN}}) — fill once created |
+| QA owner                    | {{name}}                                                                            |
+| Sprint                      | {{name}}                                                                            |
+| Target env                  | {{`staging` (default) \| `local` \| `production`}}                                  |
 
 ---
 
@@ -72,23 +72,23 @@ Default execution mode for this Plan: **manual** in sprint, with promotions to *
 
 Each row will spawn one Test issue in Jira (`{{jira.work_type.test_case}}` → `Test`). TC keys filled after creation.
 
-| # | TC key (filled later) | Title | Layer | Priority | ROI verdict | Anchored ACs |
-|---|---|---|---|---|---|---|
-| TC-001 | {{BK-NNN}} | {{Happy path: …}} | UI | High | Candidate | AC1 |
-| TC-002 | {{BK-NNN}} | {{API contract: POST returns 201 with shape}} | API | High | Candidate | AC1 |
-| TC-003 | {{BK-NNN}} | {{Validation: missing field → 422}} | API | High | Candidate | AC2 |
-| TC-004 | {{BK-NNN}} | {{Edge case: …}} | UI | Medium | Manual | AC3 |
-| TC-005 | {{BK-NNN}} | {{Negative: unauthorized → 401}} | API | Medium | Candidate | AC3 |
-| TC-006 | {{BK-NNN}} | {{RLS: cross-tenant read denied}} | API | High | Candidate | (Cross-cutting BR-RLS) |
-| TC-007 | {{BK-NNN}} | {{PAT scope: insufficient scope → 403}} | API | Medium | Candidate (post Phase F) | (Cross-cutting BR-021) |
+| #      | TC key (filled later) | Title                                         | Layer | Priority | ROI verdict              | Anchored ACs           |
+| ------ | --------------------- | --------------------------------------------- | ----- | -------- | ------------------------ | ---------------------- |
+| TC-001 | {{BK-NNN}}            | {{Happy path: …}}                             | UI    | High     | Candidate                | AC1                    |
+| TC-002 | {{BK-NNN}}            | {{API contract: POST returns 201 with shape}} | API   | High     | Candidate                | AC1                    |
+| TC-003 | {{BK-NNN}}            | {{Validation: missing field → 422}}           | API   | High     | Candidate                | AC2                    |
+| TC-004 | {{BK-NNN}}            | {{Edge case: …}}                              | UI    | Medium   | Manual                   | AC3                    |
+| TC-005 | {{BK-NNN}}            | {{Negative: unauthorized → 401}}              | API   | Medium   | Candidate                | AC3                    |
+| TC-006 | {{BK-NNN}}            | {{RLS: cross-tenant read denied}}             | API   | High     | Candidate                | (Cross-cutting BR-RLS) |
+| TC-007 | {{BK-NNN}}            | {{PAT scope: insufficient scope → 403}}       | API   | Medium   | Candidate (post Phase F) | (Cross-cutting BR-021) |
 
 ### Coverage map (AC → TCs)
 
-| AC | Covered by | Status |
-|---|---|---|
+| AC                   | Covered by     | Status                             |
+| -------------------- | -------------- | ---------------------------------- |
 | AC1 — {{paraphrase}} | TC-001, TC-002 | ☐ Designed ☐ Documented ☐ Executed |
-| AC2 — {{paraphrase}} | TC-003 | ☐ ☐ ☐ |
-| AC3 — {{paraphrase}} | TC-004, TC-005 | ☐ ☐ ☐ |
+| AC2 — {{paraphrase}} | TC-003         | ☐ ☐ ☐                              |
+| AC3 — {{paraphrase}} | TC-004, TC-005 | ☐ ☐ ☐                              |
 
 Any AC without ≥1 TC is a coverage gap — block Story exit from `In Test` until it is closed.
 

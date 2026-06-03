@@ -8,15 +8,15 @@ This directory holds **local working notes** per Story / Bug / Test — never a 
 
 ## Jira project
 
-| Field | Value | Source |
-|---|---|---|
-| **Project key** | `BK` | `<framework>/.agents/project.yaml > project.project_key` |
-| **Project name** | Bunkai TMS | confirmed via `acli jira project view --key BK` (2026-05-24) |
-| **Lead** | Ely | same |
-| **Type** | software | same |
-| **Atlassian site** | `https://upexgalaxy67.atlassian.net/` | `.agents/project.yaml > issue_tracker.atlassian_url` |
-| **Issue tracker CLI** | `acli` (v1.3+) | `.agents/project.yaml > issue_tracker.issue_tracker_cli` |
-| **TMS** | Xray on Jira — CLI `bun xray` (Modality A) | `.agents/project.yaml > testing.tms_cli` |
+| Field                 | Value                                      | Source                                                       |
+| --------------------- | ------------------------------------------ | ------------------------------------------------------------ |
+| **Project key**       | `BK`                                       | `<framework>/.agents/project.yaml > project.project_key`     |
+| **Project name**      | Bunkai TMS                                 | confirmed via `acli jira project view --key BK` (2026-05-24) |
+| **Lead**              | Ely                                        | same                                                         |
+| **Type**              | software                                   | same                                                         |
+| **Atlassian site**    | `https://jira.upexgalaxy.com.net/`         | `.agents/project.yaml > issue_tracker.atlassian_url`         |
+| **Issue tracker CLI** | `acli` (v1.3+)                             | `.agents/project.yaml > issue_tracker.issue_tracker_cli`     |
+| **TMS**               | Xray on Jira — CLI `bun xray` (Modality A) | `.agents/project.yaml > testing.tms_cli`                     |
 
 Credentials live in `<framework>/.env`: `ATLASSIAN_URL`, `ATLASSIAN_EMAIL`, `ATLASSIAN_API_TOKEN`. Refresh by running `acli jira auth login` if calls 401.
 
@@ -163,9 +163,9 @@ Two patterns — pick per ticket complexity.
 
 ### When to use each
 
-| Structure | Use when | Example |
-|---|---|---|
-| **Per-Story** | Single Story, ≤5 TCs, no cross-session tracking | Small bug fix, copy tweak |
+| Structure      | Use when                                              | Example                                 |
+| -------------- | ----------------------------------------------------- | --------------------------------------- |
+| **Per-Story**  | Single Story, ≤5 TCs, no cross-session tracking       | Small bug fix, copy tweak               |
 | **Per-Module** | Multi-ticket module, ≥6 TCs, multi-session automation | ATC authoring flow, run execution, auth |
 
 ---

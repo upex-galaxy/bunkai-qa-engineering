@@ -1,7 +1,7 @@
 # BK-2: Sign up and sign in with email (magic-link)
 
-**Ticket:** [BK-2](https://upexgalaxy67.atlassian.net/browse/BK-2) | **Module:** tenancy-identity | **Status:** Ready For QA | **Sprint:** Bunkai (67) Sprint 1 (active, 2026-05-11 → 2026-06-08)
-**Epic:** [BK-1](https://upexgalaxy67.atlassian.net/browse/BK-1) — Tenancy & Identity
+**Ticket:** [BK-2](https://jira.upexgalaxy.com.net/browse/BK-2) | **Module:** tenancy-identity | **Status:** Ready For QA | **Sprint:** Bunkai (67) Sprint 1 (active, 2026-05-11 → 2026-06-08)
+**Epic:** [BK-1](https://jira.upexgalaxy.com.net/browse/BK-1) — Tenancy & Identity
 **Source spec:** FR-001 (email side only; OAuth covered by BK-3)
 **Reporter:** Ely | **Assignee:** Unassigned | **Priority:** Medium | **Story Points:** —
 **Labels:** `auth`, `mvp`, `wave-1`, `shift-left-2026-05-25`, `shift-left-reviewed`
@@ -80,9 +80,9 @@ Reconciliation decisions made in shift-left §2:
 
 ## TMS Artifacts
 
-| Artifact | ID | Status |
-|----------|----|--------|
-| ATP (Modality jira-native: Story `acceptance_test_plan` customfield + comment mirror) | Pending | Created in Stage 1 |
+| Artifact                                                                                 | ID      | Status             |
+| ---------------------------------------------------------------------------------------- | ------- | ------------------ |
+| ATP (Modality jira-native: Story `acceptance_test_plan` customfield + comment mirror)    | Pending | Created in Stage 1 |
 | ATR (Modality jira-native: Story `acceptance_test_results` customfield + comment mirror) | Pending | Created in Stage 3 |
 
 > TMS Modality resolved as **jira-native** (no Xray). `.context/master-test-plan.md` is missing — DEFAULTED per Phase 0 §4 fallback. Confirm with user before Stage 1 fires.

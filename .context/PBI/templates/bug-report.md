@@ -6,20 +6,20 @@
 
 ## Bug identity
 
-| Field | Value |
-|---|---|
-| Jira key (filed) | [{{BK-NNN}}](https://upexgalaxy67.atlassian.net/browse/{{BK-NNN}}) — fill once created |
-| Status | Open → In Progress → In Review → Ready For QA → Closed |
-| Side states | Deferred · Duplicated · Enhancement · Rejected · Cannot Reproduce · ABORTED |
-| Priority | {{P0 Critical \| P1 High \| P2 Medium \| P3 Low}} |
-| Severity (if distinct field exists) | {{Critical / High / Medium / Low}} |
-| Reporter (QA) | {{name}} |
-| Assignee (Dev) | {{name or "unassigned"}} |
-| Environment | {{`local` \| `staging` \| `production`}} |
-| Discovered during | {{Sprint testing of `BK-XXX` \| Regression run \| Exploratory \| Production incident}} |
-| Linked Story | {{`BK-XXX`}} |
-| Failing ATC / TC | {{`BK-YYY`}} or {{TMS Test key}} |
-| Failing Run (if recorded) | {{Run ID once Run entity ships}} |
+| Field                               | Value                                                                                  |
+| ----------------------------------- | -------------------------------------------------------------------------------------- |
+| Jira key (filed)                    | [{{BK-NNN}}](https://jira.upexgalaxy.com.net/browse/{{BK-NNN}}) — fill once created    |
+| Status                              | Open → In Progress → In Review → Ready For QA → Closed                                 |
+| Side states                         | Deferred · Duplicated · Enhancement · Rejected · Cannot Reproduce · ABORTED            |
+| Priority                            | {{P0 Critical \| P1 High \| P2 Medium \| P3 Low}}                                      |
+| Severity (if distinct field exists) | {{Critical / High / Medium / Low}}                                                     |
+| Reporter (QA)                       | {{name}}                                                                               |
+| Assignee (Dev)                      | {{name or "unassigned"}}                                                               |
+| Environment                         | {{`local` \| `staging` \| `production`}}                                               |
+| Discovered during                   | {{Sprint testing of `BK-XXX` \| Regression run \| Exploratory \| Production incident}} |
+| Linked Story                        | {{`BK-XXX`}}                                                                           |
+| Failing ATC / TC                    | {{`BK-YYY`}} or {{TMS Test key}}                                                       |
+| Failing Run (if recorded)           | {{Run ID once Run entity ships}}                                                       |
 
 ---
 

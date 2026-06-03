@@ -6,15 +6,15 @@
 
 ## Pointers
 
-| Field | Value |
-|---|---|
-| Jira key | [<<TICKET_KEY>>](https://upexgalaxy67.atlassian.net/browse/<<TICKET_KEY>>) |
-| Issue type | Story |
-| Module / area | {{module-slug}} (e.g., `atc-authoring`, `runs`, `tokens`, `auth`) |
-| Sprint | {{Sprint name or "Backlog"}} |
-| Assignee (Dev) | {{name}} |
-| Assignee (QA) | {{name}} |
-| Status | {{Backlog \| Shift-Left QA \| Estimation \| Ready For Dev \| In Progress \| In Review \| Ready For QA \| In Test \| QA Approved \| Ready For Release \| Deployed to Production \| BLOCKED \| ABORTED}} |
+| Field          | Value                                                                                                                                                                                                  |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Jira key       | [<<TICKET_KEY>>](https://jira.upexgalaxy.com.net/browse/<<TICKET_KEY>>)                                                                                                                                |
+| Issue type     | Story                                                                                                                                                                                                  |
+| Module / area  | {{module-slug}} (e.g., `atc-authoring`, `runs`, `tokens`, `auth`)                                                                                                                                      |
+| Sprint         | {{Sprint name or "Backlog"}}                                                                                                                                                                           |
+| Assignee (Dev) | {{name}}                                                                                                                                                                                               |
+| Assignee (QA)  | {{name}}                                                                                                                                                                                               |
+| Status         | {{Backlog \| Shift-Left QA \| Estimation \| Ready For Dev \| In Progress \| In Review \| Ready For QA \| In Test \| QA Approved \| Ready For Release \| Deployed to Production \| BLOCKED \| ABORTED}} |
 
 ---
 
@@ -57,15 +57,15 @@ Mirror the Jira custom field `✅ Acceptance Criteria (Gherkin)`. Mark `[x]` onc
 
 ## Code locations (filled during Shift-Left or Sprint Testing)
 
-| Layer | Path(s) in `upex-bunkai-tms` | Notes |
-|---|---|---|
-| UI route | {{e.g., `app/(app)/projects/[projectSlug]/atcs/[atcId]/page.tsx`}} | — |
-| UI components | {{`components/atcs/atc-editor.tsx` ...}} | — |
-| API route handler | {{`app/api/v1/atcs/route.ts`}} | — |
-| DB migration | {{`supabase/migrations/0009_*.sql`}} | If schema change |
-| RLS policies | {{table names + helper functions used}} | — |
-| RPCs touched | {{`bunkai_save_atc` etc.}} | — |
-| OpenAPI schema | {{Zod source}} | Confirm `bun run api:sync` updated |
+| Layer             | Path(s) in `upex-bunkai-tms`                                       | Notes                              |
+| ----------------- | ------------------------------------------------------------------ | ---------------------------------- |
+| UI route          | {{e.g., `app/(app)/projects/[projectSlug]/atcs/[atcId]/page.tsx`}} | —                                  |
+| UI components     | {{`components/atcs/atc-editor.tsx` ...}}                           | —                                  |
+| API route handler | {{`app/api/v1/atcs/route.ts`}}                                     | —                                  |
+| DB migration      | {{`supabase/migrations/0009_*.sql`}}                               | If schema change                   |
+| RLS policies      | {{table names + helper functions used}}                            | —                                  |
+| RPCs touched      | {{`bunkai_save_atc` etc.}}                                         | —                                  |
+| OpenAPI schema    | {{Zod source}}                                                     | Confirm `bun run api:sync` updated |
 
 ---
 
@@ -80,12 +80,12 @@ Mirror the Jira custom field `✅ Acceptance Criteria (Gherkin)`. Mark `[x]` onc
 
 ## Test scenarios planned (will become TC issues in Jira)
 
-| TC ID (planned) | Scenario | Layer | Priority | ROI verdict |
-|---|---|---|---|---|
-| {{TC-001}} | {{Happy path — …}} | UI / API / Unit | High | Candidate |
-| {{TC-002}} | {{Validation — …}} | API | High | Candidate |
-| {{TC-003}} | {{Edge case — …}} | UI | Medium | Manual |
-| {{TC-004}} | {{Negative — …}} | API | Low | Deferred |
+| TC ID (planned) | Scenario           | Layer           | Priority | ROI verdict |
+| --------------- | ------------------ | --------------- | -------- | ----------- |
+| {{TC-001}}      | {{Happy path — …}} | UI / API / Unit | High     | Candidate   |
+| {{TC-002}}      | {{Validation — …}} | API             | High     | Candidate   |
+| {{TC-003}}      | {{Edge case — …}}  | UI              | Medium   | Manual      |
+| {{TC-004}}      | {{Negative — …}}   | API             | Low      | Deferred    |
 
 ROI verdict comes from `/test-documentation` (Candidate → automate; Manual → manual run; Deferred → reject for now).
 

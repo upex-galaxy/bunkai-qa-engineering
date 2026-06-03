@@ -1,8 +1,8 @@
 # Shift-Left Refinement — BK-2
 
 **Story:** Sign up and sign in with email (magic-link)
-**Jira:** [BK-2](https://upexgalaxy67.atlassian.net/browse/BK-2)
-**Epic:** [BK-1](https://upexgalaxy67.atlassian.net/browse/BK-1) — Tenancy & Identity
+**Jira:** [BK-2](https://jira.upexgalaxy.com.net/browse/BK-2)
+**Epic:** [BK-1](https://jira.upexgalaxy.com.net/browse/BK-1) — Tenancy & Identity
 **Source spec:** FR-001 (email side only; OAuth covered by BK-3)
 **Reviewed:** 2026-05-25 — Shift-Left QA pass
 
@@ -12,23 +12,23 @@
 
 **Implementation maturity (target repo `upex-bunkai-tms`, branch `main`):**
 
-| Component                               | Status                                                                                 |
-|-----------------------------------------|----------------------------------------------------------------------------------------|
-| `app/(auth)/login/page.tsx`             | EXISTS — left brand panel + right auth panel with Suspense-wrapped form                |
-| `app/(auth)/login/magic-link-form.tsx`  | EXISTS — client form, regex email validation, `/api/v1/auth/magic-link` POST          |
-| `app/api/v1/auth/magic-link/route.ts`   | EXISTS — Zod schema, Supabase `signInWithOtp`, 429 mapped to `rate_limited`           |
-| `app/auth/callback/route.ts`            | EXISTS — `exchangeCodeForSession`, hard-codes redirect to `/projects`                  |
-| `middleware.ts`                         | EXISTS — protects `/projects` + `/onboarding`, preserves `?next=` round-trip          |
-| `app/(app)/onboarding/page.tsx`         | EXISTS — server-side guard: signed-in + no workspace → form; has workspace → `/projects` |
-| `app/(app)/onboarding/onboarding-form.tsx` | EXISTS — manual slug + name input, RPC `bunkai_bootstrap_workspace`                  |
-| `supabase/migrations/0006_bootstrap_workspace.sql` | EXISTS — atomic workspace + workspace_members row insert, security-definer    |
-| Workspace auto-create on first sign-in  | **NOT IMPLEMENTED** — current path is manual via `/onboarding`                         |
-| Specific error codes (`TOKEN_USED`, `TOKEN_EXPIRED`, `INVALID_EMAIL`) | **NOT IMPLEMENTED** — generic envelope only             |
-| RFC 5321 254-char enforcement           | **NOT IMPLEMENTED** — `z.string().email()` permits longer than SMTP allows             |
-| Magic-link TTL 15 min                   | **CONFIG-ONLY** — lives in Supabase GoTrue (`auth.otp_exp`), not in repo               |
-| `/home` route                           | **DOES NOT EXIST** — story references non-existent surface                             |
-| `signInWithOtp` resend semantics        | **UNDEFINED** — no documented behavior on second-request-before-first-expires          |
-| Pending-invite bypass branch            | **NOT VISIBLE** — depends on BK-5 (invites) shipping first                             |
+| Component                                                             | Status                                                                                   |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `app/(auth)/login/page.tsx`                                           | EXISTS — left brand panel + right auth panel with Suspense-wrapped form                  |
+| `app/(auth)/login/magic-link-form.tsx`                                | EXISTS — client form, regex email validation, `/api/v1/auth/magic-link` POST             |
+| `app/api/v1/auth/magic-link/route.ts`                                 | EXISTS — Zod schema, Supabase `signInWithOtp`, 429 mapped to `rate_limited`              |
+| `app/auth/callback/route.ts`                                          | EXISTS — `exchangeCodeForSession`, hard-codes redirect to `/projects`                    |
+| `middleware.ts`                                                       | EXISTS — protects `/projects` + `/onboarding`, preserves `?next=` round-trip             |
+| `app/(app)/onboarding/page.tsx`                                       | EXISTS — server-side guard: signed-in + no workspace → form; has workspace → `/projects` |
+| `app/(app)/onboarding/onboarding-form.tsx`                            | EXISTS — manual slug + name input, RPC `bunkai_bootstrap_workspace`                      |
+| `supabase/migrations/0006_bootstrap_workspace.sql`                    | EXISTS — atomic workspace + workspace_members row insert, security-definer               |
+| Workspace auto-create on first sign-in                                | **NOT IMPLEMENTED** — current path is manual via `/onboarding`                           |
+| Specific error codes (`TOKEN_USED`, `TOKEN_EXPIRED`, `INVALID_EMAIL`) | **NOT IMPLEMENTED** — generic envelope only                                              |
+| RFC 5321 254-char enforcement                                         | **NOT IMPLEMENTED** — `z.string().email()` permits longer than SMTP allows               |
+| Magic-link TTL 15 min                                                 | **CONFIG-ONLY** — lives in Supabase GoTrue (`auth.otp_exp`), not in repo                 |
+| `/home` route                                                         | **DOES NOT EXIST** — story references non-existent surface                               |
+| `signInWithOtp` resend semantics                                      | **UNDEFINED** — no documented behavior on second-request-before-first-expires            |
+| Pending-invite bypass branch                                          | **NOT VISIBLE** — depends on BK-5 (invites) shipping first                               |
 
 **Feasibility verdict:** the foundational plumbing exists; what's missing is the **glue logic + UX contract refinement**. BK-2 is effectively a *Phase 2 / refactor* of the existing MVP sketch, not a greenfield build.
 
@@ -40,10 +40,10 @@
 
 ### 2.1 Redirect target — `/home` vs `/projects`
 
-| Side       | Says                              | Strength                                 | Weakness                              |
-|------------|-----------------------------------|------------------------------------------|---------------------------------------|
-| AC         | "user lands on the Workspace Home" | Conveys semantic intent (post-auth root) | `/home` route does not exist          |
-| Code       | Redirects to `/projects`          | Concrete + already routable              | Skips the "needs workspace?" check    |
+| Side | Says                               | Strength                                 | Weakness                           |
+| ---- | ---------------------------------- | ---------------------------------------- | ---------------------------------- |
+| AC   | "user lands on the Workspace Home" | Conveys semantic intent (post-auth root) | `/home` route does not exist       |
+| Code | Redirects to `/projects`           | Concrete + already routable              | Skips the "needs workspace?" check |
 
 **Decision:** **Code wins on the URL, AC wins on the routing intent.** Replace AC's `/home` with the routed entry point. Add the missing branch.
 
@@ -56,10 +56,10 @@
 
 ### 2.2 Default workspace auto-creation on first verified sign-in
 
-| Side       | Says                                                                  | Strength                                                                          | Weakness                                                                       |
-|------------|-----------------------------------------------------------------------|-----------------------------------------------------------------------------------|--------------------------------------------------------------------------------|
-| AC         | Callback creates `"{display_name}'s workspace"` automatically + idempotent | Zero-friction sign-up                                                          | Requires `display_name` (we only have email); slug collisions inevitable; bad URL choices baked in |
-| Code       | Manual `/onboarding` form (name + slug, user-controlled)              | User owns the URL; slug uniqueness enforced; multi-tenant-honest                  | One extra screen between sign-in and first action                              |
+| Side | Says                                                                       | Strength                                                         | Weakness                                                                                           |
+| ---- | -------------------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| AC   | Callback creates `"{display_name}'s workspace"` automatically + idempotent | Zero-friction sign-up                                            | Requires `display_name` (we only have email); slug collisions inevitable; bad URL choices baked in |
+| Code | Manual `/onboarding` form (name + slug, user-controlled)                   | User owns the URL; slug uniqueness enforced; multi-tenant-honest | One extra screen between sign-in and first action                                                  |
 
 **Decision:** **Code pattern wins (manual onboarding)** — but with UX hand-holding.
 
@@ -76,10 +76,10 @@
 
 ### 2.3 Error code contract — AC `INVALID_EMAIL` / `TOKEN_USED` / `TOKEN_EXPIRED` vs code envelope
 
-| Side       | Says                                                                | Strength                                       | Weakness                                                |
-|------------|---------------------------------------------------------------------|------------------------------------------------|---------------------------------------------------------|
-| AC         | Domain-specific codes (`INVALID_EMAIL`, `TOKEN_USED`, `TOKEN_EXPIRED`) | Frontend can render specific copy per failure | No envelope discipline; codes invented in isolation     |
-| Code       | Structured envelope (`bad_request`, `upstream_error`, `rate_limited`) | Reusable across all API surfaces              | Loses signal — frontend can't differentiate token-replay from infra outage |
+| Side | Says                                                                   | Strength                                      | Weakness                                                                   |
+| ---- | ---------------------------------------------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------- |
+| AC   | Domain-specific codes (`INVALID_EMAIL`, `TOKEN_USED`, `TOKEN_EXPIRED`) | Frontend can render specific copy per failure | No envelope discipline; codes invented in isolation                        |
+| Code | Structured envelope (`bad_request`, `upstream_error`, `rate_limited`)  | Reusable across all API surfaces              | Loses signal — frontend can't differentiate token-replay from infra outage |
 
 **Decision:** **Hybrid — keep the envelope, replace the codes.**
 
@@ -93,10 +93,10 @@
 
 ### 2.4 Magic-link TTL 15 minutes
 
-| Side       | Says                                                    | Strength                              | Weakness                                                  |
-|------------|---------------------------------------------------------|---------------------------------------|-----------------------------------------------------------|
-| AC         | TTL 15 minutes, single-use                              | Correct security policy               | Lives outside code repo                                   |
-| Code       | Defers to Supabase GoTrue config                        | Honest about where the truth lives    | Repo gives no signal that the value is enforced anywhere  |
+| Side | Says                             | Strength                           | Weakness                                                 |
+| ---- | -------------------------------- | ---------------------------------- | -------------------------------------------------------- |
+| AC   | TTL 15 minutes, single-use       | Correct security policy            | Lives outside code repo                                  |
+| Code | Defers to Supabase GoTrue config | Honest about where the truth lives | Repo gives no signal that the value is enforced anywhere |
 
 **Decision:** **AC wins (15 min is correct)**, but enforcement is an **ops + docs concern**, not a code concern.
 
@@ -107,10 +107,10 @@
 
 ### 2.5 Email validation — RFC 5321 (254 char limit)
 
-| Side       | Says                                                  | Strength                                            | Weakness                          |
-|------------|-------------------------------------------------------|-----------------------------------------------------|-----------------------------------|
-| AC         | RFC 5321 with 254-char ceiling                        | Aligns with SMTP delivery reality                   | None worth keeping                |
-| Code       | Loose client regex + `z.string().email()` server-side | Catches shape errors                                | Permits 300+ char addresses that GoTrue / SMTP will reject silently |
+| Side | Says                                                  | Strength                          | Weakness                                                            |
+| ---- | ----------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------- |
+| AC   | RFC 5321 with 254-char ceiling                        | Aligns with SMTP delivery reality | None worth keeping                                                  |
+| Code | Loose client regex + `z.string().email()` server-side | Catches shape errors              | Permits 300+ char addresses that GoTrue / SMTP will reject silently |
 
 **Decision:** **AC wins.**
 
@@ -124,10 +124,10 @@
 
 **Status:** AC silent; needs PO decision.
 
-| Option                                         | Pros                                       | Cons                                                                                  |
-|------------------------------------------------|--------------------------------------------|---------------------------------------------------------------------------------------|
-| A. Both tokens valid until used/expired (Supabase default) | Zero work; matches GoTrue out-of-box      | Phishing risk: if 1st link is intercepted, requesting a "fresh" one doesn't kill it   |
-| B. Resend invalidates prior tokens             | Stronger security posture                  | Requires custom logic (token tracking table or Edge Function); +1-2 sprint days       |
+| Option                                                     | Pros                                 | Cons                                                                                |
+| ---------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------- |
+| A. Both tokens valid until used/expired (Supabase default) | Zero work; matches GoTrue out-of-box | Phishing risk: if 1st link is intercepted, requesting a "fresh" one doesn't kill it |
+| B. Resend invalidates prior tokens                         | Stronger security posture            | Requires custom logic (token tracking table or Edge Function); +1-2 sprint days     |
 
 **Recommendation:** **A for MVP, with a 60-second resend cooldown UI guard** (UX prevents accidental double-request; security upgrade B becomes a separate Story when threat model demands it). Flagged for PO/security review.
 
@@ -251,23 +251,23 @@ Scenario: Session cookie set with secure attributes
 
 ## 4. Edge cases (names + criticality)
 
-| # | Edge case                                                     | Criticality |
-|---|---------------------------------------------------------------|-------------|
-| 1 | Email with uppercase letters — Supabase normalizes; UI should mirror | Medium    |
-| 2 | Email with `+alias` (Gmail-style)                            | Low         |
-| 3 | Internationalized email (Punycode / Unicode local-part)       | Medium      |
-| 4 | Same email requesting links from two different devices/browsers | High      |
-| 5 | Magic link clicked on a different device than the one that requested it | High |
-| 6 | Magic link clicked while already signed in as a *different* user | High     |
-| 7 | Magic link clicked in private/incognito window               | Medium      |
-| 8 | Mailbox bounces / undeliverable address                      | High        |
-| 9 | User clicks the magic link, then closes the tab before redirect completes | Medium |
-| 10 | Slug collision on bootstrap (two users want same slug)       | High        |
-| 11 | Bootstrap RPC fails mid-flight (e.g. DB hiccup) — partial state | High     |
-| 12 | First-sign-in race (user double-clicks the link, two callback requests in parallel) | High |
-| 13 | Magic link arrives in spam folder                            | Medium      |
-| 14 | Supabase project is paused / unreachable                     | High        |
-| 15 | Browser blocks third-party cookies (Safari ITP)              | Medium      |
+| #   | Edge case                                                                           | Criticality |
+| --- | ----------------------------------------------------------------------------------- | ----------- |
+| 1   | Email with uppercase letters — Supabase normalizes; UI should mirror                | Medium      |
+| 2   | Email with `+alias` (Gmail-style)                                                   | Low         |
+| 3   | Internationalized email (Punycode / Unicode local-part)                             | Medium      |
+| 4   | Same email requesting links from two different devices/browsers                     | High        |
+| 5   | Magic link clicked on a different device than the one that requested it             | High        |
+| 6   | Magic link clicked while already signed in as a *different* user                    | High        |
+| 7   | Magic link clicked in private/incognito window                                      | Medium      |
+| 8   | Mailbox bounces / undeliverable address                                             | High        |
+| 9   | User clicks the magic link, then closes the tab before redirect completes           | Medium      |
+| 10  | Slug collision on bootstrap (two users want same slug)                              | High        |
+| 11  | Bootstrap RPC fails mid-flight (e.g. DB hiccup) — partial state                     | High        |
+| 12  | First-sign-in race (user double-clicks the link, two callback requests in parallel) | High        |
+| 13  | Magic link arrives in spam folder                                                   | Medium      |
+| 14  | Supabase project is paused / unreachable                                            | High        |
+| 15  | Browser blocks third-party cookies (Safari ITP)                                     | Medium      |
 
 ---
 
