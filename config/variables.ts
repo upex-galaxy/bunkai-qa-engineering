@@ -25,6 +25,11 @@ catch {
 
 export type Environment = 'local' | 'staging'; // Add more when needed (e.g., 'production')
 
+// RBAC roles mirrored from Bunkai TMS (viewer/member/admin/owner). 'user' is the
+// default/legacy role that maps to the original {ENV}_USER_* keys for backward
+// compatibility. Each role resolves credentials and an optional PAT independently.
+export type UserRole = 'user' | 'viewer' | 'member' | 'admin' | 'owner';
+
 // ============================================
 // Destructure Environment Variables (Single Access)
 // ============================================
@@ -97,6 +102,38 @@ const userCredentialsMap: Record<Environment, { email: string, password: string 
     password: STAGING_USER_PASSWORD ?? '',
   },
 };
+
+// ============================================
+// Role-aware credential resolution (multi-user per environment)
+// ============================================
+//
+// Reads role-scoped env vars on demand: {ENV}_{ROLE}_EMAIL, {ENV}_{ROLE}_PASSWORD
+// and {ENV}_{ROLE}_API_TOKEN. The 'user' role keeps the legacy {ENV}_USER_* keys.
+// This is the only place that reads process.env, preserving the single-source rule.
+//
+// Examples:
+//   resolveTestUser('user')             → LOCAL_USER_EMAIL / LOCAL_USER_PASSWORD
+//   resolveTestUser('admin', 'staging') → STAGING_ADMIN_EMAIL / STAGING_ADMIN_PASSWORD
+//                                          STAGING_ADMIN_API_TOKEN (for PAT auth)
+
+export interface TestUserCredentials {
+  email: string
+  password: string
+  apiToken: string
+}
+
+export function resolveTestUser(
+  role: UserRole = 'user',
+  environment: Environment = env.current,
+): TestUserCredentials {
+  const ENV = environment.toUpperCase();
+  const ROLE = role.toUpperCase();
+  return {
+    email: process.env[`${ENV}_${ROLE}_EMAIL`] ?? '',
+    password: process.env[`${ENV}_${ROLE}_PASSWORD`] ?? '',
+    apiToken: process.env[`${ENV}_${ROLE}_API_TOKEN`] ?? '',
+  };
+}
 
 // ============================================
 // ENV DATA Mapping (hardcoded - not secrets because these are not sensitive data like credentials)

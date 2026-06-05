@@ -49,10 +49,38 @@ if (args.includes('--help') || args.includes('-h')) {
   process.exit(0);
 }
 
+// Resolve a `--flag value` or `--flag=value` option from argv.
+function flagValue(name: string): string | undefined {
+  const eq = args.find(a => a.startsWith(`--${name}=`));
+  if (eq) { return eq.slice(name.length + 3); }
+  const idx = args.indexOf(`--${name}`);
+  const next = args[idx + 1];
+  if (idx !== -1 && next && !next.startsWith('-')) { return next; }
+  return undefined;
+}
+
+const validEnvs = ['local', 'staging']; // Must match Environment type in config/variables.ts
+const validMethods = ['signin', 'pat']; // signin = signup-fallback flow; pat = use existing PAT
+const validRoles = ['user', 'viewer', 'member', 'admin', 'owner']; // Must match UserRole
+
+// Positional arg = environment (first token that is not a flag), kept for back-compat.
+const envArg = flagValue('env') ?? args.find(a => !a.startsWith('-'));
+const method = flagValue('method') ?? 'signin';
+const role = flagValue('role') ?? 'user';
+
+if (!validMethods.includes(method)) {
+  log(`Unknown method: "${method}"`, 'error');
+  log(`Available methods: ${validMethods.join(', ')}`, 'info');
+  process.exit(1);
+}
+if (!validRoles.includes(role)) {
+  log(`Unknown role: "${role}"`, 'error');
+  log(`Available roles: ${validRoles.join(', ')}`, 'info');
+  process.exit(1);
+}
+
 // Validate and override TEST_ENV BEFORE importing config,
 // because config/variables.ts reads TEST_ENV at evaluation time.
-const validEnvs = ['local', 'staging']; // Must match Environment type in config/variables.ts
-const envArg = args[0];
 if (envArg) {
   if (!validEnvs.includes(envArg)) {
     log(`Unknown environment: "${envArg}"`, 'error');
@@ -64,7 +92,10 @@ if (envArg) {
 
 // Dynamic import: config/variables.ts reads TEST_ENV at evaluation time,
 // so we must set it above BEFORE this import runs.
-const { config, env } = await import('@variables');
+const { config, env, resolveTestUser } = await import('@variables');
+
+// Credentials for the requested role + environment (single source: config/variables.ts).
+const testUser = resolveTestUser(role as Parameters<typeof resolveTestUser>[0]);
 
 // ============================================
 // Constants
@@ -176,13 +207,13 @@ function buildApiState(responseBody: Record<string, unknown>): ApiState | null {
 async function authenticate(): Promise<ApiState | null> {
   const signinUrl = `${config.apiUrl}${config.auth.loginEndpoint}`;
   const signupUrl = `${config.apiUrl}${SIGNUP_PATH}`;
-  const { email, password } = config.testUser;
+  const { email, password } = testUser;
+  const keyPrefix = `${env.current.toUpperCase()}_${role.toUpperCase()}`;
 
   if (!email || !password) {
-    const prefix = env.current.toUpperCase();
     log('Missing credentials in .env file:', 'error');
-    if (!email) { log(`  - ${prefix}_USER_EMAIL is not set`, 'error'); }
-    if (!password) { log(`  - ${prefix}_USER_PASSWORD is not set`, 'error'); }
+    if (!email) { log(`  - ${keyPrefix}_EMAIL is not set`, 'error'); }
+    if (!password) { log(`  - ${keyPrefix}_PASSWORD is not set`, 'error'); }
     log('Set these in your .env file and try again.', 'info');
     return null;
   }
@@ -228,6 +259,59 @@ async function authenticate(): Promise<ApiState | null> {
     log(`Signin failed with status ${signinRes.status}`, 'error');
     log(`Response: ${body}`, 'error');
     return null;
+  }
+  catch (error) {
+    log('Connection failed. Is the server running?', 'error');
+    log(`  ${String(error)}`, 'error');
+    return null;
+  }
+}
+
+/**
+ * Method 2 — authenticate with an existing Personal Access Token.
+ *
+ * Reads {ENV}_{ROLE}_API_TOKEN from .env, validates it against GET /me with a
+ * Bearer header, and persists it as-is. No signin/signup is performed — the PAT
+ * is already the canonical credential. Use this when a long-lived token was
+ * minted out-of-band (e.g. from the Bunkai UI) and you just want to wire it in.
+ */
+async function authenticateWithPat(): Promise<ApiState | null> {
+  const { apiToken } = testUser;
+  const keyPrefix = `${env.current.toUpperCase()}_${role.toUpperCase()}`;
+
+  if (!apiToken) {
+    log('Missing PAT in .env file:', 'error');
+    log(`  - ${keyPrefix}_API_TOKEN is not set`, 'error');
+    log('Set it in your .env file and try again, or use --method=signin.', 'info');
+    return null;
+  }
+
+  const meUrl = `${config.apiUrl}${config.auth.meEndpoint}`;
+  log(`Validating PAT against ${meUrl}...`);
+
+  try {
+    const res = await fetch(meUrl, {
+      method: 'GET',
+      headers: { Accept: 'application/json', Authorization: `Bearer ${apiToken}` },
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      log(`PAT validation failed with status ${res.status}`, 'error');
+      log(`Response: ${body}`, 'error');
+      log(`The token in ${keyPrefix}_API_TOKEN is invalid, expired, or revoked.`, 'info');
+      return null;
+    }
+
+    log('PAT is valid.', 'success');
+    return {
+      token: apiToken,
+      tokenType: 'Bearer',
+      expiresIn: config.auth.tokenLifetimeSeconds,
+      refreshToken: null,
+      source: 'api-login',
+      createdAt: new Date().toISOString(),
+    };
   }
   catch (error) {
     log('Connection failed. Is the server running?', 'error');
@@ -308,16 +392,25 @@ function showHelp(): void {
 \x1B[1mAPI Login\x1B[0m - Authenticate and store token for tests & MCP tools
 
 \x1B[1mUSAGE\x1B[0m
-  bun run api:login [environment]
+  bun run api:login [environment] [--method <m>] [--role <r>]
 
 \x1B[1mENVIRONMENTS\x1B[0m
   local       Authenticate against local dev server (default)
   staging     Authenticate against staging server
 
+\x1B[1mMETHODS\x1B[0m (--method, default: signin)
+  signin      Sign in with email + password; auto-signup on 401 (mints a PAT)
+  pat         Use an existing PAT from .env; validate it against GET /me
+
+\x1B[1mROLES\x1B[0m (--role, default: user)
+  user viewer member admin owner
+              Selects which {ENV}_{ROLE}_* credentials to use (RBAC test users)
+
 \x1B[1mEXAMPLES\x1B[0m
-  bun run api:login                  # Uses TEST_ENV from .env
-  bun run api:login local            # Force local environment
-  bun run api:login staging          # Force staging environment
+  bun run api:login                          # local, signin, role=user
+  bun run api:login staging                  # staging, signin, role=user
+  bun run api:login staging --role admin     # staging admin via signin
+  bun run api:login local --method pat --role member   # validate member PAT
 
 \x1B[1mTOKEN STORAGE\x1B[0m
   .auth/api-state.json    Used by Playwright test fixtures
@@ -325,15 +418,20 @@ function showHelp(): void {
                           opencode.jsonc ({env:API_TOKEN}) at MCP-server spawn.
                           RESTART your terminal after login so MCPs pick it up.
 
-\x1B[1mREQUIRED .env VARIABLES\x1B[0m
-  For local:    LOCAL_USER_EMAIL, LOCAL_USER_PASSWORD
-  For staging:  STAGING_USER_EMAIL, STAGING_USER_PASSWORD
+\x1B[1mREQUIRED .env VARIABLES\x1B[0m  ({ENV} = LOCAL|STAGING, {ROLE} = USER|ADMIN|...)
+  signin:   {ENV}_{ROLE}_EMAIL, {ENV}_{ROLE}_PASSWORD
+  pat:      {ENV}_{ROLE}_API_TOKEN
+  Legacy 'user' role keeps LOCAL_USER_EMAIL / STAGING_USER_PASSWORD etc.
 
 \x1B[1mCONFIGURATION\x1B[0m
-  Environment URLs:   config/variables.ts (envDataMap)
-  Auth format:        scripts/api-login.ts (PROJECT-SPECIFIC section)
+  Environment URLs:    config/variables.ts (envDataMap)
+  Role credentials:    config/variables.ts (resolveTestUser)
+  Auth format:         scripts/api-login.ts (PROJECT-SPECIFIC section)
 
 \x1B[1mOPTIONS\x1B[0m
+  --method <m>  signin | pat   (default: signin)
+  --role <r>    user | viewer | member | admin | owner   (default: user)
+  --env <e>     local | staging   (also accepted as positional arg)
   -h, --help    Show this help
 `);
 }
@@ -342,12 +440,14 @@ function showHelp(): void {
 // Main Execution
 // ============================================
 
-console.log(`\n\x1B[1mAPI Login\x1B[0m — ${env.current}\n`);
+console.log(`\n\x1B[1mAPI Login\x1B[0m — ${env.current} · role=${role} · method=${method}\n`);
 
-log(`User: ${config.testUser.email}`);
+log(`User: ${testUser.email || '(from PAT)'}`);
 
-// 1. Authenticate
-const apiState = await authenticate();
+// 1. Authenticate via the requested method.
+const apiState = method === 'pat'
+  ? await authenticateWithPat()
+  : await authenticate();
 if (!apiState) {
   process.exit(1);
 }
