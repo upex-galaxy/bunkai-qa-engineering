@@ -285,7 +285,7 @@ Copy `.env.example` → `.env` if absent. Populate the **real key scheme** (no i
 ### 3.5 Validate
 
 ```bash
-bun run vars:check        # lint-vars: {{...}} refs resolve against project.yaml
+bun run vars:check        # lint-vars: {{VAR}} refs resolve against project.yaml
 bun run vars:env:check    # check-vars: .env.example ↔ variables-manifest parity
 bun run test:env:check    # validateTestEnv: current TEST_ENV creds present
 ```
@@ -429,6 +429,8 @@ bun run kata:manifest:check    # must exit 0
 
 **Emit a copy-paste "GitHub repo Secrets to set" block** (these live outside the repo): `<ENV>_USER_EMAIL/_PASSWORD`, `XRAY_CLIENT_ID/SECRET` + `ATLASSIAN_*` if `AUTO_SYNC=true`, optional `SLACK_WEBHOOK_URL`. Note the manual external steps: create the `gh-pages` branch + enable GitHub Pages.
 
+**Offer to push the CI secrets from `.env` automatically** (opt-in — ask first, never push silently): when `gh auth status` is authenticated, the values already exist in `.env`, and the user approves, set each via `gh secret set <NAME>` (add `--env <env>` for environment-scoped secrets; `gh variable set <NAME>` for non-secret config). This is the low-friction alternative to the manual copy-paste block above — the regression-testing readiness gate probes these same secrets via `gh secret list`, so setting them here means the first CI run does not 401. Skip for any value not present in `.env` (surface it instead) and never echo a secret's value back to the user.
+
 ### 7.3 MCP registry — DUAL-FILE sync (highest-risk surface)
 
 `.mcp.json` (Claude Code: `mcpServers`, `env`, `${VAR}`) and `opencode.jsonc` (OpenCode: `mcp`, `environment`, `{env:VAR}`) ship the **same** servers (`context7`, `tavily`, `playwright`, `dbhub`, `openapi`, `postman`). **Every change must land in BOTH** with the right syntax — a single-file edit half-breaks the other agent. Per CLAUDE.md Rule #10, a missing/empty MCP var is a HARD SESSION STOP, not a soft CI failure.
@@ -458,7 +460,7 @@ Run in this exact order. Stop on the first failure; report with diagnostics; do 
 ```bash
 1. bun run types:check
 2. bun run lint:check
-3. bun run vars:check            # {{...}} resolution
+3. bun run vars:check            # {{VAR}} resolution
 4. bun run vars:env:check        # .env parity
 5. bun run kata:manifest:check   # manifest matches disk
 6. bun run test --project=api-setup
