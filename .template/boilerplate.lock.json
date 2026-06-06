@@ -12,7 +12,7 @@
     "agents-docs": "bbc6ed56dfdddfc042cdb894e27c3215b449d4d9",
     "tooling": "57a2dfdfc1ecaf50b569114e328908e14e211aea",
     "commands": "02b93fbc43a3295d4c058e45443b17d8c6a8cfd1",
-    "skills": "02b93fbc43a3295d4c058e45443b17d8c6a8cfd1",
+    "skills": "a91280e3bab2cd192f8c95108a7b0cc58bf80036",
     "env-template": "02b93fbc43a3295d4c058e45443b17d8c6a8cfd1"
   },
   "syncedComponents": [],
@@ -43,6 +43,6 @@
     }
   },
   "cliVersion": "7.0",
-  "lastSyncedAt": "2026-06-05T10:21:42.515Z",
+  "lastSyncedAt": "2026-06-06T06:05:59.191Z",
   "variableSystemVersion": 1
 }
