@@ -3,9 +3,9 @@
 **Jira Key:** [BK-10](https://jira.upexgalaxy.com/browse/BK-10)
 **Epic:** [BK-7](https://jira.upexgalaxy.com/browse/BK-7) (Project & Module Hierarchy)
 **Type:** Story
-**Status:** Estimation
+**Status:** Ready For QA
 **Priority:** Medium
-**Story Points:** -
+**Story Points:** 2
 
 ---
 
@@ -31,7 +31,7 @@
 ## Metadata
 
 - **Created:** 5/19/2026
-- **Updated:** 6/1/2026
+- **Updated:** 6/5/2026
 - **Reporter:** Ely
 - **Assignee:** Jorgelina Abdo
 - **Labels:** hierarchy, mvp, shift-left-2026-06-01, shift-left-reviewed, wave-1

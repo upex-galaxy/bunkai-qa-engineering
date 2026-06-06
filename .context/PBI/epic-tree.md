@@ -10,45 +10,45 @@ _Project: BK_
 
 - [BK-2](https://jira.upexgalaxy.com/browse/BK-2) Authentication | Sign up and sign in with email magic-link _(5 pts, QA Approved)_
 - [BK-3](https://jira.upexgalaxy.com/browse/BK-3) Authentication | Sign up and sign in via OAuth (GitHub / Google) _(8 pts, Ready For Dev)_
-- [BK-4](https://jira.upexgalaxy.com/browse/BK-4) TMS-Workspace | Create a workspace _(- pts, Ready For QA)_
+- [BK-4](https://jira.upexgalaxy.com/browse/BK-4) TMS-Workspace | Create a workspace _(- pts, QA Approved)_
 - [BK-5](https://jira.upexgalaxy.com/browse/BK-5) TMS-Workspace | Invite a teammate with a role _(- pts, Ready For QA)_
 - [BK-6](https://jira.upexgalaxy.com/browse/BK-6) TMS-Workspace | Switch between workspaces _(- pts, Ready For QA)_
 
 ## [BK-7](https://jira.upexgalaxy.com/browse/BK-7) - Project & Module Hierarchy
 
-**Status:** Planning | **Stories:** 4 | **Points:** 18
+**Status:** Planning | **Stories:** 4 | **Points:** 26
 
-- [BK-8](https://jira.upexgalaxy.com/browse/BK-8) TMS-Project | Create a project inside a workspace _(5 pts, Ready For Dev)_
-- [BK-9](https://jira.upexgalaxy.com/browse/BK-9) TMS-Module | Create modules with nested sub-modules _(13 pts, Ready For Dev)_
-- [BK-10](https://jira.upexgalaxy.com/browse/BK-10) TMS-Module | Rename and soft-delete a module _(- pts, Estimation)_
-- [BK-11](https://jira.upexgalaxy.com/browse/BK-11) TMS-Module | Move a module to a different parent _(- pts, Shift-Left QA)_
+- [BK-8](https://jira.upexgalaxy.com/browse/BK-8) TMS-Project | Create a project inside a workspace _(8 pts, In Test)_
+- [BK-9](https://jira.upexgalaxy.com/browse/BK-9) TMS-Module | Create modules with nested sub-modules _(13 pts, Ready For QA)_
+- [BK-10](https://jira.upexgalaxy.com/browse/BK-10) TMS-Module | Rename and soft-delete a module _(2 pts, Ready For QA)_
+- [BK-11](https://jira.upexgalaxy.com/browse/BK-11) TMS-Module | Move a module to a different parent _(3 pts, Ready For QA)_
 
 ## [BK-12](https://jira.upexgalaxy.com/browse/BK-12) - User Stories & Acceptance Criteria
 
-**Status:** Planning | **Stories:** 4 | **Points:** 13
+**Status:** Planning | **Stories:** 4 | **Points:** 24
 
-- [BK-14](https://jira.upexgalaxy.com/browse/BK-14) TMS-US | Manage user stories anchored to a module _(- pts, Shift-Left QA)_
-- [BK-15](https://jira.upexgalaxy.com/browse/BK-15) TMS-AC | Manage criteria under a user story _(- pts, Shift-Left QA)_
-- [BK-16](https://jira.upexgalaxy.com/browse/BK-16) Markdown Editor | Write and preview Markdown safely _(13 pts, Ready For Dev)_
-- [BK-17](https://jira.upexgalaxy.com/browse/BK-17) Jira Import | Pull Jira issues by JQL _(- pts, Ready For Dev)_
+- [BK-14](https://jira.upexgalaxy.com/browse/BK-14) TMS-US | Manage user stories anchored to a module _(3 pts, Ready For QA)_
+- [BK-15](https://jira.upexgalaxy.com/browse/BK-15) TMS-AC | Manage criteria under a user story _(3 pts, Ready For QA)_
+- [BK-16](https://jira.upexgalaxy.com/browse/BK-16) Markdown Editor | Write and preview Markdown safely _(13 pts, Ready For QA)_
+- [BK-17](https://jira.upexgalaxy.com/browse/BK-17) Jira Import | Pull Jira issues by JQL _(5 pts, Ready For QA)_
 
 ## [BK-13](https://jira.upexgalaxy.com/browse/BK-13) - ATC Library (Atomic Test Components)
 
-**Status:** Planning | **Stories:** 6 | **Points:** 13
+**Status:** Planning | **Stories:** 6 | **Points:** 25
 
 - [BK-18](https://jira.upexgalaxy.com/browse/BK-18) TMS-ATC API | Create and edit ATCs with steps and assertions _(5 pts, Ready For Dev)_
-- [BK-19](https://jira.upexgalaxy.com/browse/BK-19) TMS-ATC Builder | Build an ATC with ordered steps and assertions _(- pts, Shift-Left QA)_
+- [BK-19](https://jira.upexgalaxy.com/browse/BK-19) TMS-ATC Builder | Build an ATC with ordered steps and assertions _(5 pts, Estimation)_
 - [BK-20](https://jira.upexgalaxy.com/browse/BK-20) TMS-ATC Search | Search and autocomplete ATCs _(5 pts, Ready For Dev)_
-- [BK-21](https://jira.upexgalaxy.com/browse/BK-21) TMS-ATC Propagation | Cascade ATC edits to all tests _(- pts, Shift-Left QA)_
+- [BK-21](https://jira.upexgalaxy.com/browse/BK-21) TMS-ATC Propagation | Cascade ATC edits to all tests _(5 pts, Shift-Left QA)_
 - [BK-22](https://jira.upexgalaxy.com/browse/BK-22) TMS-ATC Usage | See a "Used in N tests" report _(3 pts, Ready For Dev)_
-- [BK-23](https://jira.upexgalaxy.com/browse/BK-23) TMS-ATC Duplicate | Duplicate an ATC with steps and assertions _(- pts, Shift-Left QA)_
+- [BK-23](https://jira.upexgalaxy.com/browse/BK-23) TMS-ATC Duplicate | Duplicate an ATC with steps and assertions _(2 pts, Estimation)_
 
 ## [BK-24](https://jira.upexgalaxy.com/browse/BK-24) - Tests (chains of ATCs)
 
-**Status:** Planning | **Stories:** 4 | **Points:** 4
+**Status:** Planning | **Stories:** 4 | **Points:** 6
 
-- [BK-27](https://jira.upexgalaxy.com/browse/BK-27) TMS-Test Builder | Assemble a test by chaining ATCs _(1 pts, Shift-Left QA)_
-- [BK-28](https://jira.upexgalaxy.com/browse/BK-28) TMS-Test Builder | Reorder ATCs inside a test _(1 pts, Backlog)_
+- [BK-27](https://jira.upexgalaxy.com/browse/BK-27) TMS-Test Builder | Assemble a test by chaining ATCs _(3 pts, Shift-Left QA)_
+- [BK-28](https://jira.upexgalaxy.com/browse/BK-28) TMS-Test Builder | Reorder ATCs inside a test _(1 pts, Shift-Left QA)_
 - [BK-32](https://jira.upexgalaxy.com/browse/BK-32) TMS-Test View | View a test with all chained ATCs expanded _(1 pts, Backlog)_
 - [BK-33](https://jira.upexgalaxy.com/browse/BK-33) TMS-Test Tags | Assign reserved and custom tags to a test _(1 pts, Backlog)_
 

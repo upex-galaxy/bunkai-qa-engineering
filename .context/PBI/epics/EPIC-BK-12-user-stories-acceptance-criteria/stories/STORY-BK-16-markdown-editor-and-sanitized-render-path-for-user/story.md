@@ -3,7 +3,7 @@
 **Jira Key:** [BK-16](https://jira.upexgalaxy.com/browse/BK-16)
 **Epic:** [BK-12](https://jira.upexgalaxy.com/browse/BK-12) (User Stories & Acceptance Criteria)
 **Type:** Story
-**Status:** Ready For Dev
+**Status:** Ready For QA
 **Priority:** Medium
 **Story Points:** 13
 
@@ -31,7 +31,7 @@
 ## Metadata
 
 - **Created:** 5/19/2026
-- **Updated:** 6/1/2026
+- **Updated:** 6/5/2026
 - **Reporter:** Ely
 - **Assignee:** Facu Barea
 - **Labels:** markdown, mvp, shift-left-2026-06-01, shift-left-reviewed, ux, wave-2

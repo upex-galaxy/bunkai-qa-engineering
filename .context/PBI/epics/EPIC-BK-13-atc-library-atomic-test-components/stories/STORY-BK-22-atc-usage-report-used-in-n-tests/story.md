@@ -93,7 +93,7 @@ The following rules were extracted from analysis but are NOT stated explicitly i
 ## Metadata
 
 - **Created:** 5/19/2026
-- **Updated:** 6/2/2026
+- **Updated:** 6/5/2026
 - **Reporter:** Ely
 - **Assignee:** Andrés Daniel Cumare Morales
 - **Labels:** atc, mvp, reporting, shift-left-2026-06-02, shift-left-reviewed, wave-2

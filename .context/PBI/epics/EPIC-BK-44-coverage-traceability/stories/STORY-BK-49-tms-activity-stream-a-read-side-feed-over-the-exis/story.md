@@ -20,7 +20,7 @@ As a QA Lead, I want a live feed of what changed across the workspace — who cr
 ## Metadata
 
 - **Created:** 6/1/2026
-- **Updated:** 6/2/2026
+- **Updated:** 6/5/2026
 - **Reporter:** Ely
 - **Assignee:** José Andrés Lorca
 - **Labels:** new-feature

@@ -5,7 +5,7 @@
 **Type:** Story
 **Status:** Shift-Left QA
 **Priority:** Medium
-**Story Points:** -
+**Story Points:** 5
 
 ---
 
@@ -31,7 +31,7 @@
 ## Metadata
 
 - **Created:** 5/19/2026
-- **Updated:** 6/2/2026
+- **Updated:** 6/5/2026
 - **Reporter:** Ely
 - **Assignee:** Ramiro Majdalani
 - **Labels:** atc, mvp, propagation, wave-2

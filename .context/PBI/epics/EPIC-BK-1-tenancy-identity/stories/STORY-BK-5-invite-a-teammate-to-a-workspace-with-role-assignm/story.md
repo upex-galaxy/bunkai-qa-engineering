@@ -62,12 +62,30 @@ Implements ***FR-003***.
 
 ---
 
+## Fields
+
+> Each rich-text field is a separate file in this folder.
+
+- [Acceptance Test Plan (QA)](./acceptance-test-plan.md)
+
+---
+
+## Traceability
+
+### Bugs (3)
+
+- [BK-60](https://jira.upexgalaxy.com/browse/BK-60): [BK-5] BUG-CRIT-1: No email uniqueness check against active workspace members in POST /invites _(Open)_
+- [BK-61](https://jira.upexgalaxy.com/browse/BK-61): [BK-5] BUG-CRIT-2: No email uniqueness check against pending invites — duplicate invites allowed _(Open)_
+- [BK-62](https://jira.upexgalaxy.com/browse/BK-62): [BK-5] BUG-CRIT-3: Role overwrite on accept — workspace_members.upsert demotes existing owner/member _(Open)_
+
+---
+
 ## Metadata
 
 - **Created:** 5/19/2026
-- **Updated:** 5/29/2026
+- **Updated:** 6/5/2026
 - **Reporter:** Ely
-- **Assignee:** Ely
+- **Assignee:** Nahuel Gomez
 - **Labels:** mvp, shift-left-2026-05-27, shift-left-reviewed, tenancy, wave-1
 
 ---

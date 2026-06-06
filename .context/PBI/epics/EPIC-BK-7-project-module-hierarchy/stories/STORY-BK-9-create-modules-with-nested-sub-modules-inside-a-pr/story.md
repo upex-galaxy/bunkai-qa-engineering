@@ -3,7 +3,7 @@
 **Jira Key:** [BK-9](https://jira.upexgalaxy.com/browse/BK-9)
 **Epic:** [BK-7](https://jira.upexgalaxy.com/browse/BK-7) (Project & Module Hierarchy)
 **Type:** Story
-**Status:** Ready For Dev
+**Status:** Ready For QA
 **Priority:** Medium
 **Story Points:** 13
 
@@ -70,9 +70,9 @@
 ## Metadata
 
 - **Created:** 5/19/2026
-- **Updated:** 6/1/2026
+- **Updated:** 6/5/2026
 - **Reporter:** Ely
-- **Assignee:** Ely
+- **Assignee:** Andrés Daniel Cumare Morales
 - **Labels:** hierarchy, mvp, shift-left-2026-06-02, shift-left-reviewed, wave-1
 
 ---

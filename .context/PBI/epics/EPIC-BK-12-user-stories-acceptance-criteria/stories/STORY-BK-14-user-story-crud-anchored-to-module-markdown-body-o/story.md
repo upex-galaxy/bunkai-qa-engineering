@@ -3,9 +3,9 @@
 **Jira Key:** [BK-14](https://jira.upexgalaxy.com/browse/BK-14)
 **Epic:** [BK-12](https://jira.upexgalaxy.com/browse/BK-12) (User Stories & Acceptance Criteria)
 **Type:** Story
-**Status:** Shift-Left QA
+**Status:** Ready For QA
 **Priority:** Medium
-**Story Points:** -
+**Story Points:** 3
 
 ---
 
@@ -31,7 +31,7 @@
 ## Metadata
 
 - **Created:** 5/19/2026
-- **Updated:** 5/29/2026
+- **Updated:** 6/5/2026
 - **Reporter:** Ely
 - **Assignee:** Samuel Amonzabel
 - **Labels:** mvp, user-stories, wave-2

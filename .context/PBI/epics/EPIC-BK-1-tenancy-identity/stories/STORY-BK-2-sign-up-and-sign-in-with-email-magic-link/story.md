@@ -138,7 +138,7 @@ For Design (2):
 ## Metadata
 
 - **Created:** 5/19/2026
-- **Updated:** 5/29/2026
+- **Updated:** 6/5/2026
 - **Reporter:** Ely
 - **Assignee:** Ely
 - **Labels:** auth, mvp, shift-left-2026-05-25, shift-left-reviewed, wave-1

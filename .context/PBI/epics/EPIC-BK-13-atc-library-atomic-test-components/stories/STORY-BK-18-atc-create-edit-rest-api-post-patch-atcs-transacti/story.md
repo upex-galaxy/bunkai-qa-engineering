@@ -68,7 +68,7 @@ Anchors PRD US 4.1 and US 4.2 and implements SRS FR-010 (server surface). The UI
 ## Metadata
 
 - **Created:** 5/19/2026
-- **Updated:** 5/29/2026
+- **Updated:** 6/5/2026
 - **Reporter:** Ely
 - **Assignee:** Ely
 - **Labels:** api, atc, backend, mvp, shift-left-2026-05-27, shift-left-reviewed, wave-2

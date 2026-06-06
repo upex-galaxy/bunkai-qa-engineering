@@ -3,9 +3,9 @@
 **Jira Key:** [BK-11](https://jira.upexgalaxy.com/browse/BK-11)
 **Epic:** [BK-7](https://jira.upexgalaxy.com/browse/BK-7) (Project & Module Hierarchy)
 **Type:** Story
-**Status:** Shift-Left QA
+**Status:** Ready For QA
 **Priority:** Medium
-**Story Points:** -
+**Story Points:** 3
 
 ---
 
@@ -31,7 +31,7 @@
 ## Metadata
 
 - **Created:** 5/19/2026
-- **Updated:** 6/2/2026
+- **Updated:** 6/5/2026
 - **Reporter:** Ely
 - **Assignee:** micaelavirgagarcia
 - **Labels:** hierarchy, mvp, wave-1

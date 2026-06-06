@@ -5,7 +5,7 @@
 **Type:** Story
 **Status:** Shift-Left QA
 **Priority:** Medium
-**Story Points:** 1
+**Story Points:** 3
 
 ---
 
@@ -37,14 +37,14 @@
 - [BK-33](https://jira.upexgalaxy.com/browse/BK-33): TMS-Test Tags | Assign reserved and custom tags to a test _(Backlog)_
 - [BK-34](https://jira.upexgalaxy.com/browse/BK-34): TMS-Run Execution | Start a manual run in a chosen environment _(Backlog)_
 - [BK-32](https://jira.upexgalaxy.com/browse/BK-32): TMS-Test View | View a test with all chained ATCs expanded _(Backlog)_
-- [BK-28](https://jira.upexgalaxy.com/browse/BK-28): TMS-Test Builder | Reorder ATCs inside a test _(Backlog)_
+- [BK-28](https://jira.upexgalaxy.com/browse/BK-28): TMS-Test Builder | Reorder ATCs inside a test _(Shift-Left QA)_
 
 ---
 
 ## Metadata
 
 - **Created:** 5/27/2026
-- **Updated:** 6/1/2026
+- **Updated:** 6/5/2026
 - **Reporter:** Ely
 - **Assignee:** Ely
 - **Labels:** master-sprint-4, mvp, tests-epic
