@@ -43,22 +43,6 @@
       ],
       "enabled": true
     },
-    "playwright": {
-      "type": "local",
-      "command": [
-        "bunx",
-        "@playwright/mcp@latest",
-        "--caps",
-        "vision,pdf,testing,tracing,tabs",
-        "--timeout-action",
-        "10000",
-        "--timeout-navigation",
-        "30000",
-        "--viewport-size",
-        "1920x1080"
-      ],
-      "enabled": true
-    },
     "dbhub": {
       "type": "local",
       "command": [
