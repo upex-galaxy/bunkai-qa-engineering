@@ -1,8 +1,8 @@
 # BK-18 — Acceptance Criteria
 
-> Jira field: `customfield_10141` · [View in Jira](https://jira.upexgalaxy.com.net/browse/BK-18)
+> Jira field: `customfield_10063` · [View in Jira](https://jira.upexgalaxy.com/browse/BK-18)
 
-```gherkin
+```
 Scenario: Create ATC with valid payload
 Given an authenticated member of the workspace
 And a User Story US-100 in module M-10 with acceptance criteria AC-1 and AC-2
@@ -12,7 +12,7 @@ And the slug is "{module-slug}/{atc-id-padded}"
 And an atc.created event is emitted
 ```
 
-```gherkin
+```
 Scenario: Reject ATC when acceptance criteria belong to a different user story
 Given an authenticated member
 And AC-9 belongs to user story US-200 (not US-100)
@@ -21,7 +21,7 @@ Then the API returns 422 with error code "ac*outside*user_story"
 And no row is inserted in atcs, atc*steps, or atc*assertions
 ```
 
-```gherkin
+```
 Scenario: Reject ATC when module is not in the user story's project subtree
 Given a User Story US-100 belongs to project P-1
 And module M-99 belongs to project P-2
@@ -29,7 +29,7 @@ When the user POSTs /atcs with user*story*id US-100 and module_id M-99
 Then the API returns 422 with error code "module*outside*project_subtree"
 ```
 
-```gherkin
+```
 Scenario: Step positions must be strictly increasing from 1
 Given an authenticated member
 When the user POSTs /atcs with steps positions [1, 3, 2]
@@ -37,7 +37,7 @@ Then the API returns 422 with error code "steps*position*invalid"
 And the response body lists the offending positions
 ```
 
-```gherkin
+```
 Scenario: PATCH /atcs/{id} updates fields and cascade-replaces steps and assertions atomically
 Given an existing ATC at version 1 with 3 steps and 1 assertion
 When the user PATCHes /atcs/{id} with a new title and a replacement steps array of 2 steps

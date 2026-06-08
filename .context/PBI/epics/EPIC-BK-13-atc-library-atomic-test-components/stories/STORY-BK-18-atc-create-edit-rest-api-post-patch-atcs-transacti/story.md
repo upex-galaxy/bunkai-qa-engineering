@@ -6,6 +6,7 @@
 **Status:** Ready For Dev
 **Priority:** Medium
 **Story Points:** 5
+**Web Link:** https://staging-upexbunkai.vercel.app/
 
 ---
 
@@ -62,6 +63,19 @@ Anchors PRD US 4.1 and US 4.2 and implements SRS FR-010 (server surface). The UI
 
 ***IN***: POST/PATCH endpoints, bunkai*create*atc RPC, cross-entity validation, slug computation, version bump, auth+scope, optimistic locking, event emission, new error codes, OpenAPI spec, integration tests.
 ***OUT***: GET (BK-20), DELETE (future), UI form (BK-19), used*in expansion (BK-20), idempotency (future), webhooks (future), granular scopes (future), affected*test_ids with real data (EPIC-BK-5).
+
+---
+
+## Fields
+
+> Each rich-text field is a separate file in this folder.
+
+- [Acceptance Criteria](./acceptance-criteria.md)
+- [Business Rules](./business-rules.md)
+- [Scope](./scope.md)
+- [Out Of Scope](./out-of-scope.md)
+- [Workflow](./workflow.md)
+- [Acceptance Test Plan (QA)](./acceptance-test-plan.md)
 
 ---
 

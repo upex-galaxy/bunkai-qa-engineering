@@ -6,6 +6,7 @@
 **Status:** Shift-Left QA
 **Priority:** Medium
 **Story Points:** -
+**Web Link:** https://staging-upexbunkai.vercel.app/
 
 ---
 
@@ -14,6 +15,16 @@
 ## User story
 
 As a QA Lead, I want to see the acceptance criteria and modules that have no test behind them, with a filter for what has never been run, so that I can spot coverage gaps before they reach production.
+
+---
+
+## Fields
+
+> Each rich-text field is a separate file in this folder.
+
+- [Acceptance Criteria](./acceptance-criteria.md)
+- [Scope](./scope.md)
+- [Out Of Scope](./out-of-scope.md)
 
 ---
 

@@ -6,6 +6,7 @@
 **Status:** Backlog
 **Priority:** Medium
 **Story Points:** 1
+**Web Link:** https://staging-upexbunkai.vercel.app/
 
 ---
 
@@ -28,6 +29,18 @@
 - [ ] A defect whose sync fails is marked sync-failed and remains fully usable in Bunkai
 - [ ] A sync-failed defect is retried later without the Lead doing anything
 - [ ] Sync sends defects in one direction only — Bunkai to the external tracker, never the reverse
+
+---
+
+## Fields
+
+> Each rich-text field is a separate file in this folder.
+
+- [Acceptance Criteria](./acceptance-criteria.md)
+- [Business Rules](./business-rules.md)
+- [Scope](./scope.md)
+- [Out Of Scope](./out-of-scope.md)
+- [Workflow](./workflow.md)
 
 ---
 

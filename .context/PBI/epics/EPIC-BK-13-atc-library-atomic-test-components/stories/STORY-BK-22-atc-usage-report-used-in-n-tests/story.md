@@ -6,6 +6,7 @@
 **Status:** Ready For Dev
 **Priority:** Medium
 **Story Points:** 3
+**Web Link:** https://staging-upexbunkai.vercel.app/
 
 ---
 
@@ -87,6 +88,18 @@ The following rules were extracted from analysis but are NOT stated explicitly i
 1. ***Which SQL query shape is authoritative — Annotation 1 (with t.workspace*id = $session.workspace*id WHERE clause and ORDER BY t.slug ASC, ts.position ASC) or Annotation 2 (simplified, no workspace WHERE, ORDER BY t.created_at)?*** — QA will write ordering assertions against the authoritative query.
 
 > Full refinement (Phases 1-5, outline DRAFT, risk + data feasibility) lives in the ATP DRAFT comment below.
+
+---
+
+## Fields
+
+> Each rich-text field is a separate file in this folder.
+
+- [Acceptance Criteria](./acceptance-criteria.md)
+- [Business Rules](./business-rules.md)
+- [Scope](./scope.md)
+- [Out Of Scope](./out-of-scope.md)
+- [Workflow](./workflow.md)
 
 ---
 

@@ -6,6 +6,7 @@
 **Status:** Backlog
 **Priority:** Medium
 **Story Points:** 1
+**Web Link:** https://staging-upexbunkai.vercel.app/
 
 ---
 
@@ -28,6 +29,18 @@
 - [ ] Counts by status (open, in progress, resolved, closed) are shown for the current view
 - [ ] An empty result shows a clear "no defects match" state rather than a blank screen
 - [ ] Counts update to reflect whatever filters are currently applied
+
+---
+
+## Fields
+
+> Each rich-text field is a separate file in this folder.
+
+- [Acceptance Criteria](./acceptance-criteria.md)
+- [Business Rules](./business-rules.md)
+- [Scope](./scope.md)
+- [Out Of Scope](./out-of-scope.md)
+- [Workflow](./workflow.md)
 
 ---
 

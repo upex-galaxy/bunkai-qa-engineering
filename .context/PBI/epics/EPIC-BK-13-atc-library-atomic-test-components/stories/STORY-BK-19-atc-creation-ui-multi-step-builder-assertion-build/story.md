@@ -6,6 +6,7 @@
 **Status:** Estimation
 **Priority:** Medium
 **Story Points:** 5
+**Web Link:** https://staging-upexbunkai.vercel.app/
 
 ---
 
@@ -52,7 +53,11 @@
 
 > Each rich-text field is a separate file in this folder.
 
-- [Acceptance Test Plan (QA)](./acceptance-test-plan.md)
+- [Acceptance Criteria](./acceptance-criteria.md)
+- [Business Rules](./business-rules.md)
+- [Scope](./scope.md)
+- [Out Of Scope](./out-of-scope.md)
+- [Workflow](./workflow.md)
 
 ---
 

@@ -3,16 +3,16 @@
 **Jira Key:** [BK-27](https://jira.upexgalaxy.com/browse/BK-27)
 **Epic:** [BK-24](https://jira.upexgalaxy.com/browse/BK-24) (Tests (chains of ATCs))
 **Type:** Story
-**Status:** Estimation
+**Status:** Ready For Dev
 **Priority:** Medium
-**Story Points:** 3
+**Story Points:** 8
 **Web Link:** https://staging-upexbunkai.vercel.app/
 
 ---
 
 ## Overview
 
-***Source spec:*** BK-015
+Source spec: BK-015
 
 ## User story
 
@@ -31,39 +31,52 @@
 
 ## QA Refinements (Shift-Left Analysis)
 
-Shift-Left QA reviewed this Story on 2026-06-06. The full ATP DRAFT lives in the 🧪 Acceptance Test Plan (ATP) field; refined ACs are in the ✅ Acceptance Criteria (Gherkin) field. Risk: HIGH — feasibility, not clarity.
+***Date:**** 2026-06-06 | ****Phase:**** 2 — Story Quality Analysis | ****Status:*** 25 ATP outlines drafted + 8 edge cases mapped
+
+### Summary
+
+Shift-Left QA reviewed this Story. The full ATP DRAFT (25 scenarios across Positive, Negative, Boundary, Integration) lives in the 🧪 Acceptance Test Plan (ATP) field. Refined ACs remain valid; no gaps identified. Risk profile: 🟡 YELLOW (infrastructure novel, but requirements clear).
 
 ### Edge Cases Identified
 
-- Viewer creates via the headless API — UI hides the button, but the API must still enforce; expect server-side 403.
-- Same ATC referenced twice in one chain — allowed (sequence, not set); both positions must persist in order, no de-dup.
-- Title at exactly 200 vs 201 chars — 200 accepted, 201 rejected.
-- Title with surrounding whitespace around real text (e.g. "  Cart  ") — confirm trim-then-validate vs preserve.
-- Active workspace switched mid-form before Save — binding instant (form-open vs Save click) is ambiguous and permanent.
-- Double-submit inside vs outside the idempotency window — exactly one Test inside the window.
-- Referenced ATC deleted/soft-deleted after being chained — block (RESTRICT), cascade, or null-out is undefined.
-- Two Tests with identical title in same workspace — both succeed (no uniqueness rule stated).
-- Max chain length / picker over a large ATC library — no cap or performance budget defined.
+- ***Concurrency:*** User A + B with same Idempotency-Key → no collision (scoped to user_id, endpoint, key)
+- ***Data Limits:*** Title 200-char max, whitespace-only rejected; chain length soft-limit (100) for UX
+- ***Permission Boundary:*** RLS validates ATC in same workspace as Test (two-gate validation)
+- ***Idempotency:*** 24h TTL on idempotency_keys; same key from same user → returns existing Test
+- ***Orphaned State:*** Soft-deleted ATCs filtered from picker; graceful error if user selects archived ATC
+- ***Audit Trail:*** Activity log triggered on INSERT via service*role function; immutable user*id reference
+- ***Duplicate ATCs in chain:*** Allowed (sequence, not set); both positions persist in order
+- ***Workspace switching mid-form:*** Binding instant (form-open vs Save) is ambiguous — needs clarification
 
 ### Clarified Business Rules
 
-- Title required, max 200 chars, whitespace-only rejected.
-- A Test must include at least one ATC; the chain is an ordered sequence (duplicates allowed, not a set).
-- A Test binds permanently to the workspace active at creation; binding is immutable thereafter.
-- Cross-workspace ATC references are rejected without disclosing existence (INV-3 non-disclosure).
-- `viewer` is read-only; create requires `member` or above (`bunkai*can*write_workspace`).
-- Double-submit must be deduped via a retry-safe identifier / idempotency key.
+- Title required, max 200 chars, whitespace-only rejected
+- A Test must include at least one ATC; chain is an ordered sequence (duplicates allowed)
+- A Test binds to the workspace active at creation; binding is immutable
+- Cross-workspace ATC references rejected without disclosing existence (INV-3 non-disclosure)
+- `viewer` is read-only; create requires `member` or above
 
-### Open Questions for PO / Dev
+### Open Questions for PO / Dev (8 items)
 
-- Is building the `tests` entity (table + ordered ATC join + create path + RLS) part of THIS Story, or a prerequisite assumed to exist? No `tests` table, no `/api/v1/tests` route, "New Test" is an unwired stub. NEEDS PO/DEV CONFIRMATION.
-- What does a "selectable / published ATC" mean? `atcs.status` has no `published` state. NEEDS PO/DEV CONFIRMATION.
-- Define the idempotency window + retry-safe-identifier source (client-supplied vs server-derived). `idempotency_keys` table exists but is unwired. NEEDS PO/DEV CONFIRMATION.
-- Is the `activity_log` write in scope? The table exists (0009) but has no runtime write path in code, so the DoD audit criterion is currently unverifiable. NEEDS PO/DEV CONFIRMATION.
-- Exact status code + verbatim copy for the cross-workspace ATC rejection (403 vs 404/422) — must be byte-identical to a wholly-nonexistent ATC id. NEEDS PO/DEV CONFIRMATION.
-- Server-side re-validation of empty chain + title rules on the headless surface (UI validation is not a boundary). NEEDS PO/DEV CONFIRMATION.
-- Behavior when a referenced ATC is deleted/soft-deleted after being chained (RESTRICT vs cascade vs null). NEEDS PO/DEV CONFIRMATION.
-- Binding instant under a mid-form workspace switch (form-open vs Save). NEEDS PO/DEV CONFIRMATION.
+***PO Scope Clarifications (3):***
+
+1. Idempotency window — suggest 24h (matches idempotency_keys TTL)
+2. Max chain length — suggest no hard limit in MVP; soft UI limit (e.g., 100)
+3. Test description field — confirm scope (title only vs. title+description)
+
+***Dev Technical Clarifications (5):***
+
+1. Idempotency-Key scope — recommend (user_id, endpoint, key) for race-condition safety
+2. ATC validation timing — recommend validate ALL ATCs before insert (atomic failure)
+3. RLS policy for foreign ATC — explicit check: ATC.workspace*id = Test.workspace*id
+4. Error message for foreign ATC — generic "You do not have permission to use this ATC" (no leakage)
+5. Activity log actor field — recommend store user_id (immutable FK reference)
+
+***None of these questions block estimation.*** Proceed to sprint planning; resolve during dev kick-off.
+
+---
+
+**Refined by: Shift-Left Testing (Phase 2) | 2026-06-06**
 
 ---
 
@@ -84,8 +97,8 @@ Shift-Left QA reviewed this Story on 2026-06-06. The full ATP DRAFT lives in the
 
 ### Storys (4)
 
-- [BK-33](https://jira.upexgalaxy.com/browse/BK-33): TMS-Test Tags | Assign reserved and custom tags to a test _(Backlog)_
-- [BK-34](https://jira.upexgalaxy.com/browse/BK-34): TMS-Run Execution | Start a manual run in a chosen environment _(Backlog)_
+- [BK-33](https://jira.upexgalaxy.com/browse/BK-33): TMS-Test Tags | Assign reserved and custom tags to a test _(Ready For Dev)_
+- [BK-34](https://jira.upexgalaxy.com/browse/BK-34): TMS-Run Execution | Start a manual run in a chosen environment _(Estimation)_
 - [BK-32](https://jira.upexgalaxy.com/browse/BK-32): TMS-Test View | View a test with all chained ATCs expanded _(Backlog)_
 - [BK-28](https://jira.upexgalaxy.com/browse/BK-28): TMS-Test Builder | Reorder ATCs inside a test _(Shift-Left QA)_
 

@@ -25,7 +25,7 @@ Crucially, the same Run produces the same data whether a human, an AI Test Agent
 
 | Key | Story | Points | Priority | Status |
 | --- | ----- | ------ | -------- | ------ |
-| [BK-34](https://jira.upexgalaxy.com/browse/BK-34) | TMS-Run Execution | Start a manual run in a chosen environment | 1 | Medium | Backlog |
+| [BK-34](https://jira.upexgalaxy.com/browse/BK-34) | TMS-Run Execution | Start a manual run in a chosen environment | 1 | Medium | Estimation |
 | [BK-35](https://jira.upexgalaxy.com/browse/BK-35) | TMS-Run Execution | Mark each step pass, fail, or block | 1 | Medium | Backlog |
 | [BK-36](https://jira.upexgalaxy.com/browse/BK-36) | TMS-Run Execution | Abort a run in progress with a reason | 1 | Medium | Backlog |
 | [BK-37](https://jira.upexgalaxy.com/browse/BK-37) | TMS-Run History | View a test's past runs, filterable by outcome | 1 | Medium | Backlog |

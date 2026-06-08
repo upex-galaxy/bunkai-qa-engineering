@@ -6,6 +6,7 @@
 **Status:** Ready For QA
 **Priority:** Medium
 **Story Points:** -
+**Web Link:** https://staging-upexbunkai.vercel.app/
 
 ---
 
@@ -66,7 +67,11 @@ Implements ***FR-003***.
 
 > Each rich-text field is a separate file in this folder.
 
-- [Acceptance Test Plan (QA)](./acceptance-test-plan.md)
+- [Acceptance Criteria](./acceptance-criteria.md)
+- [Business Rules](./business-rules.md)
+- [Scope](./scope.md)
+- [Out Of Scope](./out-of-scope.md)
+- [Workflow](./workflow.md)
 
 ---
 

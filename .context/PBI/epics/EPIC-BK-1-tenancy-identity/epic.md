@@ -111,7 +111,7 @@ Per-story acceptance criteria live in Gherkin form on each child story. Edge cas
 | [BK-3](https://jira.upexgalaxy.com/browse/BK-3) | Authentication | Sign up and sign in via OAuth (GitHub / Google) | 8 | Medium | Ready For Dev |
 | [BK-4](https://jira.upexgalaxy.com/browse/BK-4) | TMS-Workspace | Create a workspace | - | Medium | QA Approved |
 | [BK-5](https://jira.upexgalaxy.com/browse/BK-5) | TMS-Workspace | Invite a teammate with a role | - | Medium | Ready For QA |
-| [BK-6](https://jira.upexgalaxy.com/browse/BK-6) | TMS-Workspace | Switch between workspaces | - | Medium | Ready For QA |
+| [BK-6](https://jira.upexgalaxy.com/browse/BK-6) | TMS-Workspace | Switch between workspaces | - | Medium | BLOCKED |
 
 ---
 

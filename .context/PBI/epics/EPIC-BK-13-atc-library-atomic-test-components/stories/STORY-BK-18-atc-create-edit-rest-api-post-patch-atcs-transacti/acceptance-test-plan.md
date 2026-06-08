@@ -1,11 +1,11 @@
 # BK-18 — Acceptance Test Plan (QA)
 
-> Jira field: `customfield_10120` · [View in Jira](https://jira.upexgalaxy.com.net/browse/BK-18)
+> Jira field: `customfield_10067` · [View in Jira](https://jira.upexgalaxy.com/browse/BK-18)
 
 # ATC create + edit REST API (POST/PATCH /atcs, transactional steps + assertions)
 
-***Jira Key:*** [BK-18](https://jira.upexgalaxy.com.net/browse/BK-18)
-***Epic:*** [BK-13](https://jira.upexgalaxy.com.net/browse/BK-13) (ATC Library (Atomic Test Components))
+***Jira Key:*** [BK-18](https://jira.upexgalaxy.com/browse/BK-18)
+***Epic:*** [BK-13](https://jira.upexgalaxy.com/browse/BK-13) (ATC Library (Atomic Test Components))
 ***Priority:*** Medium
 ***Story Points:*** -
 ***Status:*** Shift-Left QA
@@ -14,7 +14,7 @@
 
 ## User Story
 
-********Source spec:**** FR-010a — ATC server surface (REST)
+******Source spec:**** FR-010a — ATC server surface (REST)
 
 As an automation engineer or API consumer, I want a REST API to create and edit ATCs (Atomic Test Components) with their steps and assertions in a single transactional call, so that I can compose reusable test building blocks from CLI tools, scripts, and the UI client.
 
@@ -22,7 +22,7 @@ Implements ***FR-010a*** — server surface only. UI form is BK-19, downstream T
 
 ## Acceptance Criteria
 
-```gherkin
+```
 Scenario: Create ATC with valid payload
 Given an authenticated member of the workspace
 And a User Story US-100 in module M-10 with acceptance criteria AC-1 and AC-2
@@ -68,37 +68,39 @@ And an atc.updated event is emitted with affected*test*ids
 
 ***13 Gherkin scenarios produced*** (Happy 2 / Negative 7 / Boundary 2 / Integration 2). Key contract decisions:
 
-| #   | Decision                                                                                                                                                                                                                                                                               | Rationale                                                                                                                                                                                                                                      | Source                 |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| 1   | ***Slug format***: `{module-slug}/atc-{id-first-8-chars}` (lowercase UUID prefix)                                                                                                                                                                                                      | uuid prefix is deterministic (no sequence dependency), unique, and readable. 8 chars balances collision safety vs brevity. Matches architect recommendation on BK-2 comment.                                                                   | Senior DEV             |
-| 2   | ***PATCH semantics***: Full-replace body (PUT-like), NOT partial merge. `ATCCreate` schema reused. Omitted fields are NOT preserved — they are cleared.                                                                                                                                | Existing `bunkai*save*atc` RPC replaces children wholesale (no diff). Partial merge would require field-level tracking across 4 tables with no existing infra. If client wants partial, they GET→modify→PATCH.                                 | Senior DEV             |
-| 3   | ***Version conflict***: Optimistic locking via `If-Match: <version>` header. No version in body. 409 on mismatch.                                                                                                                                                                      | Industry standard (RFC 7232). Prevents lost updates. The existing RPC unconditionally bumps version; the route handler checks the header before calling the RPC.                                                                               | Senior DEV             |
-| 4   | ***Error codes***: Add `ac*outside*user*story`, `module*outside*project*subtree`, `steps*position*invalid`, `layer*invalid`, `slug*collision` to `API*ERROR*CODES` map. Wrapped via `ApiError('validation*failed', 422, { code: 'ac*outside*user*story' })`.                           | The existing 422 flow in `withApiHandler` catches ZodError but NOT semantic validation errors. Semantic errors need explicit `ApiError` throws with domain-specific codes.                                                                     | Senior QA              |
-| 5   | ***Auth***: `requireBearerToken` + `requireScope(ctx, 'atc:write')` on both endpoints. `atc:read` tokens are rejected with 403.                                                                                                                                                        | Established pattern from tokens routes. Consistent with existing scope model.                                                                                                                                                                  | Senior QA              |
-| 6   | `bunkai*create*atc`*** RPC***: CREATE path needs a NEW RPC that returns the new `atc*id` (unlike `bunkai*save*atc` which is void). Signature: `bunkai*create*atc(p*project*id, p*module*id, p*user*story*id, p*title, p*layer, p*tags, p*steps, p*assertions, p*ac*ids) returns uuid`. | `bunkai*save*atc` takes `p*atc*id` (UPDATE only). INSERT needs a different signature — no pre-existing id, needs project*id for RLS + slug. Adding a `p*create*flag` parameter would create an ugly dual-path RPC. A dedicated RPC is cleaner. | Senior DEV             |
-| 7   | `affected*test*ids`*** (PATCH event)***: Query `test*steps` table joining `atc*id`. Empty array = event still fires (consumers filter by `affected*test*ids.length === 0` if they only care about dependency impact).                                                                  | The SRS shows `used*in` field on ATC response → `test*steps` links. This is the canonical source.                                                                                                                                              | Senior DEV             |
-| 8   | ***PATCH ****`user*story*id`**** mutability***: Immutable on PATCH. If client sends `user*story*id`, it is silently ignored (or 422 if different). ACs are bound to the ATC's original user story.                                                                                     | Re-assigning user*story*id would break AC validation (ACs belong to original US). Cascade re-validation is expensive and adds risk. The architect annotation confirms this.                                                                    | Senior PO + Senior DEV |
+|  | Decision  | Rationale  | Source  |
+| --- | --- | --- |
+| --- | ---------- | ----------- | -------- |
+| 1  | ***Slug format***: `{module-slug}/atc-{id-first-8-chars`} (lowercase UUID prefix)  | uuid prefix is deterministic (no sequence dependency), unique, and readable. 8 chars balances collision safety vs brevity. Matches architect recommendation on BK-2 comment.  | Senior DEV  |
+| 2  | ***PATCH semantics***: Full-replace body (PUT-like), NOT partial merge. `ATCCreate` schema reused. Omitted fields are NOT preserved — they are cleared.  | Existing `bunkai*save*atc` RPC replaces children wholesale (no diff). Partial merge would require field-level tracking across 4 tables with no existing infra. If client wants partial, they GET→modify→PATCH.  | Senior DEV  |
+| 3  | ***Version conflict***: Optimistic locking via `If-Match: <version>` header. No version in body. 409 on mismatch.  | Industry standard (RFC 7232). Prevents lost updates. The existing RPC unconditionally bumps version; the route handler checks the header before calling the RPC.  | Senior DEV  |
+| 4  | ***Error codes***: Add `ac*outside*user*story`, `module*outside*project*subtree`, `steps*position*invalid`, `layer*invalid`, `slug*collision` to `API*ERROR*CODES` map. Wrapped via `ApiError('validation*failed', 422, { code: 'ac*outside*user*story' })`.  | The existing 422 flow in `withApiHandler` catches ZodError but NOT semantic validation errors. Semantic errors need explicit `ApiError` throws with domain-specific codes.  | Senior QA  |
+| 5  | ***Auth***: `requireBearerToken` + `requireScope(ctx, 'atc:write')` on both endpoints. `atc:read` tokens are rejected with 403.  | Established pattern from tokens routes. Consistent with existing scope model.  | Senior QA  |
+| 6  | `bunkai*create*atc` ***RPC***: CREATE path needs a NEW RPC that returns the new `atc*id` (unlike `bunkai*save*atc` which is void). Signature: `bunkai*create*atc(p*project*id, p*module*id, p*user*story*id, p*title, p*layer, p*tags, p*steps, p*assertions, p*ac*ids) returns uuid`.  | `bunkai*save*atc` takes `p*atc*id` (UPDATE only). INSERT needs a different signature — no pre-existing id, needs project*id for RLS + slug. Adding a `p*create*flag` parameter would create an ugly dual-path RPC. A dedicated RPC is cleaner.  | Senior DEV  |
+| 7  | `affected*test*ids` ***(PATCH event)***: Query `test*steps` table joining `atc*id`. Empty array = event still fires (consumers filter by `affected*test*ids.length === 0` if they only care about dependency impact).  | The SRS shows `used*in` field on ATC response → `test*steps` links. This is the canonical source.  | Senior DEV  |
+| 8  | ***PATCH**** `user*story*id` ****mutability***: Immutable on PATCH. If client sends `user*story*id`, it is silently ignored (or 422 if different). ACs are bound to the ATC's original user story.  | Re-assigning user*story*id would break AC validation (ACs belong to original US). Cascade re-validation is expensive and adds risk. The architect annotation confirms this.  | Senior PO + Senior DEV  |
 
 ### ⚠️ Edge Cases Identified
 
 ***14 edge cases catalogued*** (6 High, 5 Medium, 3 Low):
 
-| Sev      | Edge Case                                                                       | Mitigation / Decision                                                                                    |
-| -------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| 🔴 High   | POST with invalid PAT (malformed, expired, revoked)                             | Auth middleware returns 401 `unauthorized` — already tested in tokens routes.                            |
-| 🔴 High   | POST with `atc:read` scope (insufficient)                                       | `requireScope` returns 403 `forbidden` — established pattern.                                            |
-| 🔴 High   | PATCH to non-existent ATC id                                                    | 404 `not_found` — same pattern as tokens.                                                                |
-| 🔴 High   | Concurrent PATCH — version conflict (two clients at version 1)                  | First wins (200 v2), second gets 409 `conflict`.                                                         |
-| 🔴 High   | Slug collision (same project, same slug)                                        | DB UNIQUE `(project*id, slug)` constraint. INSERT raises unique violation → map to 409 `slug*collision`. |
-| 🔴 High   | POST with `module*id` belonging to different project than `user*story*id`       | AC3 covers the positive case. Reject with 422 `module*outside*project*subtree`.                          |
-| 🟡 Medium | POST with empty `steps[]` array                                                 | `ATCCreate` schema requires `minItems: 1`. Zod rejects → 422 `validation_failed`.                        |
-| 🟡 Medium | POST with layer value outside enum `{UI, API, Unit}`                            | Zod enum rejects → 422 `validation_failed`.                                                              |
-| 🟡 Medium | POST with 11 tags (exceeds max 10)                                              | Zod `maxItems: 10` rejects → 422.                                                                        |
-| 🟡 Medium | PATCH with empty body (no fields changed)                                       | ***Decision***: Accept empty PATCH as no-op → 200 with same version (no bump). RPC not called.           | Senior DEV |
-| 🟡 Medium | POST with `acceptance*criterion*ids` that are valid UUIDs but don't exist in DB | 422 `ac*outside*user_story` (same code — the query returns empty for non-existent IDs too).              |
-| 🟢 Low    | Title with Unicode/emoji                                                        | Existing DB `text` type handles UTF-8. Zod string accepts it. No special handling needed.                |
-| 🟢 Low    | Step content > 2KB                                                              | Zod `maxLength: 2048` on step content.                                                                   |
-| 🟢 Low    | POST with `acceptance*criterion*ids: []` (empty array)                          | Zod `minItems: 1` rejects → 422.                                                                         |
+| Sev  | Edge Case  | Mitigation / Decision  |
+| --- | --- | --- |
+| ----- | ----------- | ---------------------- |
+| 🔴 High  | POST with invalid PAT (malformed, expired, revoked)  | Auth middleware returns 401 `unauthorized` — already tested in tokens routes.  |
+| 🔴 High  | POST with `atc:read` scope (insufficient)  | `requireScope` returns 403 `forbidden` — established pattern.  |
+| 🔴 High  | PATCH to non-existent ATC id  | 404 `not_found` — same pattern as tokens.  |
+| 🔴 High  | Concurrent PATCH — version conflict (two clients at version 1)  | First wins (200 v2), second gets 409 `conflict`.  |
+| 🔴 High  | Slug collision (same project, same slug)  | DB UNIQUE `(project*id, slug)` constraint. INSERT raises unique violation → map to 409 `slug*collision`.  |
+| 🔴 High  | POST with `module*id` belonging to different project than `user*story*id`  | AC3 covers the positive case. Reject with 422 `module*outside*project*subtree`.  |
+| 🟡 Medium  | POST with empty `steps[]` array  | `ATCCreate` schema requires `minItems: 1`. Zod rejects → 422 `validation_failed`.  |
+| 🟡 Medium  | POST with layer value outside enum `{UI, API, Unit`}  | Zod enum rejects → 422 `validation_failed`.  |
+| 🟡 Medium  | POST with 11 tags (exceeds max 10)  | Zod `maxItems: 10` rejects → 422.  |
+| 🟡 Medium  | PATCH with empty body (no fields changed)  | ***Decision***: Accept empty PATCH as no-op → 200 with same version (no bump). RPC not called.  | Senior DEV  |
+| 🟡 Medium  | POST with `acceptance*criterion*ids` that are valid UUIDs but don't exist in DB  | 422 `ac*outside*user_story` (same code — the query returns empty for non-existent IDs too).  |
+| 🟢 Low  | Title with Unicode/emoji  | Existing DB `text` type handles UTF-8. Zod string accepts it. No special handling needed.  |
+| 🟢 Low  | Step content > 2KB  | Zod `maxLength: 2048` on step content.  |
+| 🟢 Low  | POST with `acceptance*criterion*ids: []` (empty array)  | Zod `minItems: 1` rejects → 422.  |
 
 ### 📋 Clarified Business Rules
 
@@ -110,7 +112,7 @@ And an atc.updated event is emitted with affected*test*ids
 - ***RLS***: All table operations go through existing RLS policies (`authenticated` + workspace membership). The RPCs are `security invoker` so RLS evaluates as the API caller.
 - ***idempotency***: Not required for MVP. POSTs are not idempotent by nature (each creates a new ATC). PATCH is idempotent (same payload = same result). If idempotency is needed later, add `Idempotency-Key` header — existing `IdempotencyKeySchema` in the codebase covers this.
 - ***Soft-delete***: OUT of scope for BK-18. DELETE endpoint will be BK-? (future Story). Status field exists in schema but is not touched by POST/PATCH.
-- `used*in`*** field in response***: OUT of scope for BK-18. The GET endpoint (BK-? future) will expand it. POST/PATCH responses return the ATC object without `used*in`.
+- `used*in` ***field in response***: OUT of scope for BK-18. The GET endpoint (BK-? future) will expand it. POST/PATCH responses return the ATC object without `used*in`.
 
 ### ❓ Open Questions for PO / Dev / Design
 
@@ -122,10 +124,10 @@ And an atc.updated event is emitted with affected*test*ids
 
 ***For Dev (4):***
 
-1. `bunkai*create*atc`*** RPC signature****: Confirm output: `RETURNS uuid` (the new atc*id)? Input includes `p*project*id` for slug computation + RLS? ****Decision (Senior DEV)***: Yes — `returns uuid`, takes `p*project*id uuid` as first param. Slug computed as `lower(replace(p*title, ' ', '-')) || '/atc-' || substr(gen*random*uuid()::text, 1, 8)` — deterministic from inputs, no sequence dependency. RLS works because `project_id` is in the row.
+1. `bunkai*create*atc` ***RPC signature****: Confirm output: `RETURNS uuid` (the new atc*id)? Input includes `p*project*id` for slug computation + RLS? ****Decision (Senior DEV)***: Yes — `returns uuid`, takes `p*project*id uuid` as first param. Slug computed as `lower(replace(p*title, ' ', '-')) || '/atc-' || substr(gen*random*uuid()::text, 1, 8)` — deterministic from inputs, no sequence dependency. RLS works because `project_id` is in the row.
 2. ***Slug computation — pure SQL or app layer?****: The existing RPC is PL/pgSQL. Slug computation should live in the RPC (same transaction, no round-trip). Confirm? ****Decision (Senior DEV)***: Pure PL/pgSQL inside `bunkai*create*atc`. App layer sends title, RPC derives slug. Immutable after create.
 3. ***Error code registration****: Add new codes to `API*ERROR*CODES` map or define them inline in route handlers? ****Decision (Senior DEV)***: Add to `API*ERROR*CODES` map for consistency. The map is the canonical registry that OpenAPI spec generation reads.
-4. `affected*test*ids`*** query****: Does `test*steps` exist in the schema yet (it's part of EPIC-BK-5 Tests)? Or should the event payload skip this field until that schema migration lands? ****Decision (Senior DEV)***: `test*steps` does NOT exist yet. Emit `affected*test*ids: []` (empty) in MVP. When EPIC-BK-5 adds the table, update the event emission. The field name in the event contract stays the same — consumers handle empty arrays.
+4. `affected*test*ids` ***query****: Does `test*steps` exist in the schema yet (it's part of EPIC-BK-5 Tests)? Or should the event payload skip this field until that schema migration lands? ****Decision (Senior DEV)***: `test*steps` does NOT exist yet. Emit `affected*test*ids: []` (empty) in MVP. When EPIC-BK-5 adds the table, update the event emission. The field name in the event contract stays the same — consumers handle empty arrays.
 
 ***For Design (0):***
 
@@ -136,7 +138,7 @@ No design questions — this is an API-only Story (no UI). The UI counterpart is
 ***✅ IN BK-18:***
 
 - `POST /api/v1/atcs` endpoint (NEW)
-- `PATCH /api/v1/atcs/{id}` endpoint (NEW)
+- `PATCH /api/v1/atcs/{id`} endpoint (NEW)
 - `bunkai*create*atc` RPC (NEW — returns uuid)
 - Cross-entity validation: AC→US belong, module→project subtree
 - Step position validation (strictly increasing from 1)
@@ -163,7 +165,7 @@ No design questions — this is an API-only Story (no UI). The UI counterpart is
 
 ---
 
-***See custom field 🧪 Acceptance Test Plan (ATP) + Shift-Left comment for the complete refinement (******~******13 test outlines, full Gherkin scenarios, AC↔code reconciliation per divergence).***
+***See custom field 🧪 Acceptance Test Plan (ATP) + Shift-Left comment for the complete refinement (~13 test outlines, full Gherkin scenarios, AC↔code reconciliation per divergence).***
 
 ---
 
@@ -171,7 +173,7 @@ No design questions — this is an API-only Story (no UI). The UI counterpart is
 
 > Refined and consolidated by QA during the pre-sprint Shift-Left review. Reconciliation reasoning (AC ↔ code divergences, decisions, edge cases, scope cuts) is captured in the ***🧪 Acceptance Test Plan (ATP)**** field and the ****Shift-Left Refinement*** comment on this issue.
 
-```gherkin
+```
 Background:
   Given the workspace has a project P-1 with module M-10 and user story US-100
     And US-100 has acceptance criteria AC-1 and AC-2
@@ -303,7 +305,7 @@ Scenario: Transactional rollback on validation failure
     And SELECT count(*) FROM atc_assertions returns the same count as before
 ```
 
-********Markers used:**** all NEEDS PO/DEV CONFIRMATION items are explicitly resolved with Senior PO/DEV decisions inline in §Key Contract Decisions. The AC text above is final with those decisions applied.
+******Markers used:**** all NEEDS PO/DEV CONFIRMATION items are explicitly resolved with Senior PO/DEV decisions inline in §Key Contract Decisions. The AC text above is final with those decisions applied.
 
 ---
 
@@ -358,7 +360,7 @@ A member calls POST /atcs with a fully-formed payload (title, module*id, user*st
 ## References
 
 - [SRS API Contract — ATC paths](https://github.com/upexgalaxy67/upex-bunkai-tms/blob/main/.context/SRS/api-contracts.yaml#L268)
-- [Architect Annotation — BK-2 comment](https://jira.upexgalaxy.com.net/browse/BK-2?focusedCommentId=12473)
+- [Architect Annotation — BK-2 comment](https://jira.upexgalaxy.com/browse/BK-2?focusedCommentId=12473)
 
 ---
 

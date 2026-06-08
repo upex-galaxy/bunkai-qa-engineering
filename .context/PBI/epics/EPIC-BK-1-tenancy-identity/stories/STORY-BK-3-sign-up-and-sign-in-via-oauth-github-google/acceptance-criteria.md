@@ -1,8 +1,8 @@
 # BK-3 — Acceptance Criteria
 
-> Jira field: `customfield_10141` · [View in Jira](https://jira.upexgalaxy.com.net/browse/BK-3)
+> Jira field: `customfield_10063` · [View in Jira](https://jira.upexgalaxy.com/browse/BK-3)
 
-```gherkin
+```
 Scenario: GitHub OAuth happy path
 Given a visitor on the Sign-in screen
 When they click "Continue with GitHub" and approve the OAuth consent
@@ -12,7 +12,7 @@ And the user lands on the Workspace Home with status 201
 And a default workspace exists
 ```
 
-```gherkin
+```
 Scenario: Google OAuth happy path
 Given a visitor on the Sign-in screen
 When they click "Continue with Google" and approve the OAuth consent
@@ -20,7 +20,7 @@ Then Supabase Auth completes the code exchange and signs in / signs up the user
 And the user lands on the Workspace Home
 ```
 
-```gherkin
+```
 Scenario: OAuth consent denied
 Given a visitor who clicks "Continue with GitHub"
 When they deny the consent screen on the provider side
@@ -28,7 +28,7 @@ Then Bunkai redirects to /login with error code OAUTH_DENIED
 And surfaces a "Try a different method" CTA including the magic-link fallback
 ```
 
-```gherkin
+```
 Scenario: OAuth state CSRF token mismatch
 Given an OAuth callback whose state token does not match the issued one
 When the callback hits /auth/callback
@@ -36,7 +36,7 @@ Then the request is rejected with code OAUTH*STATE*MISMATCH and 403
 And no session is created
 ```
 
-```gherkin
+```
 Scenario: OAuth callback blocked by third-party-cookie restrictions
 Given a visitor on a browser blocking third-party cookies
 When the OAuth callback popup fails to set a cookie within 30s

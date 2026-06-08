@@ -1,8 +1,8 @@
 # BK-40 — Acceptance Criteria
 
-> Jira field: `customfield_10141` · [View in Jira](https://jira.upexgalaxy.com.net/browse/BK-40)
+> Jira field: `customfield_10063` · [View in Jira](https://jira.upexgalaxy.com/browse/BK-40)
 
-```gherkin
+```
 Scenario: File a defect from a failing step with everything pre-filled
   Given Elena is running the test "Checkout - apply promo code" and step 4 "Promo code field rejects expired code" has just been marked failed
   And the step captured one screenshot "expired-code-error.png"
@@ -14,7 +14,7 @@ Scenario: File a defect from a failing step with everything pre-filled
   And she only needs to set the severity and confirm the title before saving
 ```
 
-```gherkin
+```
 Scenario: File a standalone defect with no run attached
   Given Elena is viewing the defects area for the project "Storefront"
   And she is not inside any run
@@ -27,7 +27,7 @@ Scenario: File a standalone defect with no run attached
   And it appears at the top of the defects list with no linked run
 ```
 
-```gherkin
+```
 Scenario: Title shorter than the minimum is rejected
   Given Elena is filing a defect for the module "Cart"
   When she enters the title "bug"
@@ -37,7 +37,7 @@ Scenario: Title shorter than the minimum is rejected
   And the title field is highlighted for correction
 ```
 
-```gherkin
+```
 Scenario: Attaching more than the allowed number of evidence links is blocked
   Given Elena is filing a defect and has already attached 10 evidence links
   When she tries to attach an 11th link
@@ -46,7 +46,7 @@ Scenario: Attaching more than the allowed number of evidence links is blocked
   And the existing 10 attachments remain intact
 ```
 
-```gherkin
+```
 Scenario: Choosing a severity outside the allowed set is not possible
   Given Elena is filing a defect for the module "Checkout"
   When she opens the severity selector
@@ -54,7 +54,7 @@ Scenario: Choosing a severity outside the allowed set is not possible
   And no other severity value can be entered or saved
 ```
 
-```gherkin
+```
 Scenario: Module must belong to the current project
   Given Elena is filing a defect in the project "Storefront"
   When she opens the module selector

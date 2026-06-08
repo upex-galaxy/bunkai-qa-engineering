@@ -6,6 +6,7 @@
 **Status:** QA Approved
 **Priority:** Medium
 **Story Points:** 5
+**Web Link:** https://staging-upexbunkai.vercel.app/
 
 ---
 
@@ -132,6 +133,21 @@ For Design (2):
 ---
 
 **See custom field 🧪 Acceptance Test Plan (ATP) + Shift-Left comment for the complete refinement (~17 test outlines, full Gherkin scenarios, AC↔code reconciliation per divergence).**
+
+---
+
+## Fields
+
+> Each rich-text field is a separate file in this folder.
+
+- [Acceptance Criteria](./acceptance-criteria.md)
+- [Business Rules](./business-rules.md)
+- [Scope](./scope.md)
+- [Out Of Scope](./out-of-scope.md)
+- [Workflow](./workflow.md)
+- [Mockup](./mockup.md)
+- [Acceptance Test Plan (QA)](./acceptance-test-plan.md)
+- [Acceptance Test Results (QA)](./acceptance-test-results.md)
 
 ---
 

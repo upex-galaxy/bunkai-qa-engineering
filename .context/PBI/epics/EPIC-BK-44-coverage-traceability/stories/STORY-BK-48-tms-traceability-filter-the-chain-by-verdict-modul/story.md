@@ -6,6 +6,7 @@
 **Status:** Shift-Left QA
 **Priority:** Medium
 **Story Points:** -
+**Web Link:** https://staging-upexbunkai.vercel.app/
 
 ---
 
@@ -14,6 +15,16 @@
 ## User story
 
 As a Senior QA Engineer, I want to filter the evidence chain by result, module and date range so that I can focus on what failed, where, and when without scrolling the whole history.
+
+---
+
+## Fields
+
+> Each rich-text field is a separate file in this folder.
+
+- [Acceptance Criteria](./acceptance-criteria.md)
+- [Scope](./scope.md)
+- [Out Of Scope](./out-of-scope.md)
 
 ---
 

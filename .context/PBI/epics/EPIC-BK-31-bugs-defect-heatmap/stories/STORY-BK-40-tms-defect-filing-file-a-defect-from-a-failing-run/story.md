@@ -6,6 +6,7 @@
 **Status:** Backlog
 **Priority:** Medium
 **Story Points:** 1
+**Web Link:** https://staging-upexbunkai.vercel.app/
 
 ---
 
@@ -29,6 +30,18 @@
 - [ ] The module is required and only modules belonging to the current project can be chosen
 - [ ] Up to 10 evidence links can be attached; attempting more is blocked with a clear message
 - [ ] A filed defect starts in the open state and is immediately visible in the defects list
+
+---
+
+## Fields
+
+> Each rich-text field is a separate file in this folder.
+
+- [Acceptance Criteria](./acceptance-criteria.md)
+- [Business Rules](./business-rules.md)
+- [Scope](./scope.md)
+- [Out Of Scope](./out-of-scope.md)
+- [Workflow](./workflow.md)
 
 ---
 

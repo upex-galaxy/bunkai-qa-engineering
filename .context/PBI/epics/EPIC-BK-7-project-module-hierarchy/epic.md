@@ -106,8 +106,8 @@ See per-story `story.md` for Gherkin acceptance criteria.
 | Key | Story | Points | Priority | Status |
 | --- | ----- | ------ | -------- | ------ |
 | [BK-8](https://jira.upexgalaxy.com/browse/BK-8) | TMS-Project | Create a project inside a workspace | 8 | Medium | In Test |
-| [BK-9](https://jira.upexgalaxy.com/browse/BK-9) | TMS-Module | Create modules with nested sub-modules | 13 | Medium | Ready For QA |
-| [BK-10](https://jira.upexgalaxy.com/browse/BK-10) | TMS-Module | Rename and soft-delete a module | 2 | Medium | Ready For QA |
+| [BK-9](https://jira.upexgalaxy.com/browse/BK-9) | TMS-Module | Create modules with nested sub-modules | 13 | Medium | QA Approved |
+| [BK-10](https://jira.upexgalaxy.com/browse/BK-10) | TMS-Module | Rename and soft-delete a module | 2 | Medium | In Test |
 | [BK-11](https://jira.upexgalaxy.com/browse/BK-11) | TMS-Module | Move a module to a different parent | 3 | Medium | Ready For QA |
 
 ---

@@ -6,6 +6,7 @@
 **Status:** Ready For Dev
 **Priority:** Medium
 **Story Points:** 8
+**Web Link:** https://staging-upexbunkai.vercel.app/
 
 ---
 
@@ -127,6 +128,19 @@ See comment "Shift-Left Refinement Mirror" on this issue for the full refined AC
 ---
 
 **Shift-Left label:** `shift-left-reviewed` `shift-left-2026-05-26`
+
+---
+
+## Fields
+
+> Each rich-text field is a separate file in this folder.
+
+- [Acceptance Criteria](./acceptance-criteria.md)
+- [Business Rules](./business-rules.md)
+- [Scope](./scope.md)
+- [Out Of Scope](./out-of-scope.md)
+- [Workflow](./workflow.md)
+- [Acceptance Test Plan (QA)](./acceptance-test-plan.md)
 
 ---
 

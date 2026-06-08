@@ -196,5 +196,157 @@ Rename / move / delete (BK-10, BK-11), bulk import, drag-drop reorder, per-modul
 
 ---
 
+### Andrés Daniel Cumare Morales - 6/6/2026, 7:06:14 AM
+
+ATP posted — see sprint testing session BK-9 2026-06-06
+
+---
+
+### Andrés Daniel Cumare Morales - 6/6/2026, 7:07:37 AM
+
+## 🧪 Acceptance Test Plan (ATP) — BK-9
+
+Story: TMS-Module | Create modules with nested sub-modules
+Environment: staging | Date: 2026-06-06 | Modality: jira-native | shift-left-reviewed ✓
+
+### Scope
+
+- API: POST /api/v1/projects/{id}/modules
+- UI: Create Module form + Sidebar affordances
+- DB: path materialization, depth constraint CHECK, UNIQUE (project_id, path)
+
+### Test Cases (25)
+
+| ***TC#**** | ****Title**** | ****Type**** | ****Expected*** |
+| --- | --- | --- | --- |
+| TC-01 | Create root module | Positive | 201, path=slug(name), position=0 |
+| TC-02 | Create sub-module depth 2 | Positive | 201, path=parent/slug, parent*module*id set |
+| TC-03 | Create at depth 3 | Positive | 201, no warning |
+| TC-04 | Create at depth 4 | Positive | 201, NO warning (threshold>=5) |
+| TC-05 | Create at depth 5 — warning | Positive+Integration | 201 + warning string present |
+| TC-06 | Create at depth 6 — warning | Positive+Integration | 201 + warning string present |
+| TC-07 | Attempt depth 7 — blocked | Negative | 422, reason=depth_exceeded |
+| TC-08 | Name = 2 chars (min boundary) | Boundary | 201 |
+| TC-09 | Name = 1 char (below min) | Boundary | 422, reason=name*too*short |
+| TC-10 | Name = 80 chars (max boundary) | Boundary | 201 |
+| TC-11 | Name = 81 chars (above max) | Boundary | 422, reason=name*too*long |
+| TC-12 | Whitespace-only name | Negative | 422, reason=name*too*short (after trim) |
+| TC-13 | No-alphanumeric name | Negative | 422, reason=name*no*alphanumeric |
+| TC-14 | Description = 500 chars (max) | Boundary | 201, description stored |
+| TC-15 | Description = 501 chars | Boundary | 422, reason=description*too*long |
+| TC-16 | Duplicate sibling name | Negative | 409, reason=module*slug*duplicate |
+| TC-17 | Cross-project parent*module*id | Negative | 422, reason=parent_invalid |
+| TC-18 | Non-existent parent UUID | Negative | 422, reason=parent_invalid |
+| TC-19 | Unauthenticated request | Negative | 401 |
+| TC-20 | Invalid JSON body | Negative | 400 |
+| TC-21 | Non-UUID project id | Negative | 400 |
+| TC-22 | Path materialization in DB | Integration | DB: path segments match depth |
+| TC-23 | Slug auto-derived from name | Integration | path segment = slugify(name) |
+| TC-24 | Warning payload is string | API contract | response.warning is string, not boolean |
+| TC-25 | Position = last sibling + 1 | Integration | position increments correctly |
+
+### Risk Areas
+
+- Depth threshold OFF-BY-ONE — TC-04 (no warn at 4) and TC-05 (warn at 5) are critical
+- RLS cross-workspace isolation
+- Warning string type (TC-24)
+- Client-side validation gap: form submits 1-char name (no client-side min check)
+
+---
+
+### Andrés Daniel Cumare Morales - 6/6/2026, 7:28:46 AM
+
+## 🧪 Acceptance Test Results (ATR) — BK-9
+
+Story: TMS-Module | Create modules with nested sub-modules
+
+Environment: staging | Date: 2026-06-06 | Verdict: ✅ PASSED WITH ISSUES
+
+All 25 functional TCs PASS. 2 UX bugs + 1 improvement filed.
+
+### Test Results (25/25 PASS)
+
+TC-01 ✓ Root module → 201, path materialized, position=0
+
+TC-02 ✓ Sub-module depth 2 → 201, path=login/oauth
+
+TC-03 ✓ Depth 3 → 201, no warning
+
+TC-04 ✓ Depth 4 → 201, NO warning (confirmed — threshold is depth≥5)
+
+TC-05 ✓ Depth 5 → 201 + warning string
+
+TC-06 ✓ Depth 6 → 201 + warning string
+
+TC-07 ✓ Depth 7 → 422 depth_exceeded
+
+TC-08 ✓ Name 2-char min boundary → 201
+
+TC-09 ✓ Name 1-char → 422 name*too*short
+
+TC-10 ✓ Name 80-char max boundary → 201
+
+TC-11 ✓ Name 81-char → 422 name*too*long
+
+TC-12 ✓ Whitespace-only → 422 name*too*short
+
+TC-13 ✓ No-alphanumeric (---) → 422 name*no*alphanumeric
+
+TC-14 ✓ Description 500-char max → 201
+
+TC-15 ✓ Description 501-char → 422 description*too*long
+
+TC-16 ✓ Duplicate sibling → 409 module*slug*duplicate
+
+TC-17 ✓ Cross-project parent → 422 parent_invalid
+
+TC-18 ✓ Non-existent parent UUID → 422 parent_invalid
+
+TC-19 ✓ Unauthenticated → 401
+
+TC-20 ✓ Invalid JSON → 400 bad_request
+
+TC-21 ✓ Non-UUID project ID → 400 bad_request
+
+TC-22 ✓ DB: 6-level path chain verified (login/oauth/google/callback/token/refresh/session)
+
+TC-23 ✓ Slug auto-derived: 'Payment & Billing' → payment-billing
+
+TC-24 ✓ Warning payload is string (not boolean)
+
+TC-25 ✓ Position increments correctly: sibling A=1, B=2
+
+### UI Tests (Playwright, staging, headless Chromium)
+
+UI-01 ✓ module-new-root button visible for authenticated member
+
+UI-02 ✓ Slug preview updates live in create form
+
+UI-03 ✗ BUG: Submit button enabled for 1-char name → filed as BK-68
+
+UI-04 ✓ Success toast 'Module created' fires for depth 1-4 modules
+
+UI-05 ✓ 12 'Add sub-module' affordances visible in module tree
+
+UI-06 ✓ XSS: <script> module name rendered as literal text (no execution)
+
+### Bugs Filed
+
+BK-67 [MEDIUM] Warning toast suppresses success confirmation at depth≥5
+
+BK-68 [LOW] Create form allows 1-char submit — no client-side min-length gate
+
+BK-69 [IMPROVEMENT] Module name stores raw HTML; description IS sanitized — inconsistency with AC edge case
+
+### Notable (non-bug) Findings
+
+• Dev checklist referenced 'warning at depth 4' — code correctly implements depth≥5 (checklist error only)
+
+• Position collision on concurrent siblings: documented as known MVP limitation
+
+• Idempotency-Key: not supported by module endpoint (shift-left open question confirmed)
+
+---
+
 
 _Synced from Jira by sync-jira-issues_
