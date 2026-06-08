@@ -5,14 +5,14 @@
   "perComponentCommit": {
     "claude-config": "f539bc96114e98ea9691f5cd8a7c53401f766e9b",
     "scripts": "fdc7af826b833b2aa6c607b311a8aeef7fd80cc0",
-    "docs": "8f6676693d16f3b5772a7070ed4bd8123f36a015",
+    "docs": "1441165aa14c13b998ae38265d67b0b55cf24f60",
     "cli": "bc869c81ae1a9a83c33ffc5840d1d5075213034e",
     "vscode": "57a2dfdfc1ecaf50b569114e328908e14e211aea",
     "husky": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
     "agents-docs": "fdc7af826b833b2aa6c607b311a8aeef7fd80cc0",
     "tooling": "57a2dfdfc1ecaf50b569114e328908e14e211aea",
     "commands": "02b93fbc43a3295d4c058e45443b17d8c6a8cfd1",
-    "skills": "a91280e3bab2cd192f8c95108a7b0cc58bf80036",
+    "skills": "1441165aa14c13b998ae38265d67b0b55cf24f60",
     "env-template": "fdc7af826b833b2aa6c607b311a8aeef7fd80cc0"
   },
   "syncedComponents": [],
@@ -43,6 +43,6 @@
     }
   },
   "cliVersion": "7.0",
-  "lastSyncedAt": "2026-06-08T07:15:43.030Z",
+  "lastSyncedAt": "2026-06-08T10:55:15.184Z",
   "variableSystemVersion": 1
 }
