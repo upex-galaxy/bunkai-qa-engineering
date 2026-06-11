@@ -500,5 +500,55 @@ A no-op is not an error condition. This makes PATCH idempotent by definition.
 
 ---
 
+### Automation for Jira - 6/8/2026, 6:15:07 AM
+
+🔎 Pull Request created. Task is pending to ANALYZE and REVIEW by the team. Waiting for PR Approval.
+
+---
+
+### Automation for Jira - 6/8/2026, 6:16:48 AM
+
+✅ Pull Request is successfully MERGED. Task is Done.
+
+---
+
+### Ely - 6/8/2026, 6:19:58 AM
+
+## 🧪 Listo para QA — BK-18 (TMS-ATC API)
+
+Desplegado en ***staging***: https://staging-upexbunkai.vercel.app
+
+***PR:**** #27 (merge commit `54fcd8b`) · ****Branch:*** `feature/BK-18-atc-create-edit-api` (mergeada y borrada)
+
+### Qué se entregó
+
+- `POST /api/v1/atcs` — crea un ATC con steps + assertions en una sola llamada transaccional.
+- `PATCH /api/v1/atcs/{id}` — edición estilo PUT (reemplazo total de steps/assertions).
+
+### Cómo probar
+
+- ***Auth:*** Personal Access Token (PAT) con scope `atc:write` en header `Authorization: Bearer bk*pat*...`. La sesión por cookie también funciona. Un token con solo `atc:read` → 403.
+- ***Slug:*** `{module-slug}/atc-{8 hex}` — inmutable tras crear (no cambia al renombrar).
+- ***PATCH optimistic locking:*** header `If-Match: <version>` → 409 si la versión no coincide. Body vacío `{}` = no-op 200 (sin incremento de versión, sin evento).
+- ***Inmutables en PATCH:*** `user*story*id`, `module_id`, `slug`.
+
+### Escenarios del ATP (todos verificados a nivel RPC contra la DB real; ver la matriz en el PR #27)
+
+- Crear con payload válido → 201, slug con regex, version 1, steps + assertions, evento `atc.created`.
+- AC que pertenece a otra User Story → 422 `ac*outside*user_story` (sin filas insertadas — rollback transaccional).
+- Module fuera del subtree del project de la US → 422 `module*outside*project_subtree`.
+- Posiciones de steps inválidas (`[1,3,2]` / `[2,3,4]`) → 422 `steps*position*invalid` (lista las posiciones infractoras).
+- PATCH a un id inexistente → 404.
+- Conflicto de versión (If-Match viejo) → 409 `conflict` (incluye la versión actual).
+- Sin auth / PAT inválido → 401. Scope insuficiente (`atc:read`) → 403.
+
+### Notas
+
+- Los eventos van a la tabla `activity*log` (`atc.created` / `atc.updated`); `affected*test*ids` = `[]` en el MVP (la tabla `test*steps` llega con EPIC-BK-5).
+- Fuera de alcance (otras stories): GET/search (BK-20), duplicar (BK-23), UI (BK-19), reporte de uso (BK-22).
+- Contrato completo en OpenAPI: `/api/openapi` (paths `/api/v1/atcs` y `/api/v1/atcs/{id}`).
+
+---
+
 
 _Synced from Jira by sync-jira-issues_

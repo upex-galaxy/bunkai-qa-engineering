@@ -615,7 +615,7 @@ MANDATORY. Capabilities that could NOT be verified from code, appear partial, or
 
 9. **`/workspaces/**` route protection.** The members page is NOT in middleware `PROTECTED_PREFIXES` (only `/projects`, `/onboarding`); gating relies on the in-page `getUser()` check + RLS. UNVERIFIED whether a non-member is reliably blocked at all layers.
 
-10. **ATC acronym definition conflict.** The login UI expands ATC = "Acceptance Test Case"; project doctrine (CLAUDE.md) uses "Atomic Test Component". Treat as synonyms; needs glossary reconciliation before user-facing test copy.
+10. **ATC acronym definition conflict.** The login UI expands ATC = "Acceptance Test Case"; project doctrine (CLAUDE.md) uses "Acceptance Test Case". Treat as synonyms; needs glossary reconciliation before user-facing test copy.
 
 11. **Realtime, Jira sync, telemetry, billing.** No Supabase Realtime channels, no bidirectional Jira sync code, no telemetry endpoint, no billing/subscription entities — all unimplemented (unchanged from the data map).
 

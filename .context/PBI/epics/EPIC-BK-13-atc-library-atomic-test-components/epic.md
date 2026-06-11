@@ -13,7 +13,7 @@
 
 Maps PRD EPIC-BK-004 (US 4.1..4.6) and SRS FR-010..FR-014.
 
-***Capability***: The reusable testing primitives layer. An ATC (Atomic Test Component) is a small, named, reusable test fragment anchored to a User Story + ≥1 Acceptance Criterion. Tests are composed by chaining ATCs (see EPIC-BK-5). Editing an ATC propagates to every Test that references it — one-edit-many-tests.
+***Capability***: The reusable testing primitives layer. An ATC (Acceptance Test Case) is a small, named, reusable test fragment anchored to a User Story + ≥1 Acceptance Criterion. Tests are composed by chaining ATCs (see EPIC-BK-5). Editing an ATC propagates to every Test that references it — one-edit-many-tests.
 
 ## Wave
 

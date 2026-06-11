@@ -180,7 +180,7 @@ create table public.atcs (
 - **Status semantics**: see "State Machines" below.
 - **Full-text search**: `tsv` is auto-refreshed by trigger `atcs_refresh_tsv` from `title + tags`; GIN-indexed for fast search.
 - **Versioning**: `version` increments on every save via `bunkai_save_atc` RPC (`0007_save_atc.sql`). Edit propagation = "edit ATC-001 once, every test chaining it sees the new version".
-- **UI label**: "ATC" (in code) — full name "Acceptance Test Case" in product docs; sometimes "Atomic Test Component" in business-model.md (per UPEX Galaxy training context). The two names are used interchangeably in product copy.
+- **UI label**: "ATC" (in code) — full name "Acceptance Test Case" in product docs; sometimes "Acceptance Test Case" in business-model.md (per UPEX Galaxy training context). The two names are used interchangeably in product copy.
 - **Source**: `<target>/supabase/migrations/0004_atcs.sql`.
 
 ### ATC Step
@@ -334,7 +334,7 @@ Status `invited` is pre-accept; RLS treats only `active` rows as authoritative. 
 | "Module" | `modules` | tree node; path is slash-separated |
 | "User Story" | `user_stories` | Jira-link via `external_id` (e.g., `BK-123`) |
 | "Acceptance Criterion" / "AC" | `acceptance_criteria` | Ordered by `position` |
-| "ATC" / "Acceptance Test Case" / "Atomic Test Component" | `atcs` | Three names used in product copy; treat as synonyms |
+| "ATC" / "Acceptance Test Case" / "Acceptance Test Case" | `atcs` | Three names used in product copy; treat as synonyms |
 | "Step" | `atc_steps` | — |
 | "Assertion" | `atc_assertions` | — |
 | "Personal Access Token" / "PAT" / "API Token" | `access_tokens` | `bk_pat_<prefix>.<secret>` format |
