@@ -416,3 +416,81 @@ work_types:
       deprecated: { from: any, to: deprecated, description: Retire the TC (global transition) }
       recover: { from: deprecated, to: draft, description: Restore a deprecated TC back to draft }
     used_by: [test-documentation, test-automation]
+
+# -----------------------------------------------------------------------------
+# Issue link types the methodology requires (traceability linking).
+#
+# Each entry's KEY is the canonical slug — the value skills address via
+# {{jira.link_types.<slug>}} (sub-fields: name / outward / inward / fallback).
+# Workspace resolution happens against `.agents/jira-link-types.json`
+# (regenerate: `bun run jira:sync-link-types`); `bun run jira:check` compares
+# this manifest to that catalog. The name/outward/inward values below are the
+# Jira Cloud defaults — illustrative, never hardcoded by skills.
+#
+# Sections:
+#   required  — traceability graph breaks without these. A missing required
+#               slug degrades to its `fallback` (loudly — direction is lost on
+#               symmetric types); missing type AND fallback fails jira:check.
+#   optional  — Xray-special refinements + the fallback target itself. Reported
+#               as INFO; never affects exit code.
+#
+# Doctrine: agentic-qa-core/references/traceability-linking.md
+# -----------------------------------------------------------------------------
+link_types:
+  required:
+    test:
+      name: Test
+      outward: tests
+      inward: is tested by
+      fallback: relates
+      description: Coverage edge — Story is tested by Test / Test Plan / Test Execution.
+      used_by: [shift-left-testing, sprint-testing, test-documentation, regression-testing]
+
+    problem_incident:
+      name: Problem/Incident
+      outward: causes
+      inward: is caused by
+      fallback: relates
+      description: Causation edge — Story under test causes the defect filed against it.
+      used_by: [sprint-testing]
+
+    blocks:
+      name: Blocks
+      outward: blocks
+      inward: is blocked by
+      fallback: relates
+      description: Blocking edge — open defect blocks the Story (defect_reported → blocked gate).
+      used_by: [sprint-testing]
+
+  optional:
+    relates:
+      name: Relates
+      outward: relates to
+      inward: relates to
+      fallback: null
+      description: Symmetric fallback target when a required type is absent — direction is lost.
+      used_by: [shift-left-testing, sprint-testing, test-documentation, regression-testing]
+
+    test_design:
+      name: Test Design
+      outward: designs
+      inward: is designed by
+      fallback: null
+      description: Xray refinement — Test designs a requirement/spec (finer than generic test).
+      used_by: [test-documentation]
+
+    test_execute:
+      name: Test Execute
+      outward: executes
+      inward: is executed by
+      fallback: null
+      description: Xray refinement — Test Execution executes a specific Test.
+      used_by: [test-documentation, regression-testing]
+
+    test_automation:
+      name: Test Automation
+      outward: automation test for
+      inward: is automated by
+      fallback: null
+      description: Xray refinement — automated test covers the manual Test it automates.
+      used_by: [test-documentation, test-automation]
