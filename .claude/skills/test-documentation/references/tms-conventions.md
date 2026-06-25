@@ -31,40 +31,42 @@ Decision rule: if you cannot confidently describe the expected behavior, the fea
 
 ## 2. TC naming convention (mandatory)
 
-### Format by tool
+### Format (all tools, all modalities)
 
-| Tool stack | Format |
-|-----------|--------|
-| **Xray with Test Sets** | `{TS_ID}: TC#: Validate <CORE> <CONDITIONAL>` |
-| **Xray without Test Sets** or **Jira native** | `{US_ID}: TC#: Validate <CORE> <CONDITIONAL>` |
+The prefix is **ALWAYS the User Story key** (`{US_ID}`) — never the Test Set ID — in every modality (Jira-native, Xray with Test Sets, Xray without Test Sets).
+
+```
+{US_ID}: TC#: should <expected outcome> [<connector> <condition>] [given <precondition>]
+```
+
+> Test Set membership is expressed as an issue **link** ("is part of" the Test Set), NEVER baked into the TC title.
 
 ### Components
 
 | Component | What it is | Examples |
 |-----------|-----------|----------|
-| `TS_ID` | Test Set ID (Xray Test Set) | `GX-150` |
-| `US_ID` | User Story ID | `GX-101` |
+| `US_ID` | User Story ID (always the prefix) | `GX-101` |
 | `TC#` | Sequential TC number | `TC1`, `TC2`, `TC3` |
-| `CORE` | The behavior: verb + object | `successful login`, `authentication error`, `cart behavior` |
-| `CONDITIONAL` | The distinguishing condition | `with valid credentials`, `when password is incorrect`, `when exceeding 5 failed attempts` |
+| `CORE` | Expected outcome (verb + object), phrased after `should` | `grant access`, `reject login`, `cap input` |
+| `CONDITIONAL` | Optional connector clause (`when …` / `if …`) plus optional `given …` | `when credentials are valid`, `if password is incorrect`, `when cart is empty given a logged-in user` |
 
 ### Examples by test type
 
 | Type | CORE | CONDITIONAL | Full title |
 |------|------|-------------|-----------|
-| Positive | successful login | with valid credentials | `GX-101: TC1: Validate successful login with valid credentials` |
-| Negative | authentication error | when password is incorrect | `GX-101: TC2: Validate authentication error when password is incorrect` |
-| Boundary | character limit | when entering exactly 50 chars | `GX-101: TC3: Validate character limit when entering exactly 50 chars` |
-| Edge | cart behavior | when there are multiple same items | `GX-101: TC4: Validate cart behavior when there are multiple same items` |
+| Positive | grant access | when credentials are valid | `GX-101: TC1: should grant access when credentials are valid` |
+| Negative | reject login | if password is incorrect | `GX-101: TC2: should reject login if password is incorrect` |
+| Boundary | cap input | when exceeding 50 chars | `GX-101: TC3: should cap input when exceeding 50 chars` |
+| Edge | block checkout | when cart is empty given a logged-in user | `GX-101: TC4: should block checkout when cart is empty given a logged-in user` |
 
 ### Anti-patterns (reject)
 
 | Wrong | Right | Why |
 |-------|-------|-----|
-| `Login test` | `GX-101: TC1: Validate successful login with valid credentials` | Missing ID, TC#, CORE, CONDITIONAL |
-| `Login - error` | `GX-101: TC2: Validate authentication error with invalid password` | Too vague |
-| `TC1: Test form` | `GX-101: TC1: Validate form submission with all fields` | Missing ID; CORE not specific |
-| `Should work correctly` | `GX-101: TC1: Validate successful login with valid credentials` | No behavior, no condition |
+| `Login test` | `GX-101: TC1: should grant access when credentials are valid` | Missing ID, TC#, outcome, condition |
+| `Login - error` | `GX-101: TC2: should show auth error when password is incorrect` | Too vague |
+| `TC1: Test form` | `GX-101: TC1: should submit form when all fields are filled` | Missing ID; outcome not specific |
+| `should work correctly` | `GX-101: TC1: should grant access when credentials are valid` | No concrete outcome, no condition — vague, NOT because of the word "should" |
 
 ### Code-side naming (KATA)
 
@@ -85,9 +87,9 @@ The prefix is the TMS-generated key (e.g., `PROJ-101`), not an invented conventi
 | User Story | `{{PROJECT_KEY}}-{n}` | `PROJ-123` |
 | ATP | `Test Plan: {{PROJECT_KEY}}-{n}` | `Test Plan: PROJ-123` |
 | ATR | `Test Results: {{PROJECT_KEY}}-{n}` | `Test Results: PROJ-123` |
-| Test Suite (TS) | `<Strategy>: <ID>: <SUMMARY>` | `Sanity: GX-101: Allow credit card payment`; `Smoke: Core Features v2.0`; `Regression: Sprint 50` |
+| Test Suite (TS) | `<Strategy>: <ID>: <SUMMARY>` | `Sanity: GX-101: Validate credit card payment`; `Smoke: Core Features v2.0`; `Regression: Sprint 50` |
 | Test Plan (Xray) | `QA: TestPlan: <Strategy> <Version>` | `QA: TestPlan: Regression S50`; `QA: TestPlan: Smoke v2` |
-| Test Execution (TX) | `<Strategy>: <ID>: <SUMMARY>` | `Sanity: GX-101: Allow credit card payment`; `Regression: TP-50: Sprint 50 Regression` |
+| Test Execution (TX) | `<Strategy>: <ID>: <SUMMARY>` | `Sanity: GX-101: Validate credit card payment`; `Regression: TP-50: Sprint 50 Regression` |
 | ReTesting (RTX) | `ReTest: <BUGID>: <ISSUE_SUMMARY>` | `ReTest: GX-202: Does not show error when entering incorrect password` |
 | Precondition (PRC) | `<EPIC>: <COMPONENT>: PRC: For <NEXT_ACTION>` | `CheckoutFlow: Payment: PRC: For processing credit card payment` |
 
@@ -102,7 +104,7 @@ Every TC in the TMS must have these fields populated. Exact field names vary by 
 | Field | Type | Purpose | Example |
 |-------|------|---------|---------|
 | ID | Auto-generated | Unique identifier | `PROJ-101` |
-| Summary / Title | Text | TC name following naming convention | `GX-101: TC1: Validate ...` |
+| Summary / Title | Text | TC name following naming convention | `GX-101: TC1: should ...` |
 | Description / Steps | Long text | Gherkin or traditional step table | See §6 |
 | Test Status | Select | Execution state | `NOT RUN` / `PASSED` / `FAILED` |
 | Workflow Status | Select | Lifecycle state | `Draft`, `Ready`, `Candidate`, `Automated`, ... |
@@ -240,7 +242,7 @@ Feature: User Login
     Given the system is in initial state
 
   @critical @smoke @regression @automation-candidate @{US_ID}
-  Scenario Outline: Validate <core> <conditional>
+  Scenario Outline: should <outcome> <connector> <condition>
     """
     Bugs covered: {BUG-ID1}, {BUG-ID2}
     Related Story: {US_ID}
@@ -339,6 +341,15 @@ And the average rating {average} = sum of ratings / {N}
 ```
 
 ### Variables table (mandatory in TC Description)
+
+> **`Examples:` vs `Variables` — two different tables, do not conflate.** The
+> `Examples:` table (in the Gherkin §"Gherkin") supplies the **varying data values
+> per equivalence partition** — *what* changes each parameterized run (the
+> artifact-economy lever, doctrine §"Part 2.5"). The `Variables` table (here, in
+> the Description) explains **how to OBTAIN each variable at runtime** (the SQL /
+> source query) — it does not vary per run. Rule of thumb: a value that *changes
+> the case* → an `Examples` column; a value you must *look up to run the case* → a
+> `Variables` row. A parameterized TC typically has BOTH.
 
 Every TC with variables must include a table explaining how to obtain each one:
 
@@ -512,9 +523,23 @@ Inputs producing **different outputs** -> separate TCs.
 
 Example: all invalid credentials (wrong email, wrong password, empty fields) producing 401 -> one parameterized TC `loginWithInvalidCredentials`. Locked account producing 423 -> separate TC.
 
-### Boundary Value Analysis
+### Boundary Value Analysis (REQUIRED wherever a range/limit exists)
 
-Test at the edges of equivalence classes. 7 chars (just below min) and 65 chars (just above max) are interesting; 30 chars in the middle of the valid range is not.
+Test at the edges of equivalence classes: `min-1 · min · min+1` and `max-1 · max · max+1`, plus zero / empty / null / overflow. 7 chars (just below an 8-min) and 65 chars (just above a 64-max) are interesting; 30 chars in the middle of the valid range is not. EP without BVA misses off-by-one defects — when an AC names any numeric range, string length, collection size, date window, quota, or pagination limit, boundary TCs are mandatory, not optional.
+
+### State-Transition (REQUIRED for stateful entities)
+
+When an entity has a status / lifecycle (draft → submitted → approved; cart → paid → shipped; active → locked → closed), derive one TC per **valid transition** AND one per **invalid transition** (a trigger fired in a state that should reject it — e.g. "approve an already-closed item → rejected"). The invalid transitions are where defects concentrate; testing only the target state is insufficient.
+
+### Decision Tables (REQUIRED when 2+ conditions interact)
+
+When the outcome depends on a combination of conditions (role × feature-flag × account-status), build a decision table: enumerate the condition combinations, collapse impossible/equivalent columns, and derive one TC per surviving rule. Do not test only the combinations the AC happens to mention.
+
+### Pairwise / combinatorial (REQUIRED when 3+ combinable factors)
+
+When 3+ independent factors each have multiple values (browser × locale × plan × payment-method), the full grid explodes. Use all-pairs selection — cover every pair of factor-values at least once — and **log that pairwise was applied** so the reduction is visible, not a silent cap.
+
+> Full canon + worked example: `agentic-qa-core/references/test-design-doctrine.md`. The techniques decide the TC set; ROI (SKILL.md Phase 2) then decides which TCs are Candidate / Manual / Deferred.
 
 ---
 

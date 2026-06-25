@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Test Automation (KATA) — The Craft &amp; The AI</title>
+<title>La Trifuerza — Exploración por Capas (UI · API · DB)</title>
 <style>
 /* html-ppt :: shared webfonts */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800;900&display=swap');
@@ -458,521 +458,669 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 /* fix: cover .speaker must not collide with the absolute .deck-footer */
 .tpl-howto .slide:has(> .speaker){padding-bottom:160px}
 .tpl-howto .slide .speaker{position:absolute;left:88px;right:88px;bottom:70px;margin-top:0;z-index:3}</style>
+<style>
+/* ===== defect-management :: extra components (quiz, lifecycle, metric cards) ===== */
+.tpl-howto .lifecycle{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:22px}
+.tpl-howto .lstate{padding:9px 15px;border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:13.5px;font-weight:600;border:1px solid;white-space:nowrap}
+.tpl-howto .lstate.new{color:var(--text-1);background:var(--surface-2);border-color:var(--border-strong)}
+.tpl-howto .lstate.prog{color:var(--warn);background:color-mix(in srgb,var(--warn) 13%,transparent);border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
+.tpl-howto .lstate.good{color:var(--good);background:color-mix(in srgb,var(--good) 13%,transparent);border-color:color-mix(in srgb,var(--good) 40%,transparent)}
+.tpl-howto .lstate.bad{color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent);border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
+.tpl-howto .arr{color:var(--text-3);font-weight:700;font-size:15px}
+
+/* triage fan */
+.tpl-howto .triage{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}
+.tpl-howto .tnode{padding:13px 16px;border:1px solid var(--border);border-radius:11px;background:var(--surface)}
+.tpl-howto .tnode .tt{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent);margin-bottom:5px}
+.tpl-howto .tnode .ts{font-size:13.5px;color:var(--text-2);line-height:1.5}
+.tpl-howto .tnode b{color:#fff;font-weight:600}
+
+/* horizontal bar chart (real data) */
+.tpl-howto .bars{display:grid;gap:11px;margin-top:22px}
+.tpl-howto .barrow{display:grid;grid-template-columns:150px 1fr 48px;align-items:center;gap:14px;font-size:14px}
+.tpl-howto .barrow .bl{color:var(--text-2);font-family:'JetBrains Mono',monospace;font-size:13px;text-align:right}
+.tpl-howto .barrow .bt{height:22px;border-radius:6px;background:var(--grad);min-width:3px}
+.tpl-howto .barrow .bt.muted{background:var(--surface-2);border:1px solid var(--border-strong)}
+.tpl-howto .barrow .bn{color:#fff;font-weight:700;font-family:'JetBrains Mono',monospace;font-size:14px}
+
+/* metric stat cards */
+.tpl-howto .mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:22px}
+.tpl-howto .mcard{padding:20px;border:1px solid var(--border);border-radius:14px;background:var(--surface);border-top:3px solid var(--accent)}
+.tpl-howto .mcard .mv{font-size:40px;font-weight:900;line-height:1;letter-spacing:-.03em}
+.tpl-howto .mcard .mk{font-size:13px;color:var(--text-3);margin-top:8px;font-family:'JetBrains Mono',monospace}
+.tpl-howto .mcard .md{font-size:13px;color:var(--text-2);margin-top:6px;line-height:1.5}
+
+/* ===== QUIZ ===== */
+.tpl-howto .quiz{margin-top:18px}
+.tpl-howto .qitem{margin-bottom:18px}
+.tpl-howto .qq{font-size:19px;font-weight:600;color:#fff;margin-bottom:12px;display:flex;gap:12px;line-height:1.4}
+.tpl-howto .qq .qn{flex:none;color:var(--accent);font-family:'JetBrains Mono',monospace}
+.tpl-howto .opts{display:grid;gap:9px}
+.tpl-howto .opt{display:flex;align-items:center;gap:13px;padding:12px 17px;border:1px solid var(--border);border-radius:11px;background:var(--surface);cursor:pointer;font-size:15px;color:var(--text-2);transition:border-color .15s,background .15s,color .15s}
+.tpl-howto .opt:hover{border-color:var(--border-strong);color:#fff}
+.tpl-howto .opt .mk{flex:none;width:26px;height:26px;border-radius:7px;background:var(--surface-2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--text-2)}
+.tpl-howto .opt.correct{border-color:var(--good);background:color-mix(in srgb,var(--good) 15%,transparent);color:#fff}
+.tpl-howto .opt.correct .mk{background:var(--good);border-color:var(--good);color:#03130b}
+.tpl-howto .opt.reveal-correct{border-color:var(--good);color:#fff}
+.tpl-howto .opt.reveal-correct .mk{background:var(--good);border-color:var(--good);color:#03130b}
+.tpl-howto .opt.wrong{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent);color:#fff}
+.tpl-howto .opt.wrong .mk{background:var(--bad);border-color:var(--bad);color:#190405}
+.tpl-howto .qitem.answered .opt{cursor:default}
+.tpl-howto .qexp{margin-top:11px;font-size:14px;color:var(--text-2);border-left:3px solid var(--good);padding:11px 16px;background:color-mix(in srgb,var(--good) 7%,transparent);border-radius:0 9px 9px 0;display:none;line-height:1.6}
+.tpl-howto .qitem.answered .qexp{display:block}
+.tpl-howto .qexp b{color:#fff}
+.tpl-howto .qhint{font-size:13px;color:var(--text-3);font-family:'JetBrains Mono',monospace;margin-top:6px}
+
+/* ===== naming anatomy — segmented title ===== */
+.tpl-howto .nameline{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px;margin-top:24px;font-family:'JetBrains Mono',monospace}
+.tpl-howto .seg{display:flex;flex-direction:column;gap:5px;align-items:center;padding:12px 16px;border-radius:11px;border:1px solid;text-align:center}
+.tpl-howto .seg .sv{font-size:18px;font-weight:700;color:#fff}
+.tpl-howto .seg .sl{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;font-family:'Inter',sans-serif}
+.tpl-howto .seg.id{border-color:color-mix(in srgb,var(--a2) 45%,transparent);background:color-mix(in srgb,var(--a2) 12%,transparent)}
+.tpl-howto .seg.id .sl{color:var(--a2)}
+.tpl-howto .seg.tc{border-color:color-mix(in srgb,var(--a1) 45%,transparent);background:color-mix(in srgb,var(--a1) 12%,transparent)}
+.tpl-howto .seg.tc .sl{color:var(--a1)}
+.tpl-howto .seg.core{border-color:color-mix(in srgb,var(--a3) 45%,transparent);background:color-mix(in srgb,var(--a3) 12%,transparent)}
+.tpl-howto .seg.core .sl{color:var(--a3)}
+.tpl-howto .seg.cond{border-color:var(--border-strong);background:var(--surface-2)}
+.tpl-howto .seg.cond .sl{color:var(--text-3)}
+.tpl-howto .seg .vstop{color:var(--text-3);font-weight:700;align-self:center;font-size:20px;display:flex;align-items:center}
+.tpl-howto .sep{color:var(--text-3);font-weight:700;font-size:20px;display:flex;align-items:center}
+
+/* gherkin keyword tint reuse: Given/When/Then via .gk */
+.tpl-howto .gk{color:#56d4dd;font-weight:600}
+.tpl-howto .tag-g{color:#d2a8ff}
+</style>
 </head>
-<body class="tpl-howto" style="--a1:#ffa657;--a2:#ff7b72;--a3:#d2a8ff">
+<body class="tpl-howto" style="--a1:#f5b942;--a2:#e879f9;--a3:#22d3ee">
 <div class="deck">
-<section class="slide" data-title="Cover">
-  <p class="kicker run">how-it-works · agentic-qa</p>
-  <h1 class="h1 anim-fade-up" data-anim="fade-up">From Acceptance Criteria to a <span class="grad">Trustworthy Suite</span></h1>
-  <p class="lede mt-m">How a QA engineer plans, codes, and reviews automated tests by hand — and how one slash command does it from the terminal.</p>
-  <div class="speaker"><div class="av"></div><div><b>The Craft → The Acceleration</b><span>part 1: KATA by hand · part 2: the /test-automation skill</span></div></div>
-  <div class="deck-footer"><span class="mono">Playwright · TypeScript · Plan → Code → Review</span><span class="slide-number" data-current="1" data-total="33"></span></div>
-  <div class="notes">Set the frame: turning a story's acceptance criteria into automated tests that are atomic, traceable, and stable — first as a craft, then accelerated by AI.</div>
+
+<!-- 1. COVER -->
+<section class="slide" data-title="Portada">
+  <p class="kicker run">how-it-works · agentic-qa · sprint-testing</p>
+  <h1 class="h1 anim-fade-up" data-anim="fade-up">La <span class="grad">Trifuerza</span> — Exploración por Capas</h1>
+  <p class="lede mt-m">UI · API · DB. Cómo se prueba de verdad una feature: una pantalla verde puede esconder una API rota y un trigger que falla en silencio. Smoke primero, luego las tres capas, con sondas de seguridad e integridad.</p>
+  <div class="speaker"><div class="av"></div><div><b>Smoke → UI → API → DB</b><span>Stage 2 · ejecución manual / exploratoria en el sprint</span></div></div>
+  <div class="deck-footer"><span class="mono">Playwright · OpenAPI · DBHub · /sprint-testing</span><span class="slide-number" data-current="1" data-total="34"></span></div>
+  <div class="notes">Encuadre: esto es Stage 2 de sprint-testing — el acto de ejecutar QA. No es planificar (Stage 1) ni reportar (Stage 3). Es validar la feature a través de tres capas. Las tres fuerzas: UI (oro), API (magenta), DB (cian).</div>
 </section>
 
-<section class="slide center tc" data-title="Stat">
+<!-- 2. STAT HOOK -->
+<section class="slide center tc" data-title="Stat gancho">
   <div>
-    <p class="kicker">why this matters</p>
-    <div class="bigstat"><span class="grad">retries: 0</span></div>
-    <h3>The flaky-test tax — KATA's local default. If a test passes only on retry, it is flaky: a bug to investigate, not a pass to accept. No arbitrary <span class="mono">waitForTimeout</span>, no shared state, every test makes its own data.</h3>
+    <p class="kicker">la verdad que duele</p>
+    <div class="bigstat"><span class="grad">201 ≠ DB ✓</span></div>
+    <h3>Un <b>201 Created</b> no prueba que la base de datos quedó correcta — los triggers pueden no ejecutarse en silencio. La capa que <b>responde</b> bien no es la capa que <b>persiste</b> bien. Por eso se prueban las tres.</h3>
   </div>
-  <div class="notes">Lead with the cultural rule that defines the whole method. Flakiness is the silent killer of automated suites; KATA refuses to hide it behind retries.</div>
+  <div class="notes">La regla cross-layer más importante: un 201 no prueba persistencia correcta. La pantalla verde, el status code OK y la fila en DB son tres verdades distintas. La Trifuerza existe para no confundirlas.</div>
 </section>
 
+<!-- 3. AGENDA -->
 <section class="slide" data-title="Agenda">
-  <p class="kicker">what we'll cover</p>
-  <h2 class="h2" data-anim="fade-up">Two Halves: The Craft, then The Acceleration</h2>
+  <p class="kicker">qué cubriremos</p>
+  <h2 class="h2" data-anim="fade-up">El Acto de Testear, por Capas</h2>
   <div class="stack mt-l anim-stagger-list">
-    <div class="agenda-row"><span class="anum">01</span><span class="at">The Craft — manual KATA: scope, plan, layered architecture, ATC identity, data, code, review gate</span><span class="ad">part 1</span></div>
-    <div class="agenda-row"><span class="anum">02</span><span class="at">The Acceleration — how /test-automation drives it: trigger, context, subagents, tools, artifacts</span><span class="ad">part 2</span></div>
-    <div class="agenda-row"><span class="anum">03</span><span class="at">Takeaways — the rules that keep a suite trustworthy at scale</span><span class="ad">close</span></div>
+    <div class="agenda-row"><span class="anum">00</span><span class="at">Smoke first — el gate Go/No-Go que valida el ambiente antes de explorar</span><span class="ad">el gate</span></div>
+    <div class="agenda-row"><span class="anum">01</span><span class="at">Capa UI — el loop por AC, edge cases, transiciones inválidas, DevTools</span><span class="ad">oro</span></div>
+    <div class="agenda-row"><span class="anum">02</span><span class="at">Capa API — la matriz de status codes y la sonda de RLS A/B</span><span class="ad">magenta</span></div>
+    <div class="agenda-row"><span class="anum">03</span><span class="at">Capa DB — sondas de constraints, barridos de integridad, RLS en SQL</span><span class="ad">cian</span></div>
+    <div class="agenda-row"><span class="anum">04</span><span class="at">Disciplina — triage bloqueante/no-bloqueante, TTL, sin NOT RUN, evidencia</span><span class="ad">el oficio</span></div>
   </div>
-  <div class="notes">Part 1 is the bulk — learn to do this by hand. Part 2 shows the AI doing exactly that, faster, with the human still in control.</div>
+  <p class="qhint mt-l">3 quizzes interactivos a lo largo del recorrido — haz clic en las respuestas.</p>
+  <div class="notes">Cinco partes: el gate de smoke, las tres capas (UI/API/DB) y la disciplina transversal. El corazón es entender qué prueba cada capa.</div>
 </section>
 
-<section class="slide divider" data-title="Part 1">
-  <div>
-    <p class="part-no">PART 01</p>
-    <h1 class="h1">The Craft<br><span class="grad">KATA by hand</span></h1>
-    <p class="lede">If the AI did not exist, what would a QA engineer do, step by step? Plan before code. Respect the layers. One ATC = one test case. Review every line against the checklist.</p>
+<!-- 4. TRIFORCE MODEL -->
+<section class="slide" data-title="Modelo Trifuerza">
+  <p class="kicker">el modelo</p>
+  <h2 class="h2" data-anim="fade-up">Tres Capas, Tres Verdades</h2>
+  <div class="grid g3 mt-m">
+    <div class="card" style="border-top:3px solid #f5b942"><h4 style="color:#f5b942">UI</h4><p class="dim">Lo que el usuario ve. ¿Renderiza, fluye, da feedback? Puede mostrar datos cacheados o mock.</p></div>
+    <div class="card" style="border-top:3px solid #e879f9"><h4 style="color:#e879f9">API</h4><p class="dim">El contrato. ¿Status correcto, schema válido, auth y RLS? El 2xx no garantiza la DB.</p></div>
+    <div class="card" style="border-top:3px solid #22d3ee"><h4 style="color:#22d3ee">DB</h4><p class="dim">La verdad persistida. ¿La fila existe, el trigger corrió, los constraints aguantan?</p></div>
   </div>
-  <div class="notes">Everything in Part 1 is the real method a human follows. The AI later automates this exact sequence — so master it first.</div>
-</section>
-
-<section class="slide" data-title="Pipeline">
-  <p class="kicker">the non-negotiable pipeline</p>
-  <h2 class="h2" data-anim="fade-up">Plan → Code → Review (Never Skip a Phase)</h2>
-  <div class="flow mt-m">
-    <div class="stage"><div class="sx">1</div><div><h4>Plan</h4><p>Write spec.md + automation-plan.md; choose scope, ATCs, fixture, data strategy.</p></div></div>
-    <div class="stage"><div class="sx">2</div><div><h4>Code</h4><p>types → component class → register fixture → test file → run + verify.</p></div></div>
-    <div class="stage"><div class="sx">3</div><div><h4>Review</h4><p>Run the KATA checklist; three gates (test / types / lint) all green = merge.</p></div></div>
-  </div>
-  <div class="callout mt-m"><h4>Each arrow is a GATE</h4><p>Do not start Code before the Plan is approved; do not close the ticket before Review passes.</p></div>
-  <div class="notes">This three-phase order is structural, not politeness. Coding the wrong scope is the most common failure — the Plan gate prevents it.</div>
-</section>
-
-<section class="slide" data-title="Scopes">
-  <p class="kicker">phase 0 — pick your scope</p>
-  <h2 class="h2" data-anim="fade-up">Three Scopes, Three Sizes of Work</h2>
-  <table class="dtable mt-m">
-    <thead><tr><th>Scope</th><th>Input</th><th>Output</th><th>Use when</th></tr></thead>
+  <table class="dtable mt-l" style="font-size:14px">
+    <thead><tr><th>Tipo de feature</th><th>Orden de capas</th></tr></thead>
     <tbody>
-      <tr><td><b>Module (Macro)</b></td><td>Module + candidate TCs</td><td>1 module plan + N ATC specs</td><td>Batch-automating an area, 10+ tests</td></tr>
-      <tr><td><b>Ticket (Medium)</b></td><td>One story ID + scenarios</td><td>1 implementation plan</td><td>One user story — default for sprint work</td></tr>
-      <tr><td><b>Regression (Micro)</b></td><td>One TC (post-bugfix)</td><td>1 ATC implementation plan</td><td>One regression test after a fix</td></tr>
+      <tr><td>UI-focused</td><td><span class="mono">UI → API → DB</span></td></tr>
+      <tr><td>API-first</td><td><span class="mono">API → DB → UI</span></td></tr>
+      <tr><td>Data-focused</td><td><span class="mono">DB → API → UI</span></td></tr>
+      <tr><td>Full-stack</td><td><span class="mono">las tres</span></td></tr>
     </tbody>
   </table>
-  <p class="dim mt-s">When in doubt, ASK. Never assume "module" just because several TC IDs appear.</p>
-  <p class="dim mt-s">These scopes consume the <b>Candidate</b> verdicts from /test-documentation — mapping: Module ← module-driven · Ticket ← ticket-driven · Regression ← bug-driven · ad-hoc → wherever it fits. Manual and Deferred are terminal.</p>
-  <div class="notes">Scope dictates how much planning ceremony you produce. Only Candidate verdicts from test-documentation reach automation — Manual and Deferred are terminal.</div>
+  <div class="notes">El orden de capas lo decide el tipo de feature. UI-focused empieza por UI; data-focused por DB. Smoke siempre va primero, antes de cualquier capa.</div>
 </section>
 
-<section class="slide" data-title="Plan inputs">
-  <p class="kicker">plan phase — read first, in order</p>
-  <h2 class="h2" data-anim="fade-up">Inputs You Gather Before Drafting Anything</h2>
-  <ul class="blist anim-stagger-list">
-    <li><b>kata-manifest.json (root).</b> Authoritative registry of every Component and @atc('ID'). Load FIRST to avoid duplicates and ID collisions.</li>
-    <li><b>KATA references.</b> Doctrine for layers, ATC identity, fixture selection, import aliases.</li>
-    <li><b>tests/components/.</b> The existing Api/Page/Steps shapes on disk to match.</li>
-    <li><b>The synced Story folder.</b> Read the ENTIRE folder — ACs, scope, business rules, AND comments — not one field.</li>
-    <li><b>api/schemas/ + .env.</b> OpenAPI-derived types (refresh if stale); credentials via config.testUser — never hardcode.</li>
-  </ul>
-  <div class="notes">The manifest is the anti-duplication gate (Critical Rule #12). Skipping it produces duplicate Pages, duplicate ATC IDs, and missed reuse — all rejected at review.</div>
+<!-- 5. DIVIDER PART 1 — SMOKE -->
+<section class="slide divider" data-title="Smoke">
+  <div>
+    <p class="part-no">EL GATE</p>
+    <h1 class="h1">Smoke First<br><span class="grad">Valida el Ambiente, no la Feature</span></h1>
+    <p class="lede">5-10 minutos de Go/No-Go. Nunca entres a explorar a fondo hasta que el smoke pase. Un ambiente roto produce reportes de bug falsos.</p>
+  </div>
+  <div class="notes">Smoke es obligatorio y primero. Valida que el ambiente esté vivo, no que la feature funcione — son preguntas distintas, ambas necesarias.</div>
 </section>
 
-<section class="slide" data-title="What is an ATC">
-  <p class="kicker">the heart of KATA — what is an ATC?</p>
-  <h2 class="h2" data-anim="fade-up">ATC = Complete Test Case, Not a Click</h2>
+<!-- 6. SMOKE CHECKLIST -->
+<section class="slide" data-title="Smoke checklist">
+  <p class="kicker">en orden, ≤10 min</p>
+  <h2 class="h2" data-anim="fade-up">El Checklist de Smoke</h2>
+  <div class="flow mt-m">
+    <div class="stage"><div class="sx">1</div><div><h4>Acceso básico</h4><p>La app carga, sin 500, assets renderizan, consola sin errores rojos (warnings amarillos OK).</p></div></div>
+    <div class="stage"><div class="sx">2</div><div><h4>Autenticación</h4><p>Login, la sesión persiste al refrescar, logout funciona (saltar si el ticket es pre-auth).</p></div></div>
+    <div class="stage"><div class="sx">3</div><div><h4>Happy path</h4><p>El flujo primario del ticket de punta a punta, 3-5 pasos, marca cada uno al funcionar.</p></div></div>
+    <div class="stage"><div class="sx">4</div><div><h4>Integración backend</h4><p>Network tab durante el happy path: todas las llamadas <span class="mono">/api/*</span> en 2xx, los datos persisten tras F5.</p></div></div>
+  </div>
+  <div class="callout warn mt-m"><h4>SIEMPRE revisa el Network tab — aunque la UI se vea bien</h4><p>La UI puede renderizar datos cacheados o mock. La red no miente: si la UI muestra algo pero no hubo llamada 2xx, no confíes en la pantalla.</p></div>
+  <div class="notes">4 pasos en orden. El paso 4 es clave: la UI puede engañar con cache/mock; el Network tab revela la verdad. Siempre revisar la red.</div>
+</section>
+
+<!-- 7. SMOKE VERDICT + RESTRICTIONS -->
+<section class="slide" data-title="Smoke verdict">
+  <p class="kicker">el veredicto y sus reglas</p>
+  <h2 class="h2" data-anim="fade-up">Go / No-Go</h2>
   <div class="vs">
-    <div class="card bad-side side"><h3>❌ NOT an ATC</h3><ul>
-      <li>clickLoginButton() — single interaction</li>
-      <li>fillEmailSuccessfully() — wraps one page.fill()</li>
-      <li>submitFormSuccessfully() — an interaction, not an outcome</li>
-    </ul></div>
-    <div class="mid">→</div>
-    <div class="card good-side side"><h3>✅ A real ATC</h3><ul>
-      <li>loginWithValidCredentials(data) — goto, fill, submit, assert redirect</li>
-      <li>createOrderSuccessfully(payload) — POST, assert 201, assert body.id, return tuple</li>
-    </ul></div>
+    <div class="card good-side">
+      <h3>✓ PASS → continúa</h3>
+      <ul>
+        <li>Registra <span class="mono">Smoke: PASSED</span> en memory</li>
+        <li>Procede a UI / API / DB</li>
+        <li>Captura evidencia del home</li>
+      </ul>
+    </div>
+    <div class="mid">vs</div>
+    <div class="card bad-side">
+      <h3>✗ FAIL → STOP</h3>
+      <ul>
+        <li>Es un bloqueante de ambiente</li>
+        <li>Triagea primero (NO auto-Critical)</li>
+        <li>Surfacea al usuario, NO explores a fondo</li>
+      </ul>
+    </div>
   </div>
-  <p class="dim mt-s">If the method one-line-wraps page.click(), delete it.</p>
-  <div class="notes">The single most important reframe. An ATC is an atomic mini-flow with its own fixed assertions, decorated @atc('TICKET-ID'), mapping 1:1 to a TMS ticket.</div>
+  <div class="callout mt-m"><h4>Las restricciones del smoke</h4><p>Durante el smoke: <b>no</b> corras edge cases ni negativos · <b>no</b> abras bugs menores (solo bloqueantes) · <b>no</b> excedas 10 minutos. El smoke detecta bloqueantes, no documenta calidad.</p></div>
+  <div class="notes">PASS→continúa, FAIL→STOP (bloqueante de ambiente, triagea sin auto-Critical). Restricciones: solo bloqueantes, sin edge cases, ≤10min. Reportar bugs falsos por un ambiente roto es el peor desperdicio.</div>
 </section>
 
-<section class="slide" data-title="TC identity">
-  <p class="kicker">TC identity rule</p>
-  <h2 class="h2" data-anim="fade-up">One TC = One Precondition + One Action</h2>
-  <div class="callout"><h4>The definition</h4><p>A test case is exactly two things: the PRECONDITION (state) and the ACTION (trigger). EVERY expected result from the same precondition + action is an assertion of the SAME TC — no matter which panel, endpoint, or section it validates.</p></div>
-  <div class="vs mt-m">
-    <div class="card bad-side side"><h3>❌ WRONG</h3><ul><li>TC-A: verify Pricing block</li><li>TC-B: verify Reviews block</li><li>TC-C: verify page structure</li></ul></div>
-    <div class="mid">→</div>
-    <div class="card good-side side"><h3>✅ RIGHT</h3><ul><li>One TC: "Open product detail page"</li><li>Pricing, Reviews, structure = its assertions</li></ul></div>
+<!-- 8. SMOKE != DEEP -->
+<section class="slide" data-title="Smoke vs deep">
+  <p class="kicker">dos preguntas distintas</p>
+  <h2 class="h2" data-anim="fade-up">Smoke ≠ Exploración Profunda</h2>
+  <div class="grid g2 mt-m">
+    <div class="card card-accent"><h4>Smoke pregunta…</h4><p class="dim" style="font-size:18px">"¿El <b>ambiente</b> está vivo?" — ¿carga, autentica, persiste el happy path? Si no, todo lo demás es ruido.</p></div>
+    <div class="card card-accent"><h4>La Trifuerza pregunta…</h4><p class="dim" style="font-size:18px">"¿La <b>feature</b> funciona bien?" — ¿cumple los ACs, aguanta edge cases, es segura e íntegra en sus tres capas?</p></div>
   </div>
-  <div class="notes">Splitting one action's assertions into multiple TCs is the most common over-counting mistake. It explodes the suite and breaks traceability. Collapse them.</div>
+  <div class="callout warn mt-m"><h4>El orden importa</h4><p>Un ambiente roto produce <b>reportes de bug falsos</b>. Si smoke falla y exploras igual, vas a reportar "bugs" que en realidad son el ambiente caído. Smoke valida el ambiente; la Trifuerza valida la feature. Primero uno, luego la otra.</p></div>
+  <div class="notes">Anti-patrón S7: nunca saltar el smoke antes de la trifuerza. Son preguntas distintas — ambiente vs feature. El reachability gate (Stage Start) es aún anterior: ¿el env responde? Tres gates, tres preguntas.</div>
 </section>
 
-<section class="slide" data-title="Equivalence partitioning">
-  <p class="kicker">equivalence partitioning</p>
-  <h2 class="h2" data-anim="fade-up">Same Output = One Parameterized ATC</h2>
+<!-- 9. DIVIDER PART 2 — UI -->
+<section class="slide divider" data-title="Capa UI">
+  <div>
+    <p class="part-no" style="color:#f5b942">CAPA 01 · UI</p>
+    <h1 class="h1">La Capa <span style="color:#f5b942">UI</span><br>Lo que el Usuario Ve</h1>
+    <p class="lede">Valida los ACs, descubre edge cases, captura evidencia — y desconfía de la pantalla: puede esconder un fallo de la capa de abajo.</p>
+  </div>
+  <div class="notes">UI = oro. El loop por AC + edge cases + transiciones inválidas + reglas de DevTools.</div>
+</section>
+
+<!-- 10. UI SCENARIO LOOP -->
+<section class="slide" data-title="UI loop">
+  <p class="kicker">el loop por cada AC</p>
+  <h2 class="h2" data-anim="fade-up">Navega → Observa → Captura</h2>
+  <div class="flow mt-s">
+    <div class="stage"><div class="sx">1</div><div><h4>Navega + snapshot</h4><p>Abre la URL de inicio, captura la estructura del DOM / árbol de accesibilidad.</p></div></div>
+    <div class="stage"><div class="sx">2</div><div><h4>Ejecuta + observa</h4><p>Acciones del happy path paso a paso. ¿Resultado esperado? ¿estado UI raro? ¿consola roja? ¿red 4xx/5xx?</p></div></div>
+    <div class="stage"><div class="sx">3</div><div><h4>Captura + propaga estado</h4><p>Screenshot en el estado clave (<span class="mono">{KEY}-{n}-ac{N}-desc.png</span>) y marca el outline PASSED/FAILED en memory.</p></div></div>
+  </div>
+  <div class="callout warn mt-m"><h4>Reglas de DevTools</h4><p>Consola: <b>rojo = log</b> (amarillo OK). Red: filas <b>rojas (4xx/5xx) siempre se anotan</b> aunque la UI se vea bien — la UI puede enmascarar un fallo de API. &gt;5s de carga = hallazgo de Performance. Desactiva el cache.</p></div>
+  <div class="notes">El loop: navegar→snapshot→ejecutar→observar(consola+red)→capturar→propagar estado. La regla de oro de DevTools: las filas rojas de red siempre cuentan, aunque la UI se vea verde.</div>
+</section>
+
+<!-- 11. UI EDGE-CASE CHECKLIST -->
+<section class="slide" data-title="UI edge cases">
+  <p class="kicker">el checklist por input / interacción</p>
+  <h2 class="h2" data-anim="fade-up">Edge Cases de la Capa UI</h2>
+  <table class="dtable mt-s" style="font-size:14px">
+    <thead><tr><th>Categoría</th><th>Qué probar</th></tr></thead>
+    <tbody>
+      <tr><td><b>Boundary (BVA)</b></td><td>vacío · <span class="mono">min-1·min·min+1</span> · <span class="mono">max-1·max·max+1</span> · 0 / -1 / MAX_INT · especiales <span class="mono">&lt;script&gt;</span>, <span class="mono">'; DROP TABLE</span></td></tr>
+      <tr><td><b>UI / sesión</b></td><td>refrescar a mitad de flujo · botón atrás · pestañas duplicadas · timeout / idle</td></tr>
+      <tr><td><b>Estado / transición</b></td><td>cada transición válida, luego una que el estado debe <b>rechazar</b></td></tr>
+      <tr><td><b>Validación de datos</b></td><td>email inválido · password débil · doble submit · edición concurrente</td></tr>
+      <tr><td><b>Visual</b></td><td>breakpoints responsive · loading states · layouts rotos · elementos solapados</td></tr>
+    </tbody>
+  </table>
+  <div class="callout mt-m"><h4>Si exploras y encuentras un caso nuevo…</h4><p>…que el ATP de Stage 1 no derivó (una partición, un boundary, una transición), <b>añádelo de vuelta</b> al set de outlines. La cobertura es el piso (ACs) <b>más</b> esta capa de riesgo, no la exploración en lugar de la planificación.</p></div>
+  <div class="notes">El checklist de edge cases UI. Los caracteres especiales (script/DROP TABLE) son sondas de seguridad básicas. Lo encontrado se realimenta al plan, no reemplaza al plan.</div>
+</section>
+
+<!-- 12. INVALID STATE TRANSITIONS -->
+<section class="slide" data-title="Transiciones inválidas">
+  <p class="kicker">donde se esconden los defectos</p>
+  <h2 class="h2" data-anim="fade-up">Transiciones Inválidas — el Punto Ciego</h2>
+  <p class="lede mt-s">Para cualquier entidad con estado (draft→submitted→approved, cart→paid→shipped): dispara cada transición <b>válida</b>, luego dispara una que el estado actual <b>debería rechazar</b>.</p>
+  <div class="lifecycle mt-l">
+    <span class="lstate new">draft</span><span class="arr">→</span>
+    <span class="lstate prog">submitted</span><span class="arr">→</span>
+    <span class="lstate good">approved</span><span class="arr">→</span>
+    <span class="lstate bad">closed</span>
+  </div>
+  <div class="lifecycle mt-m">
+    <span class="dim2 mono" style="font-size:13px">la sonda:</span>
+    <span class="lstate bad">approve(closed) → ¿rechazado?</span>
+    <span class="dim2 mono" style="font-size:13px">un 200 silencioso sin cambio de estado = bug</span>
+  </div>
+  <div class="callout warn mt-m"><h4>El happy path casi siempre funciona</h4><p>Lo que rompe es cuando alguien intenta hacer lo que el negocio no permite — aprobar algo ya cerrado, cancelar algo ya enviado. <b>Las transiciones inválidas son donde viven los bugs de máquina de estados.</b></p></div>
+  <div class="notes">Conecta con la técnica State-Transition: 1 TC por transición inválida. El bug típico: un 200 OK silencioso que no cambia nada deja al usuario confundido.</div>
+</section>
+
+<!-- 13. ESCALATE TO API/DB -->
+<section class="slide" data-title="Escalar capas">
+  <p class="kicker">cuándo bajar una capa</p>
+  <h2 class="h2" data-anim="fade-up">Cuándo Escalar a API / DB</h2>
+  <div class="grid g3 mt-m">
+    <div class="card card-accent"><h4>UI renderiza pero el dato se ve mal</h4><p class="dim">→ baja a <b style="color:#22d3ee">§DB</b> para confirmar qué se persistió de verdad.</p></div>
+    <div class="card card-accent"><h4>Un botón dispara un request non-2xx</h4><p class="dim">→ baja a <b style="color:#e879f9">§API</b> para reproducir la llamada directamente.</p></div>
+    <div class="card card-accent"><h4>Sospecha de RLS — ves filas que no deberías</h4><p class="dim">→ baja a <b style="color:#e879f9">§API</b> <b>y</b> <b style="color:#22d3ee">§DB</b> ambas.</p></div>
+  </div>
+  <div class="callout mt-m"><h4>La UI es el síntoma, no el diagnóstico</h4><p>Cuando algo se ve mal arriba, la causa casi siempre está abajo. Escalar de capa es cómo pasas de "esto se ve raro" a "esto está roto aquí, por esto".</p></div>
+  <div class="notes">Reglas de escalado: dato mal→DB; non-2xx→API replay; RLS→ambas. La UI te dice QUE algo falla; las capas de abajo te dicen POR QUÉ.</div>
+</section>
+
+<!-- 14. DIVIDER PART 3 — API -->
+<section class="slide divider" data-title="Capa API">
+  <div>
+    <p class="part-no" style="color:#e879f9">CAPA 02 · API</p>
+    <h1 class="h1">La Capa <span style="color:#e879f9">API</span><br>El Contrato</h1>
+    <p class="lede">Confirma contratos, auth, manejo de errores y RLS. Cada status code no es un número — es una prueba de que algo funciona (o no).</p>
+  </div>
+  <div class="notes">API = magenta. La matriz de status codes "qué prueba" + la sonda de RLS A/B. Esta capa enseña a leer status codes como evidencia.</div>
+</section>
+
+<!-- 15. API SETUP -->
+<section class="slide" data-title="API setup">
+  <p class="kicker">descubrir + autenticar</p>
+  <h2 class="h2" data-anim="fade-up">Preparar la Exploración de API</h2>
+  <div class="terminal mt-s">
+    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>auth una vez, reutiliza</span></div>
+<pre><span class="cmt"># credenciales SIEMPRE desde .env — nunca hardcodear</span>
+<span class="kw">POST</span> /auth/v1/token
+  body: { email: {{env.STAGING_USER_EMAIL}}, password: {{env.STAGING_USER_PASSWORD}} }
+  store: <span class="fn">access_token</span>, <span class="fn">refresh_token</span>, <span class="fn">user.id</span>
+
+<span class="cmt"># registra los endpoints del ticket en una tabla en memory:</span>
+<span class="cmt"># | Method | Endpoint | Purpose | AC |</span></pre>
+  </div>
+  <div class="callout warn mt-m"><h4>Gotcha de propagación de token</h4><p>Algunos backends scopean el token por workspace/tenant. Si un request da <b>200 para un usuario y 403 para otro con el mismo rol</b>, la propagación es la sospechosa — anótalo como <b>descubrimiento</b>, no como bug, hasta confirmarlo con el equipo.</p></div>
+  <div class="notes">Token una vez desde .env, reutilizar. La gotcha de propagación: mismo rol, distinto resultado = problema de scoping, no necesariamente bug. Confirmar antes de reportar.</div>
+</section>
+
+<!-- 16. STATUS-CODE MATRIX -->
+<section class="slide" data-title="Status codes">
+  <p class="kicker">cada status PRUEBA algo</p>
+  <h2 class="h2" data-anim="fade-up">La Matriz de Status Codes</h2>
+  <table class="dtable mt-s" style="font-size:13.5px">
+    <thead><tr><th>Escenario</th><th>Esperado</th><th>Qué prueba</th></tr></thead>
+    <tbody>
+      <tr><td>Happy path</td><td><span class="tag ok">200 / 201</span></td><td>Contrato + data feliz</td></tr>
+      <tr><td>Campo requerido faltante</td><td><span class="tag warn">400</span></td><td>Validación viva</td></tr>
+      <tr><td>Input sobre-largo</td><td><span class="tag warn">400 / 413</span></td><td>Guardia de tamaño</td></tr>
+      <tr><td>Sin header de auth</td><td><span class="tag warn">401</span></td><td>Auth requerida</td></tr>
+      <tr><td>Token expirado</td><td><span class="tag warn">401</span></td><td>La rotación de token funciona</td></tr>
+      <tr><td>Recurso de otro tenant</td><td><span class="tag no">403 / vacío</span></td><td><b>RLS / aislamiento de tenant</b></td></tr>
+      <tr><td>Recurso inexistente</td><td>200+vacío (PostgREST) / 404</td><td>Semántica de not-found</td></tr>
+      <tr><td>Único duplicado</td><td><span class="tag no">409</span></td><td>Manejo de conflicto</td></tr>
+    </tbody>
+  </table>
+  <div class="notes">La idea núcleo de la capa API: un status code es evidencia. 400 prueba que la validación está viva; 403 prueba aislamiento de tenant; 409 prueba manejo de conflicto. No probar el negativo = no saber si la guardia existe.</div>
+</section>
+
+<!-- 17. RLS PROBE -->
+<section class="slide" data-title="RLS probe">
+  <p class="kicker">la sonda de seguridad que casi nadie corre</p>
+  <h2 class="h2" data-anim="fade-up">Sonda de RLS / Autorización — A/B</h2>
+  <p class="lede mt-s">Crítica para apps multi-tenant. Dos usuarios (A, B), <b>el mismo rol</b>. La pregunta: ¿puede A tocar lo de B?</p>
+  <div class="terminal mt-s">
+    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>A intenta acceder a lo de B</span></div>
+<pre><span class="num">1.</span> A lista recursos              <span class="kw">→</span> solo las filas de A
+<span class="num">2.</span> A lee <span class="str">resource?user_id=eq.B</span>   <span class="kw">→</span> array vacío o 403
+<span class="num">3.</span> A hace PATCH a la fila de B    <span class="kw">→</span> 0 filas afectadas o 403
+
+<span class="cmt"># resultado por sonda:</span>  <span class="tag ok">VERIFIED</span>  o  <span class="tag no">VULNERABLE</span></pre>
+  </div>
+  <div class="callout warn mt-m"><h4>Cualquier <span class="mono">VULNERABLE</span> es territorio de bug Critical</h4><p>Si A puede leer o escribir lo de B, es una fuga cross-tenant — el peor tipo de defecto. Es un finding <b>bloqueante</b>: detiene la pasada de inmediato.</p></div>
+  <div class="notes">La sonda A/B con dos usuarios del mismo rol: listar-solo-lo-mío, leer-otro-tenant, PATCH-otra-fila. VULNERABLE = Critical = bloqueante. Esta es la sonda de seguridad de mayor valor de la capa API.</div>
+</section>
+
+<!-- 18. CROSS-LAYER HANDOFF -->
+<section class="slide" data-title="201 ≠ DB">
+  <p class="kicker">el handoff cross-layer</p>
+  <h2 class="h2" data-anim="fade-up">Un 201 No Prueba la DB</h2>
+  <div class="flow mt-m">
+    <div class="stage"><div class="sx">✓</div><div><h4>La API responde 201 Created</h4><p>El contrato dice "creado". Pero un POST/PATCH exitoso solo prueba que la API <b>aceptó</b> la petición.</p></div></div>
+    <div class="stage"><div class="sx">?</div><div><h4>¿El trigger corrió? ¿La fila quedó bien?</h4><p>Los triggers pueden no ejecutarse en silencio. El total calculado, las relaciones, los timestamps — todo eso vive en la DB.</p></div></div>
+    <div class="stage"><div class="sx">→</div><div><h4>Baja a §DB a confirmar</h4><p>Tras cada POST/PATCH exitoso, verifica persistencia y ejecución de triggers en la base. La respuesta no es la verdad.</p></div></div>
+  </div>
+  <div class="callout warn mt-m"><h4>La regla de oro de la Trifuerza</h4><p>Cada capa prueba <b>su</b> verdad. La API prueba el contrato; solo la DB prueba la persistencia. Confiar en el 201 es confiar en la capa equivocada.</p></div>
+  <div class="notes">El handoff cross-layer: 201 ≠ DB correcta (triggers silenciosos). Siempre confirmar persistencia en DB tras un write exitoso. Esta es la lección que une las tres capas.</div>
+</section>
+
+<!-- 19. QUIZ 1 -->
+<section class="slide" data-title="Quiz 1">
+  <p class="kicker">quiz · smoke + UI + API</p>
+  <h2 class="h2" data-anim="fade-up">Las Capas de Arriba</h2>
+  <div class="quiz">
+    <div class="qitem">
+      <div class="qq"><span class="qn">Q1</span><span>El POST devuelve 201 y la UI muestra "Orden creada". ¿Es suficiente para marcar el AC como PASSED?</span></div>
+      <div class="opts">
+        <div class="opt"><span class="mk">A</span><span>Sí — 201 + UI verde = creado correctamente</span></div>
+        <div class="opt" data-correct="1"><span class="mk">B</span><span>No — un 201 no prueba la DB; baja a confirmar fila + trigger</span></div>
+        <div class="opt"><span class="mk">C</span><span>Sí, si la consola no tiene errores rojos</span></div>
+      </div>
+      <div class="qexp"><b>No.</b> Un 201 prueba que la API aceptó la petición, no que la DB quedó correcta — los triggers pueden no correr en silencio. Confirma persistencia (fila, total calculado, relaciones) en §DB antes de dar PASSED.</div>
+    </div>
+    <div class="qitem">
+      <div class="qq"><span class="qn">Q2</span><span>El usuario A, con su token, hace <span class="mono">GET resource?user_id=eq.B</span> y recibe las filas de B (200). ¿Veredicto?</span></div>
+      <div class="opts">
+        <div class="opt" data-correct="1"><span class="mk">A</span><span>VULNERABLE — fuga cross-tenant, bug Critical, finding bloqueante</span></div>
+        <div class="opt"><span class="mk">B</span><span>VERIFIED — devolvió 200, el endpoint funciona</span></div>
+        <div class="opt"><span class="mk">C</span><span>Observación menor — depende del rol</span></div>
+      </div>
+      <div class="qexp"><b>VULNERABLE.</b> A no debería ver nada de B. Leer datos de otro tenant es una fuga de aislamiento — Critical, y bloqueante: detiene la pasada de inmediato. La sonda RLS A/B es justo para cazar esto.</div>
+    </div>
+  </div>
+  <div class="notes">Las dos lecciones clave de UI+API: el 201 no prueba la DB, y la sonda RLS A/B caza fugas cross-tenant (VULNERABLE = Critical bloqueante).</div>
+</section>
+
+<!-- 20. DIVIDER PART 4 — DB -->
+<section class="slide divider" data-title="Capa DB">
+  <div>
+    <p class="part-no" style="color:#22d3ee">CAPA 03 · DB</p>
+    <h1 class="h1">La Capa <span style="color:#22d3ee">DB</span><br>La Verdad Persistida</h1>
+    <p class="lede">Confirma estado, constraints, triggers y RLS a nivel SQL. Aquí la pregunta cambia: en las sondas negativas, el <b>éxito es el bug</b>.</p>
+  </div>
+  <div class="notes">DB = cian. State verification + constraint probes (éxito=bug) + integrity sweeps + RLS en SQL. La capa donde se invierte la lógica: las sondas negativas deben fallar.</div>
+</section>
+
+<!-- 21. DB STATE VERIFICATION -->
+<section class="slide" data-title="DB state">
+  <p class="kicker">después de una acción API / UI</p>
+  <h2 class="h2" data-anim="fade-up">Verificación de Estado</h2>
+  <table class="dtable mt-s" style="font-size:14px">
+    <thead><tr><th>Check</th><th>Patrón de query</th></tr></thead>
+    <tbody>
+      <tr><td>La fila existe</td><td><span class="mono">SELECT * FROM {table} WHERE id = '{id}'</span></td></tr>
+      <tr><td>La relación</td><td><span class="mono">JOIN</span> hijo a padre, compara el conteo esperado</td></tr>
+      <tr><td>El trigger corrió</td><td>compara el total guardado vs <span class="mono">SUM(items)</span></td></tr>
+      <tr><td>Timestamps sanos</td><td><span class="mono">created_at</span> reciente, <span class="mono">updated_at &gt;= created_at</span></td></tr>
+    </tbody>
+  </table>
+  <div class="callout mt-m"><h4>Aquí se cobra el 201</h4><p>El "trigger corrió" es exactamente la verdad que el 201 no podía dar: si el total guardado ≠ la suma de los items, el trigger falló en silencio aunque la API respondió 201.</p></div>
+  <div class="notes">Las 4 verificaciones de estado post-acción. "El trigger corrió" (total guardado vs SUM) es donde se atrapa el trigger silencioso que el 201 ocultó.</div>
+</section>
+
+<!-- 22. CONSTRAINT PROBES -->
+<section class="slide" data-title="Constraint probes">
+  <p class="kicker">la lógica invertida</p>
+  <h2 class="h2" data-anim="fade-up">Sondas de Constraints — el Éxito es el Bug</h2>
+  <table class="dtable mt-s" style="font-size:15px">
+    <thead><tr><th>Constraint</th><th>Sonda (todas deben ERRORAR)</th></tr></thead>
+    <tbody>
+      <tr><td><b>FK</b></td><td>INSERT hijo con parent id inexistente</td></tr>
+      <tr><td><b>CHECK</b></td><td>UPDATE a un valor de enum inválido</td></tr>
+      <tr><td><b>UNIQUE</b></td><td>INSERT duplicado de columna única</td></tr>
+      <tr><td><b>NOT NULL</b></td><td>INSERT con NULL en columna requerida</td></tr>
+    </tbody>
+  </table>
+  <div class="callout warn mt-m"><h4>Si la sonda <b>tiene éxito</b>, el constraint falta — y eso es el bug</h4><p>Estas sondas deben fallar TODAS. Un INSERT inválido que pasa significa que la base no está protegiendo la integridad. <b>Envuelve cada sonda en una transacción y haz ROLLBACK</b> para no contaminar staging.</p></div>
+  <div class="notes">La lógica se invierte: en sondas negativas, el éxito = constraint ausente = bug. FK/CHECK/UNIQUE/NOT NULL deben errorar todas. Siempre en transacción + ROLLBACK.</div>
+</section>
+
+<!-- 23. INTEGRITY SWEEPS -->
+<section class="slide" data-title="Integrity sweeps">
+  <p class="kicker">barridos de integridad</p>
+  <h2 class="h2" data-anim="fade-up">Cazar Datos Corruptos</h2>
+  <div class="terminal mt-s">
+    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>SQL · estas queries deben volver 0 filas</span></div>
+<pre><span class="cmt">-- huérfanos: hijos sin padre</span>
+<span class="kw">SELECT</span> c.* <span class="kw">FROM</span> child c <span class="kw">LEFT JOIN</span> parent p <span class="kw">ON</span> c.fk=p.id <span class="kw">WHERE</span> p.id <span class="kw">IS NULL</span>;
+
+<span class="cmt">-- calc mismatch: total guardado ≠ suma real</span>
+<span class="kw">SELECT</span> o.id, o.total, COALESCE(SUM(i.qty*i.unit_price),0) <span class="kw">AS</span> calc
+<span class="kw">FROM</span> orders o <span class="kw">LEFT JOIN</span> order_items i <span class="kw">ON</span> o.id=i.order_id
+<span class="kw">GROUP BY</span> o.id, o.total <span class="kw">HAVING</span> o.total != calc;
+
+<span class="cmt">-- estados de dominio imposibles</span>
+<span class="kw">SELECT</span> * <span class="kw">FROM</span> orders <span class="kw">WHERE</span> status=<span class="str">'delivered'</span> <span class="kw">AND</span> payment_status!=<span class="str">'completed'</span>;</pre>
+  </div>
+  <div class="callout mt-m"><h4>Cualquier fila devuelta es un defecto de integridad</h4><p>Un pedido "entregado" sin pago "completado" es un estado que el negocio jamás debería permitir. Estos barridos cazan la corrupción que ninguna prueba de UI vería.</p></div>
+  <div class="notes">Tres barridos: huérfanos, calc mismatch, estados imposibles. Cada uno debe volver 0 filas. Correr periódicamente en features con mucha data. Caza lo que la UI nunca muestra.</div>
+</section>
+
+<!-- 24. RLS SQL + CLEANUP -->
+<section class="slide" data-title="RLS SQL + cleanup">
+  <p class="kicker">RLS real + cascadas</p>
+  <h2 class="h2" data-anim="fade-up">RLS a Nivel SQL y Limpieza</h2>
+  <div class="grid g2 mt-s">
+    <div class="card card-accent">
+      <h4>RLS de verdad</h4>
+      <p class="dim mb-s">El rol <span class="mono">qa_team</span> suele saltar RLS. Para probarla real, impersona el JWT:</p>
+      <div class="terminal" style="box-shadow:none">
+<pre style="max-height:160px"><span class="kw">BEGIN</span>;
+<span class="kw">SET LOCAL</span> request.jwt.claim.sub = <span class="str">'{user-a}'</span>;
+<span class="kw">SELECT</span> * <span class="kw">FROM</span> {table}; <span class="cmt">-- solo filas de A</span>
+<span class="kw">ROLLBACK</span>;</pre>
+      </div>
+    </div>
+    <div class="card card-accent">
+      <h4>Cascadas de limpieza</h4>
+      <p class="dim mb-s">Tras probar flujos CRUD, verifica que la limpieza cascadea:</p>
+      <ul class="blist" style="margin-top:4px;font-size:14px">
+        <li>DELETE padre → ¿los hijos se van?</li>
+        <li>Soft-delete: ¿flag puesto, fila aún presente?</li>
+        <li>Registra <span class="mono">CLEANUP COMPLETE / INCOMPLETE</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout mt-m"><h4>Si el SQL directo salta la RLS</h4><p>Cae a la sonda API §RLS A/B — esa pasa por el enforcement real de la aplicación. Dos caminos para la misma verdad de seguridad.</p></div>
+  <div class="notes">RLS real necesita impersonar el JWT (qa_team la salta). Cleanup: cascadas de DELETE y soft-delete. Si el SQL salta RLS, usar la sonda API A/B (enforcement real).</div>
+</section>
+
+<!-- 25. QUIZ 2 -->
+<section class="slide" data-title="Quiz 2">
+  <p class="kicker">quiz · capa DB</p>
+  <h2 class="h2" data-anim="fade-up">La Verdad Persistida</h2>
+  <div class="quiz">
+    <div class="qitem">
+      <div class="qq"><span class="qn">Q1</span><span>Sondas la constraint UNIQUE insertando un duplicado, y el INSERT <b>tiene éxito</b> (no errora). ¿Qué significa?</span></div>
+      <div class="opts">
+        <div class="opt"><span class="mk">A</span><span>Bien — la base aceptó el dato, todo en orden</span></div>
+        <div class="opt" data-correct="1"><span class="mk">B</span><span>Bug — el constraint UNIQUE falta; la sonda negativa debía errorar</span></div>
+        <div class="opt"><span class="mk">C</span><span>Observación — depende de la columna</span></div>
+      </div>
+      <div class="qexp"><b>Bug.</b> En sondas de constraints la lógica se invierte: el éxito es el defecto. Un duplicado que pasa = la base no protege la unicidad. Por eso las sondas FK/CHECK/UNIQUE/NOT NULL deben errorar todas (en transacción + ROLLBACK).</div>
+    </div>
+    <div class="qitem">
+      <div class="qq"><span class="qn">Q2</span><span>Tu barrido devuelve un pedido con <span class="mono">status='delivered'</span> y <span class="mono">payment_status='pending'</span>. ¿Acción?</span></div>
+      <div class="opts">
+        <div class="opt"><span class="mk">A</span><span>Ignorar — la UI no lo muestra, no afecta al usuario</span></div>
+        <div class="opt" data-correct="1"><span class="mk">B</span><span>Defecto de integridad — un estado de dominio imposible que el negocio nunca debe permitir</span></div>
+        <div class="opt"><span class="mk">C</span><span>Normal — los estados son independientes</span></div>
+      </div>
+      <div class="qexp"><b>Defecto de integridad.</b> "Entregado sin pago completado" es un estado imposible. Los barridos de integridad cazan exactamente esta corrupción silenciosa — invisible en la UI, real en los datos.</div>
+    </div>
+  </div>
+  <div class="notes">Las dos lecciones DB: en sondas de constraints el éxito = bug; y los estados de dominio imposibles son defectos de integridad aunque la UI no los muestre.</div>
+</section>
+
+<!-- 26. DIVIDER PART 5 — DISCIPLINE -->
+<section class="slide divider" data-title="Disciplina">
+  <div>
+    <p class="part-no">EL OFICIO</p>
+    <h1 class="h1">La Disciplina<br><span class="grad">Que Hace la Pasada Confiable</span></h1>
+    <p class="lede">Cuándo detenerse y cuándo seguir, cómo tratar el tiempo, y por qué ningún test puede quedar en NOT RUN.</p>
+  </div>
+  <div class="notes">La capa transversal: triage de findings, TTL, status propagation, evidencia. Lo que separa una pasada profesional de un click-around.</div>
+</section>
+
+<!-- 27. FINDING TRIAGE -->
+<section class="slide" data-title="Finding triage">
+  <p class="kicker">la pausa graduada</p>
+  <h2 class="h2" data-anim="fade-up">Bloqueante vs No-Bloqueante</h2>
+  <p class="lede mt-s">Un FAIL durante la exploración <b>no</b> es automáticamente Critical y <b>no</b> detiene la pasada por sí solo. Triagea primero, luego decide.</p>
   <div class="vs">
-    <div class="card bad-side side"><h3>❌ Three ATCs, one outcome</h3><ul>
-      <li>@atc('T1') loginWithWrongEmail()</li>
-      <li>@atc('T2') loginWithWrongPassword()</li>
-      <li>@atc('T3') loginWithEmptyFields()</li>
-      <li>all return HTTP 401</li>
-    </ul></div>
-    <div class="mid">→</div>
-    <div class="card good-side side"><h3>✅ One parameterized ATC</h3><ul>
-      <li>@atc('T1') loginWithInvalidCredentials(payload)</li>
-      <li>test file parameterizes the inputs</li>
-      <li>all produce 401 + error body</li>
-    </ul></div>
+    <div class="card bad-side">
+      <h3>Bloqueante → STOP</h3>
+      <ul>
+        <li>smoke / ambiente caído</li>
+        <li>corrupción / pérdida de integridad</li>
+        <li>seguridad explotable (RLS <span class="mono">VULNERABLE</span>, bypass de auth, cross-tenant)</li>
+      </ul>
+    </div>
+    <div class="mid">vs</div>
+    <div class="card good-side">
+      <h3>No-bloqueante → log + sigue</h3>
+      <ul>
+        <li>cosmético, gap de validación menor</li>
+        <li>edge case en un TC no crítico</li>
+        <li>finding de seguridad/framework-default pendiente de recalibración</li>
+      </ul>
+    </div>
   </div>
-  <p class="dim mt-s">Actions inside change → different ATC. Only DATA changes but behavior is identical → same ATC, parameterized.</p>
-  <div class="notes">Different status codes, UI states, or business outcomes are separate ATCs. Same outcome, different data, is one. This keeps the ATC count honest.</div>
+  <div class="callout warn mt-m"><h4>Por qué no parar por todo</h4><p>Pausar una pasada de 17 TCs por un hallazgo cosmético desperdicia el dispatch y pierde cobertura. Un finding no-bloqueante se registra y la pasada <b>continúa</b>; todos se surfacean juntos al cierre de Stage 2. Un bloqueante genuino sí detiene de inmediato.</p></div>
+  <div class="notes">La pausa graduada: bloqueante (env/corrupción/seguridad) detiene; no-bloqueante (cosmético/menor) se registra y la pasada sigue. Un FAIL no es auto-Critical. El objetivo es cobertura completa.</div>
 </section>
 
-<section class="slide" data-title="AC is the floor">
-  <p class="kicker">test-design doctrine — the core principle</p>
-  <h2 class="h2" data-anim="fade-up">"All ACs covered" is the <span class="grad">floor</span>, not the success bar</h2>
-  <div class="grid g3 mt-l anim-stagger-list">
-    <div class="card card-accent"><h4>1 · Passing ≠ probing</h4><p class="dim">Green ACs confirm the contract. They don't prove the system is robust, safe, or error-resistant.</p></div>
-    <div class="card card-accent"><h4>2 · Floor, not ceiling</h4><p class="dim">"All ACs covered" is the entry bar. The ATC set must also cover risk-beyond-AC.</p></div>
-    <div class="card card-accent"><h4>3 · Criterion vs case</h4><p class="dim">A criterion is a business assertion. An ATC is its concrete exploration: precondition + action + assertions.</p></div>
-    <div class="card card-accent"><h4>4 · 1 : N by default</h4><p class="dim">One AC → many ATCs. EP-merge collapses WITHIN a partition only — never across partitions, boundaries, or states.</p></div>
-    <div class="card card-accent"><h4>5 · Risk lives outside</h4><p class="dim">Automate the invalid/boundary inputs, auth/error paths, state transitions, and anomalies the AC is silent on.</p></div>
-    <div class="card"><h4>EP ≠ BVA</h4><p class="dim"><b>Same-behavior merge hides off-by-one.</b> Wherever a range/limit/length/date-window exists, add explicit boundary ATCs.</p></div>
+<!-- 28. TTL PLAYBOOK -->
+<section class="slide" data-title="TTL">
+  <p class="kicker">probar el tiempo sin esperar</p>
+  <h2 class="h2" data-anim="fade-up">Casos Dependientes del Tiempo (TTL)</h2>
+  <p class="lede mt-s">Magic links, OTPs, tokens, sesiones, caches: "a las 14:59 funciona, a las 15:01 no". No se prueban haciendo clic más rápido — necesitas controlar el tiempo. Elige la opción más alta que el stack permita.</p>
+  <div class="steps s3 mt-m">
+    <div class="step"><div class="num">1</div><h4>Fixture / TTL corto</h4><p>La mejor. Si el env expone un TTL configurable, ponlo en segundos y prueba el borde 14:59/15:01 real. Ejercita el código de expiry verdadero.</p></div>
+    <div class="step"><div class="num">2</div><h4>Clock-mock</h4><p>Si el stack permite inyectar/congelar el tiempo, avanza el reloj y asegura la expiración — siempre que el mock maneje la lógica real, no una rama de test.</p></div>
+    <div class="step"><div class="num">3</div><h4>Defer manual escrito</h4><p>Último recurso. Documenta el borde que no pudiste ejercitar, por qué, y el follow-up concreto (ej. "añadir <span class="mono">MAGIC_LINK_TTL</span> override").</p></div>
   </div>
-  <div class="notes">Canon: agentic-qa-core/references/test-design-doctrine.md. The review gate (§3.4.1 input-domain, §3.4.2 state/temporal) enforces this in code.</div>
+  <div class="callout warn mt-m"><h4>Nunca un <span class="mono">BLOCKED</span> a secas</h4><p>Marca <span class="mono">BLOCKED — needs time fixture</span> con la opción elegida (1/2/3) y una línea de razón. Un BLOCKED sin camino de decisión pierde cobertura en silencio.</p></div>
+  <div class="notes">La escalera TTL de 3 opciones por prioridad: fixture > clock-mock > defer escrito. Nunca un BLOCKED desnudo — siempre "BLOCKED — needs time fixture" + opción + razón.</div>
 </section>
 
-<section class="slide" data-title="Techniques by trigger">
-  <p class="kicker">test-design doctrine — derive by technique</p>
-  <h2 class="h2" data-anim="fade-up">One criterion → N ATCs, chosen by the AC's <span class="grad">shape</span></h2>
-  <table class="dtable mt-l">
-    <thead><tr><th>Trigger in the AC</th><th>Technique (binding)</th><th>ATCs it produces</th></tr></thead>
-    <tbody>
-      <tr><td>Any input (always)</td><td><b>Equivalence Partitioning</b></td><td>same-behavior inputs → one parameterized ATC; distinct partitions → separate ATCs</td></tr>
-      <tr><td>A range / limit / length / date-window</td><td><b>Boundary Value Analysis</b></td><td>min-1·min·min+1 … max-1·max·max+1, zero / empty / null</td></tr>
-      <tr><td>A status / lifecycle field</td><td><b>State-Transition</b></td><td>every valid transition + every invalid transition</td></tr>
-      <tr><td>2+ interacting conditions</td><td><b>Decision Table</b></td><td>one ATC per surviving rule of the combo matrix</td></tr>
-      <tr><td>3+ combinable factors</td><td><b>Pairwise</b></td><td>all-pairs ATC set (log the reduction)</td></tr>
-    </tbody>
-  </table>
-  <div class="notes">EP without BVA misses off-by-one. A status field with no invalid-transition ATC is an incomplete plan. The triggers are binding.</div>
+<!-- 29. NO NOT RUN + EVIDENCE -->
+<section class="slide" data-title="No NOT RUN">
+  <p class="kicker">cerrar la pasada con rigor</p>
+  <h2 class="h2" data-anim="fade-up">Sin NOT RUN · Evidencia que Sirve</h2>
+  <div class="grid g2 mt-s">
+    <div class="card card-accent">
+      <h4>Propagación de estado</h4>
+      <p class="dim">Al cerrar Stage 2, cada outline / TC tiene <b>PASSED o FAILED</b>. Sin NOT RUN. Si uno queda NOT RUN: o está fuera de scope (di por qué en Notes) o está incompleto (vuelve al loop).</p>
+    </div>
+    <div class="card card-accent">
+      <h4>Disciplina de evidencia</h4>
+      <ul class="blist" style="margin-top:4px;font-size:14px">
+        <li>Nombre: <span class="mono">{KEY}-{n}-ac{N}-desc.png</span></li>
+        <li>Captura en el <b>estado de fallo</b>, no navegando hacia él</li>
+        <li><span class="mono">evidence/</span> gitignored, nunca commiteado</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout mt-m"><h4>El log es el handoff a Stage 3</h4><p>El bloque Stage-2 de <span class="mono">test-session-memory.md</span> (smoke + tablas UI/API/DB + Findings) es lo que Stage 3 consume: los Findings alimentan los bugs, los pass/fail alimentan el ATR.</p></div>
+  <div class="notes">Sin NOT RUN: todo termina PASSED o FAILED. Evidencia en el estado de fallo, nombrada y gitignored. El memory de Stage 2 es el input de Stage 3 (Findings→bugs, pass/fail→ATR).</div>
 </section>
 
-<section class="slide" data-title="ATC craft rules">
-  <p class="kicker">ATC craft rules</p>
-  <h2 class="h2" data-anim="fade-up">Five Rules That Decide Acceptance at Review</h2>
-  <ul class="blist anim-stagger-list">
-    <li><b>ATCs are atomic.</b> An ATC NEVER calls another ATC. Reusable chains live in a Steps module (no @atc).</li>
-    <li><b>Locators inline.</b> No locators/*.ts. Reused in 2+ ATCs of the same component? Promote to a private readonly arrow function.</li>
-    <li><b>Helpers vs ATCs.</b> Read-only GET is a helper (@step). A state-changing action is an ATC. A GET that verifies the action lives INSIDE the ATC.</li>
-    <li><b>Fixed inside, flow outside.</b> Status / required fields / redirect go in the ATC; combined-outcome checks go in the test file.</li>
-    <li><b>Max 2 positional params.</b> 3+ must use a named object param — fn(args: Args).</li>
+<!-- 30. QUIZ 3 -->
+<section class="slide" data-title="Quiz 3">
+  <p class="kicker">quiz · disciplina</p>
+  <h2 class="h2" data-anim="fade-up">El Oficio de la Pasada</h2>
+  <div class="quiz">
+    <div class="qitem">
+      <div class="qq"><span class="qn">Q1</span><span>En el TC #4 de 17 encuentras un texto desalineado (cosmético). ¿Detienes la pasada?</span></div>
+      <div class="opts">
+        <div class="opt"><span class="mk">A</span><span>Sí — todo FAIL detiene la pasada y se reporta de inmediato</span></div>
+        <div class="opt" data-correct="1"><span class="mk">B</span><span>No — es no-bloqueante: lo registro y sigo; lo surfaceo todo junto al cierre</span></div>
+        <div class="opt"><span class="mk">C</span><span>Sí — abro un bug Critical para no olvidarlo</span></div>
+      </div>
+      <div class="qexp"><b>No, sigue.</b> Un cosmético es no-bloqueante: se registra en Findings, el TC queda FAILED y la pasada continúa para no perder los otros 13 TCs. Solo lo bloqueante (env/corrupción/seguridad) detiene. Un FAIL no es auto-Critical.</div>
+    </div>
+    <div class="qitem">
+      <div class="qq"><span class="qn">Q2</span><span>Un TC valida que un magic link expira a los 15 min, pero no hay forma de adelantar el reloj hoy. ¿Cómo lo cierras?</span></div>
+      <div class="opts">
+        <div class="opt"><span class="mk">A</span><span>Lo dejas en <span class="mono">NOT RUN</span></span></div>
+        <div class="opt"><span class="mk">B</span><span><span class="mono">BLOCKED</span> a secas — no se pudo correr</span></div>
+        <div class="opt" data-correct="1"><span class="mk">C</span><span><span class="mono">BLOCKED — needs time fixture</span> + la opción elegida y la razón</span></div>
+      </div>
+      <div class="qexp"><b>BLOCKED — needs time fixture.</b> Nunca un BLOCKED desnudo ni un NOT RUN. Documenta el borde, por qué no se pudo, y el follow-up (opción 3: defer escrito). Así la cobertura no se pierde en silencio y viaja a Stage 3.</div>
+    </div>
+  </div>
+  <div class="notes">Las dos reglas de disciplina: cosmético = no-bloqueante (sigue), y nunca BLOCKED/NOT RUN desnudo (siempre con razón + camino).</div>
+</section>
+
+<!-- 31. WHOLE PASS AT A GLANCE -->
+<section class="slide" data-title="Pasada completa">
+  <p class="kicker">todo junto</p>
+  <h2 class="h2" data-anim="fade-up">La Pasada Completa de Stage 2</h2>
+  <div class="lifecycle">
+    <span class="lstate" style="color:var(--text-1);background:var(--surface-2);border:1px solid var(--border-strong)">Smoke ✓</span>
+    <span class="arr">→</span>
+    <span class="lstate" style="color:#f5b942;background:color-mix(in srgb,#f5b942 13%,transparent);border:1px solid color-mix(in srgb,#f5b942 40%,transparent)">UI</span>
+    <span class="arr">→</span>
+    <span class="lstate" style="color:#e879f9;background:color-mix(in srgb,#e879f9 13%,transparent);border:1px solid color-mix(in srgb,#e879f9 40%,transparent)">API</span>
+    <span class="arr">→</span>
+    <span class="lstate" style="color:#22d3ee;background:color-mix(in srgb,#22d3ee 13%,transparent);border:1px solid color-mix(in srgb,#22d3ee 40%,transparent)">DB</span>
+    <span class="arr">→</span>
+    <span class="lstate good">Findings</span>
+  </div>
+  <ul class="blist mt-l">
+    <li><b>Smoke primero</b> — Go/No-Go del ambiente, ≤10 min, siempre revisa la red.</li>
+    <li><b>Capas por tipo de feature</b> — el orden lo decide qué cambió; cada capa prueba su verdad.</li>
+    <li><b>Triagea cada finding</b> — bloqueante detiene, no-bloqueante registra y sigue.</li>
+    <li><b>Cierra con rigor</b> — sin NOT RUN, evidencia en el estado de fallo, Findings al handoff de Stage 3.</li>
   </ul>
-  <div class="notes">These five are the recurring rejection reasons. Internalize them and most of your code passes review on the first pass.</div>
+  <div class="notes">El recap del flujo completo: smoke → UI/API/DB (orden por feature) → triage → status → findings a Stage 3. Las tres fuerzas en una pasada.</div>
 </section>
 
-<section class="slide" data-title="Layers">
-  <p class="kicker">the architecture you must respect</p>
-  <h2 class="h2" data-anim="fade-up">KATA's Layers — Never Collapse Them</h2>
-  <div class="flow mt-m">
-    <div class="stage"><div class="sx">1</div><div><h4>TestContext</h4><p>config, logger, faker, environment accessors.</p></div></div>
-    <div class="stage"><div class="sx">2</div><div><h4>ApiBase / UiBase</h4><p>HTTP helpers (typed tuple returns) and Playwright helpers.</p></div></div>
-    <div class="stage"><div class="sx">3</div><div><h4>Domain Components + Steps</h4><p>UsersApi, LoginPage — @atc lives here. Steps = reusable ATC chains (no @atc).</p></div></div>
-    <div class="stage"><div class="sx">4</div><div><h4>Fixtures → Tests</h4><p>Api/Ui/Steps/Test fixtures inject; tests orchestrate ATCs into scenarios.</p></div></div>
+<!-- 32. HOW TO DO IT WELL -->
+<section class="slide" data-title="Cómo hacerlo bien">
+  <p class="kicker">el checklist del explorador</p>
+  <h2 class="h2" data-anim="fade-up">Cómo Hacerlo Bien</h2>
+  <div class="grid g2 mt-s">
+    <ul class="blist">
+      <li><b>Smoke antes que todo</b> — un ambiente roto da bugs falsos.</li>
+      <li><b>Desconfía de la UI</b> — revisa la red aunque se vea verde.</li>
+      <li><b>Lee los status codes como evidencia</b> — cada uno prueba algo.</li>
+      <li><b>Corre la sonda RLS A/B</b> — multi-tenant siempre.</li>
+    </ul>
+    <ul class="blist">
+      <li><b>Confirma en DB tras cada write</b> — el 201 no basta.</li>
+      <li><b>Sondas negativas: éxito = bug</b> — en transacción + ROLLBACK.</li>
+      <li><b>Prueba las transiciones inválidas</b> — ahí viven los defectos.</li>
+      <li><b>Cierra sin NOT RUN</b> — cada TC PASSED o FAILED, con evidencia.</li>
+    </ul>
   </div>
-  <p class="dim mt-s">A higher layer may use a lower one, never the reverse.</p>
-  <div class="notes">Flattening these layers is an automatic rejection. The separation is what lets API helpers, UI helpers, and agnostic utilities stay in their correct homes.</div>
+  <div class="callout mt-m"><h4>La meta</h4><p>Que ningún defecto cruce las tres capas sin ser visto: ni el que la UI esconde, ni el que la API maquilla, ni el que la DB corrompe en silencio.</p></div>
+  <div class="notes">El checklist operativo del cómo hacerlo bien. Cada punto es una palanca contra un punto ciego de capa.</div>
 </section>
 
-<section class="slide" data-title="Fixture selection">
-  <p class="kicker">fixture selection — load-bearing every test</p>
-  <h2 class="h2" data-anim="fade-up">Pick the Fixture, Decide if a Browser Opens</h2>
-  <table class="dtable mt-m">
-    <thead><tr><th>Test type</th><th>Fixture</th><th>Browser?</th><th>Use when</th></tr></thead>
-    <tbody>
-      <tr><td><b>API only</b></td><td>{ api }</td><td>No (lazy)</td><td>Pure API — default for tests/integration/**</td></tr>
-      <tr><td><b>UI only</b></td><td>{ ui }</td><td>Yes</td><td>UI-focused, no API setup</td></tr>
-      <tr><td><b>Hybrid</b></td><td>{ test }</td><td>Yes</td><td>Setup via API, drive via UI, verify via API</td></tr>
-      <tr><td><b>Precondition chains</b></td><td>{ steps }</td><td>Depends</td><td>3+ ATCs repeated across 3+ files</td></tr>
-    </tbody>
-  </table>
-  <p class="dim mt-s">Never request { ui } for a test that never touches the UI — it opens a browser for nothing.</p>
-  <div class="notes">Wrong fixture means a missing browser context or a needless slow browser launch. Playwright lazily instantiates only the fixtures a test requests.</div>
-</section>
-
-<section class="slide" data-title="Data strategy">
-  <p class="kicker">test data strategy — classify during PLANNING</p>
-  <h2 class="h2" data-anim="fade-up">Discover → Modify → Generate (Strict Priority)</h2>
-  <div class="steps s4 anim-stagger-list">
-    <div class="step"><div class="num">1</div><h4>Discover</h4><p>Query the system for data already in the required state. Zero DB impact. Preferred.</p></div>
-    <div class="step"><div class="num">2</div><h4>Modify</h4><p>Find existing data, mutate it via API into the required state. One mutation.</p></div>
-    <div class="step"><div class="num">3</div><h4>Generate</h4><p>Create from scratch via faker payload + POST. Last resort; pollutes the env.</p></div>
-    <div class="step"><div class="num">4</div><h4>Blocker</h4><p>No pattern feasible → flag NOT automatable, document the gap, escalate.</p></div>
+<!-- 33. TAKEAWAYS -->
+<section class="slide" data-title="Conclusiones">
+  <p class="kicker">para llevar</p>
+  <h2 class="h2" data-anim="fade-up">Tres Ideas que se Quedan</h2>
+  <div class="steps s3 mt-l">
+    <div class="step"><div class="num">1</div><h4>Cada capa, su verdad</h4><p>La UI muestra, la API contrata, la DB persiste. Un 201 no prueba la base; una pantalla verde no prueba la API.</p></div>
+    <div class="step"><div class="num">2</div><h4>El negativo es el oro</h4><p>Los status de error, las transiciones inválidas, las sondas de constraint (éxito=bug) y RLS A/B cazan lo que el happy path nunca toca.</p></div>
+    <div class="step"><div class="num">3</div><h4>Disciplina sobre impulso</h4><p>Smoke primero, triage graduado, sin NOT RUN. La cobertura completa vale más que parar por el primer hallazgo.</p></div>
   </div>
-  <p class="dim mt-s">Override: use Generate even when data could be discovered IF the test mutates state (avoid order dependencies).</p>
-  <div class="notes">This classification happens in the plan, never deferred to coding. Discover runs in beforeAll; if it finds nothing the test uses test.skip — never an expect on precondition data.</div>
+  <div class="notes">Los tres conceptos núcleo: cada capa su verdad, el valor del negativo/seguridad, y la disciplina de la pasada.</div>
 </section>
 
-<section class="slide" data-title="beforeAll trap">
-  <p class="kicker">the beforeAll trap</p>
-  <h2 class="h2" data-anim="fade-up">Never Put expect() Inside beforeAll</h2>
-  <div class="callout warn"><h4>Watch out</h4><p>A failing beforeAll assertion kills EVERY test in the describe block — including unrelated ones — and hides what really broke.</p></div>
-  <div class="callout mt-m"><h4>Right pattern</h4><p>beforeAll DISCOVERS only (no assertions, populates describe-scope vars). Each test guards its own precondition: <span class="mono">if (!order) return test.skip(true, 'No order available')</span>. The report then distinguishes "skipped — missing data" from "failed — real bug". Cleanup: Discover needs none; Modify restores in afterAll; Generate deletes in afterEach.</p></div>
-  <div class="notes">A subtle but high-impact rule. Assertions in shared setup turn one missing fixture into a wall of red failures that obscures the actual signal.</div>
-</section>
-
-<section class="slide" data-title="API component code">
-  <p class="kicker">code phase — the API component shape</p>
-  <h2 class="h2" data-anim="fade-up">A KATA API Component (Layer 3)</h2>
-  <div class="terminal mt-m">
-    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>OrdersApi.ts</span></div>
-<pre><span class="kw">export class</span> <span class="fn">OrdersApi</span> <span class="kw">extends</span> <span class="fn">ApiBase</span> {
-  <span class="kw">private readonly</span> baseEndpoint = <span class="str">'/api/v1/orders'</span>;
-
-  <span class="fn">@step</span>                                <span class="cmt">// helper — read-only, no @atc</span>
-  <span class="kw">async</span> <span class="fn">getOrderById</span>(id: <span class="kw">string</span>): Promise&lt;[APIResponse, Order]&gt; {
-    <span class="kw">return this</span>.<span class="fn">apiGET</span>&lt;Order&gt;(<span class="str">`${this.baseEndpoint}/${id}`</span>);
-  }
-
-  <span class="fn">@atc</span>(<span class="str">'TICKET-ID'</span>)                      <span class="cmt">// ATC — state-changing</span>
-  <span class="kw">async</span> <span class="fn">createOrderSuccessfully</span>(payload: CreateOrderRequest) {
-    <span class="kw">const</span> [response, body, sent] =
-      <span class="kw">await this</span>.<span class="fn">apiPOST</span>(<span class="kw">this</span>.baseEndpoint, payload);
-    <span class="fn">expect</span>(response.<span class="fn">status</span>()).<span class="fn">toBe</span>(<span class="num">201</span>);  <span class="cmt">// FIXED assertion</span>
-    <span class="fn">expect</span>(body.id).<span class="fn">toBeDefined</span>();       <span class="cmt">// FIXED assertion</span>
-    <span class="kw">return</span> [response, body, sent];       <span class="cmt">// 3-tuple: enables chaining</span>
-  }
-}</pre>
-  </div>
-  <div class="notes">Note the order: baseEndpoint, constructor, helpers, then ATCs. GET/DELETE return 2-tuples; POST/PUT/PATCH return 3-tuples so tests can compare what was sent against what came back.</div>
-</section>
-
-<section class="slide" data-title="Status matrix">
-  <p class="kicker">API status-code matrix</p>
-  <h2 class="h2" data-anim="fade-up">One ATC per Expected Outcome</h2>
-  <table class="dtable mt-m">
-    <thead><tr><th>Outcome</th><th>Status</th><th>ATC name pattern</th><th>Response type</th></tr></thead>
-    <tbody>
-      <tr><td><b>Created</b></td><td>201</td><td>create{Resource}Successfully</td><td>{Resource}Response</td></tr>
-      <tr><td><b>Read</b></td><td>200</td><td>get{Resource}Successfully</td><td>{Resource}/ListResponse</td></tr>
-      <tr><td><b>Delete</b></td><td>204/200</td><td>delete{Resource}Successfully</td><td>void</td></tr>
-      <tr><td><b>Validation error</b></td><td>400</td><td>create{Resource}WithInvalid{Field}</td><td>ApiErrorResponse</td></tr>
-      <tr><td><b>Unauthenticated</b></td><td>401</td><td>get{Resources}Unauthorized</td><td>ApiErrorResponse</td></tr>
-      <tr><td><b>Not found</b></td><td>404</td><td>get{Resource}WithNonExistentId</td><td>ApiErrorResponse</td></tr>
-      <tr><td><b>Conflict</b></td><td>409</td><td>create{Resource}WithDuplicate{Field}</td><td>ApiErrorResponse</td></tr>
-    </tbody>
-  </table>
-  <p class="dim mt-s">Each outcome's status AND shape differ → separate ATC. Error ATCs type the body as ApiErrorResponse.</p>
-  <div class="notes">Types come from @schemas/{domain}.types — only facade files import from @openapi. Forgetting to wire a new component into the fixture's setAuthToken is the #1 cause of surprise 401s.</div>
-</section>
-
-<section class="slide" data-title="UI component code">
-  <p class="kicker">code phase — the UI component & locators</p>
-  <h2 class="h2" data-anim="fade-up">A KATA Page Component with the Locator Ladder</h2>
-  <div class="terminal mt-m">
-    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>LoginPage.ts</span></div>
-<pre><span class="kw">export class</span> <span class="fn">LoginPage</span> <span class="kw">extends</span> <span class="fn">UiBase</span> {
-  <span class="cmt">// shared locator: used in 2+ ATCs → private readonly arrow (lazy)</span>
-  <span class="kw">private readonly</span> submitButton = () =&gt; <span class="kw">this</span>.page.<span class="fn">getByTestId</span>(<span class="str">'login_submit_button'</span>);
-
-  <span class="fn">@atc</span>(<span class="str">'TICKET-ID'</span>)
-  <span class="kw">async</span> <span class="fn">loginWithValidCredentials</span>(data: LoginData): Promise&lt;<span class="kw">void</span>&gt; {
-    <span class="kw">await this</span>.page.<span class="fn">getByTestId</span>(<span class="str">'email_input'</span>).<span class="fn">fill</span>(data.email);  <span class="cmt">// inline (used once)</span>
-    <span class="kw">await this</span>.page.<span class="fn">getByTestId</span>(<span class="str">'password_input'</span>).<span class="fn">fill</span>(data.password);
-    <span class="kw">await this</span>.<span class="fn">submitButton</span>().<span class="fn">click</span>();
-    <span class="kw">await</span> <span class="fn">expect</span>(<span class="kw">this</span>.page).<span class="fn">toHaveURL</span>(/.*dashboard.*/);            <span class="cmt">// fixed assertion</span>
-  }
-}
-<span class="cmt">// Locator ladder:  1 getByTestId  2 getByRole  3 getByLabel  4 getByText  5 CSS/XPath</span>
-<span class="cmt">// BANNED: .btn-primary · div &gt; form &gt; button:nth-child(3) · page.waitForTimeout(3000)</span></pre>
-  </div>
-  <p class="dim mt-s">Coming from the getByRole-first standard? Here data-testid is rung 1 because the dev team provides them as a stable testing contract — getByRole remains the immediate fallback.</p>
-  <div class="notes">Prefer data-testid every time it exists. CSS-class and structural selectors decay on every refactor. UI ATCs return void; assertions live inside.</div>
-</section>
-
-<section class="slide" data-title="Test file code">
-  <p class="kicker">tests orchestrate; they don't implement</p>
-  <h2 class="h2" data-anim="fade-up">The Test File — Flows, Not Property Checks</h2>
-  <div class="terminal mt-m">
-    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>processCheckout.test.ts</span></div>
-<pre><span class="kw">import</span> { test, expect } <span class="kw">from</span> <span class="str">'@TestFixture'</span>;   <span class="cmt">// NOT from @playwright/test</span>
-
-test.<span class="fn">describe</span>(<span class="str">'UPEX-411: Apply Discount Code'</span>, () =&gt; {
-  <span class="cmt">// RIGHT: ONE test = complete flow with multiple assertions</span>
-  <span class="fn">test</span>(<span class="str">'UPEX-411: applies % discount when code is valid @critical'</span>,
-    <span class="kw">async</span> ({ api }) =&gt; {
-    <span class="kw">const</span> [, order] = <span class="kw">await</span> api.orders.<span class="fn">createOrderSuccessfully</span>(api.data.<span class="fn">createOrder</span>());
-    <span class="kw">const</span> totals = <span class="kw">await</span> api.orders.<span class="fn">getTotals</span>({ orderId: order.id });
-    <span class="fn">expect</span>(order.discountApplied).<span class="fn">toBe</span>(<span class="kw">true</span>);
-    <span class="fn">expect</span>(totals.finalAmount).<span class="fn">toBe</span>(totals.baseAmount - totals.discountAmount);
-  });
-});
-<span class="cmt">// WRONG: six tests each checking one field of the same response.</span>
-<span class="cmt">// Ticket-ID in describe AND every test(). One ticket per describe; never split across files.</span></pre>
-  </div>
-  <div class="notes">Naming hierarchy: directory = module, file = {verb}{Feature}.test.ts, describe = ticket, test = scenario. Separate tests only for fundamentally different flows, preconditions, or roles.</div>
-</section>
-
-<section class="slide" data-title="Verification loop">
-  <p class="kicker">code phase — the verification loop</p>
-  <h2 class="h2" data-anim="fade-up">Run + Verify, In This Exact Order</h2>
-  <div class="steps s4 anim-stagger-list">
-    <div class="step"><div class="num">1</div><h4>Build</h4><p>types → component class → register in fixture → test file.</p></div>
-    <div class="step"><div class="num">2</div><h4>Test</h4><p>bun run test &lt;path&gt; — all green, zero retries used.</p></div>
-    <div class="step"><div class="num">3</div><h4>Types + Lint</h4><p>types:check (tsc --noEmit), then lint:check. Fix tests BEFORE chasing lint.</p></div>
-    <div class="step"><div class="num">4</div><h4>Manifest</h4><p>kata:manifest → git add → kata:manifest:check (the husky pre-commit gate).</p></div>
-  </div>
-  <p class="dim mt-s">Optional: bun allure:agent for an AI-readable markdown report per @atc block.</p>
-  <div class="notes">Order matters. A component not registered in its fixture is unreachable. The manifest must be regenerated and staged or the pre-commit hook blocks the commit.</div>
-</section>
-
-<section class="slide" data-title="Review gate">
-  <p class="kicker">review phase — the merge gate</p>
-  <h2 class="h2" data-anim="fade-up">A Clean Review Is the Merge Gate</h2>
-  <ul class="blist anim-stagger-list">
-    <li><b>Three shared checklists first.</b> Component / ATC / Test-file review — naming, layer extension, decorators, tuple returns, inline locators, ticket-ID prefix.</li>
-    <li><b>Then the delta.</b> E2E delta (locator quality, condition-based waits, session reuse) OR API delta (facade compliance, tuple discipline, status coverage, auth).</li>
-    <li><b>Coverage gates the handoff.</b> Beyond HTTP status: §3.4.1 input-domain (EP + BVA boundaries) and §3.4.2 state-transition / idempotency / concurrency / timeout must be covered or marked explicitly N/A.</li>
-    <li><b>Severity model.</b> CRITICAL &amp; HIGH block merge; MEDIUM recommended; LOW nice-to-have. A hardcoded waitForTimeout or missing @atc is CRITICAL.</li>
-    <li><b>Revision ceiling.</b> Max 2 revision loops. Still not APPROVED after 2 rounds? Escalate to the user; never loop forever.</li>
-    <li><b>Optional adversarial gate.</b> For high-risk changes (new fixtures, shared base edits) run a dual-judge review before commit.</li>
-  </ul>
-  <div class="notes">Every failed checklist item is a blocker. The handoff checklist ('ready for CI') must be all-true: zero CRITICAL, zero HIGH, all three gates green.</div>
-</section>
-
-<section class="slide" data-title="Bug protocol">
-  <p class="kicker">quality gates G1–G4 &amp; the bug protocol</p>
-  <h2 class="h2" data-anim="fade-up">When a Test Uncovers a Real Bug</h2>
-  <div class="callout"><h4>Named gates block progression</h4><p>G1 Plan exists → G2 Tests pass → G3 Review APPROVED → G4 Progress updated.</p></div>
-  <div class="callout warn mt-m"><h4>If G2 fails on a REAL product bug</h4><p>(1) search the tracker for an existing bug; (2) if reported, annotate <span class="mono">test.fail('Blocked by {BUG-KEY}')</span> or tag <span class="mono">@blocked:{BUG-KEY}</span> and keep it; (3) if not, show the observed-vs-expected diff, get confirmation, then file the bug; (4) record it in PROGRESS.md. Only THEN may G2 be soft-overridden. A failing test with no bug key behind it is never an acceptable override.</p></div>
-  <div class="notes">This keeps a found bug visible and traceable instead of silently skipped. The @blocked tag lets regression-testing exclude it from GO/NO-GO until the fix lands.</div>
-</section>
-
-<section class="slide divider" data-title="Part 2">
+<!-- 34. THANKS -->
+<section class="slide center tc" data-title="Cierre">
   <div>
-    <p class="part-no">PART 02</p>
-    <h1 class="h1">The Acceleration<br><span class="grad">one command does it all</span></h1>
-    <p class="lede">Everything in Part 1 — scope picking, the plan, the layered code, the three-gate review — is what /test-automation drives from the terminal. You stay the approver; the AI is the executor.</p>
+    <h1 class="h1"><span class="grad">Tres Capas. Una Verdad. Ningún Punto Ciego.</span></h1>
+    <p class="lede" style="margin:14px auto">Smoke valida el ambiente → la Trifuerza valida la feature: UI (lo que se ve), API (el contrato), DB (lo que persiste). Prueba el negativo, confirma una capa abajo, cierra sin NOT RUN.</p>
+    <p class="lede" style="margin:14px auto">← → navegar · S notas del orador · O resumen · T tema</p>
   </div>
-  <div class="notes">Now we map the manual craft onto the skill. The human still gates the plan and reviews failures; the AI does the heavy reading and writing.</div>
-</section>
-
-<section class="slide" data-title="Trigger">
-  <p class="kicker">the trigger</p>
-  <h2 class="h2" data-anim="fade-up">How You Invoke It</h2>
-  <div class="terminal mt-m">
-    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>claude-code</span></div>
-<pre><span class="p">▸ </span><span class="c">/test-automation</span>
-
-<span class="o">Triggers on: "write test", "automate test", "create E2E test",</span>
-<span class="o">"create API test", "integration test", "KATA", "page object",</span>
-<span class="o">"API component", "ATC", "review test code", "automate this ticket".</span>
-
-<span class="p">▸ </span><span class="c">Write an E2E test for the checkout flow — add product to</span>
-<span class="c">  cart, go to checkout, confirm the purchase.</span>
-
-<span class="o">  ↳ Always loads BEFORE any test code — KATA fixture selection,</span>
-<span class="o">    inline-locator rule, ATC-identity rule, and import aliases</span>
-<span class="o">    differ from standard Playwright conventions.</span></pre>
-  </div>
-  <div class="notes">The skill auto-loads on these phrases. It explicitly will NOT trigger for running suites (regression-testing), documenting TCs (test-documentation), or onboarding a repo (project-discovery).</div>
-</section>
-
-<section class="slide" data-title="Preflight gate">
-  <p class="kicker">before everything — readiness preflight gate (MANDATORY)</p>
-  <h2 class="h2" data-anim="fade-up">The Readiness Gate Runs BEFORE Any Planning</h2>
-  <ul class="blist anim-stagger-list">
-    <li><b>Framework adapted.</b> No ATCs are written against the boilerplate's Example* scaffolds. Still generic? STOP — run /project-discovery → /adapt-framework first (the gate never auto-runs them).</li>
-    <li><b>Toolchain + manifest clean.</b> bun run test / types:check / lint:check resolve at t=0, not at Phase 3; kata:manifest:check clean before proposing components or ATCs.</li>
-    <li><b>Live environment + credentials.</b> Authored tests run against the active env: URL reachable, test users in .env (per role if applicable), Playwright browsers installed.</li>
-    <li><b>MCPs at PLAN-time.</b> The OpenAPI MCP (explore endpoints) and DBHub MCP (explore schema) are needed while DESIGNING ATCs and classifying data in Phase 1 — not just at run-time.</li>
-    <li><b>Two laws.</b> args-as-answers (what's already provided is never re-asked) and probe-don't-assume; gaps and REDs surface as ONE checklist, STOP on any blocking RED.</li>
-  </ul>
-  <p class="dim mt-s">After the gate comes Phase 0: if a prior session exists for the scope, it offers resume / restart / abort — you pick up exactly where you left off.</p>
-  <div class="notes">A recent, MANDATORY addition to the skill: it runs before the Phase 0 resume check and the scope picker. It prevents discovering mid-Code that a credential, an MCP, or the framework adaptation was missing. Distinct from Phase 1's anti-duplication pre-flight (which cross-checks the manifest for reuse); this gate is about tools and environment being ready to write and run code.</div>
-</section>
-
-<section class="slide" data-title="Auto-loaded context">
-  <p class="kicker">what it auto-loads</p>
-  <h2 class="h2" data-anim="fade-up">Context the Skill Pulls In For You</h2>
-  <div class="grid g2 mt-l anim-stagger-list">
-    <div class="card card-accent"><h4>Registry &amp; doctrine</h4><p class="dim">kata-manifest.json (anti-duplication gate, MANDATORY first read), the KATA architecture + typescript-patterns references, and the existing tests/components/ shapes.</p><span class="tag mt-s">read first</span></div>
-    <div class="card card-accent"><h4>Requirements &amp; types</h4><p class="dim">The Story folder synced via jira:sync-issues get &lt;KEY&gt; --include-comments (ACs, scope, rules, comments), the ATP, api/schemas/ types, and .env credentials.</p><span class="tag mt-s">per ticket</span></div>
-  </div>
-  <div class="notes">The subagent reads all this in its own context, not the orchestrator's — keeping the main thread lean. The manifest is included in every Plan and Code briefing.</div>
-</section>
-
-<section class="slide" data-title="Orchestration">
-  <p class="kicker">the orchestration pattern</p>
-  <h2 class="h2" data-anim="fade-up">Command Center + Subagents, One per Phase</h2>
-  <div class="flow mt-m">
-    <div class="stage"><div class="sx">1</div><div><h4>Plan — single subagent</h4><p>Returns spec.md + automation-plan.md as JSON; keeps KATA reads out of the orchestrator.</p></div></div>
-    <div class="stage"><div class="sx">2</div><div><h4>Code — sequential subagent</h4><p>Edits many files in isolation, returns a changed-files list + one-line summaries (orchestrator never reads diffs).</p></div></div>
-    <div class="stage"><div class="sx">3</div><div><h4>Review — 3 parallel verifiers</h4><p>One runs test, one types:check, one lint:check, simultaneously.</p></div></div>
-    <div class="stage"><div class="sx">4</div><div><h4>Aggregate — inline</h4><p>0 blockers → merge candidate; &gt;0 → reject and surface verbatim, NO auto-fix.</p></div></div>
-  </div>
-  <div class="notes">Each phase has distinct context-isolation needs. On any Verifier failure the orchestrator STOPS, returns the failing report verbatim, and does not re-dispatch Code without user approval.</div>
-</section>
-
-<section class="slide" data-title="Tools">
-  <p class="kicker">the tools it drives</p>
-  <h2 class="h2" data-anim="fade-up">CLI + MCP Under the Hood</h2>
-  <table class="dtable mt-m">
-    <thead><tr><th>Tool</th><th>Role</th></tr></thead>
-    <tbody>
-      <tr><td><b>bun run jira:sync-issues</b></td><td>Materialize Story/ATP/TC into local .md (reads fields acli view can't)</td></tr>
-      <tr><td><b>/acli</b></td><td>Jira writes — comment automated-test status back, transitions</td></tr>
-      <tr><td><b>/xray-cli (bun xray)</b></td><td>Xray TMS sync — test executions, run status (jira-xray modality)</td></tr>
-      <tr><td><b>test / types:check / lint:check</b></td><td>The three quality gates</td></tr>
-      <tr><td><b>kata:manifest(:check)</b></td><td>Regenerate + validate the Component/ATC registry</td></tr>
-      <tr><td><b>api:sync</b></td><td>Regenerate OpenAPI TypeScript types</td></tr>
-      <tr><td><b>/playwright-best-practices + /playwright-cli</b></td><td>Generic Playwright craft + live browser exploration</td></tr>
-    </tbody>
-  </table>
-  <p class="dim mt-s">Detailed reads via the sync script; writes via /acli; never acli view for customfield_*.</p>
-  <div class="notes">Reads and writes are split deliberately. The skill loads /playwright-best-practices in every Code subagent alongside itself — KATA rules here, generic Playwright craft there.</div>
-</section>
-
-<section class="slide" data-title="Artifacts">
-  <p class="kicker">what it emits, and where</p>
-  <h2 class="h2" data-anim="fade-up">Artifacts: Plans, Code, Session State</h2>
-  <div class="grid g2 mt-l anim-stagger-list">
-    <div class="card card-accent"><h4>Plans &amp; code</h4><p class="dim">spec.md, automation-plan.md, atc/*.md under .context/PBI/.../test-specs/&lt;scope&gt;/ (committed); component code in tests/components/{api,ui,steps}/; test files in tests/{e2e,integration}/{module}/.</p><span class="tag mt-s">committed</span></div>
-    <div class="card card-accent"><h4>Session &amp; traceability</h4><p class="dim">Session index + progress at .session/test-automation/&lt;scope&gt;/, archived on ACCEPT; kata-manifest.json updated; @atc('ID') linking each ATC to its TMS ticket; NDJSON → atc_results.json capture.</p><span class="tag mt-s">session state</span></div>
-  </div>
-  <div class="notes">The session plan.md is a thin index citing the canonical PBI artifacts — domain content lives once in the PBI tree, never duplicated. On a clean review the session is archived and a memory summary is saved.</div>
-</section>
-
-<section class="slide" data-title="Live transcript">
-  <p class="kicker">a realistic run</p>
-  <h2 class="h2" data-anim="fade-up">Live Transcript — Automating a Checkout Test</h2>
-  <div class="terminal mt-m">
-    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>claude-code</span></div>
-<pre><span class="p">▸ </span><span class="c">/test-automation</span>
-<span class="o">  Scope? (module / ticket / regression) — ticket UPEX-411</span>
-
-<span class="o">[Preflight] framework adapted ✓ toolchain ✓ env+creds ✓ manifest ✓ browsers ✓ — GREEN.</span>
-<span class="o">[Phase 0] No prior session for UPEX-411 → fresh start.</span>
-<span class="o">[Plan]   Syncing Story… jira:sync-issues get UPEX-411 --include-comments</span>
-<span class="o">         kata-manifest.json: CheckoutPage exists; reuse. New ATC: completeCheckoutSuccessfully.</span>
-<span class="o">         Wrote spec.md (3 TCs) + automation-plan.md. Fixture: { test }. Data: Discover. 1 question.</span>
-
-<span class="p">▸ </span><span class="c">Plan ready. 3 TCs, 1 new ATC, reuses CheckoutPage. Approve? (y/n)  y</span>
-
-<span class="o">[Code]   Coded CheckoutPage.completeCheckoutSuccessfully + processCheckout.test.ts</span>
-<span class="o">         test … 3 passed (0 retries)   types:check … clean   lint:check … clean</span>
-<span class="o">[Review] Verifier A/B/C parallel → 0 blockers.  ACCEPT.</span>
-<span class="o">         Manifest regenerated + staged. Session archived.</span>
-
-<span class="o">>> Local gate green. Ready for /git-flow-master: cut test/UPEX-411-checkout, push, PR.</span></pre>
-  </div>
-  <div class="notes">Note the human approval gate after Plan, the three parallel verifiers, and the explicit handoff. The skill stops at a clean local review — it does not branch, push, or open PRs itself.</div>
-</section>
-
-<section class="slide" data-title="Human in control">
-  <p class="kicker">how the human stays in control</p>
-  <h2 class="h2" data-anim="fade-up">The AI Executes; You Decide</h2>
-  <ul class="blist anim-stagger-list">
-    <li><b>Plan-before-code gate.</b> Phase 2 never starts without a written plan you approved; risky/blocker preconditions are surfaced for your call.</li>
-    <li><b>No silent auto-fix.</b> On any Verifier failure the AI STOPS and returns the failing report verbatim; it won't mutate code or re-run Code without approval.</li>
-    <li><b>Real-bug confirmation.</b> A found defect needs your yes before a bug is filed and the test is annotated.</li>
-    <li><b>Anti-duplication is enforced.</b> The manifest + husky pre-commit gate block duplicate components and ATC IDs mechanically.</li>
-    <li><b>Stops before Git.</b> Clean local review is the boundary; branching, pushing, and PRs stay with /git-flow-master on your command.</li>
-  </ul>
-  <div class="notes">The acceleration is in the typing and reading, not in the judgment. Every consequential decision — approve plan, confirm bug, push — remains yours.</div>
-</section>
-
-<section class="slide" data-title="Takeaways">
-  <p class="kicker">// takeaways</p>
-  <h2 class="h2" data-anim="fade-up">Three Rules That Keep a Suite Trustworthy</h2>
-  <div class="grid g3 mt-l anim-stagger-list">
-    <div class="card card-accent"><h4>1 · One ATC = one test case</h4><p class="dim">An atomic mini-flow with fixed assertions, decorated @atc('TICKET-ID'), never calling another ATC. Same output + different data = one parameterized ATC.</p></div>
-    <div class="card card-accent"><h4>2 · Plan → Code → Review, always</h4><p class="dim">Never jump to code; never skip the manifest check; never merge with a CRITICAL/HIGH finding or a non-green gate.</p></div>
-    <div class="card card-accent"><h4>3 · Stability is discipline</h4><p class="dim">retries: 0, no hardcoded waits, every test makes its own data, no expect() in beforeAll. A flaky pass is a bug.</p></div>
-  </div>
-  <div class="notes">If your audience remembers only three things, these are them. They are the difference between a suite people trust and one they ignore.</div>
-</section>
-
-<section class="slide center tc" data-title="Stat">
-  <div>
-    <p class="kicker">the payoff</p>
-    <div class="bigstat"><span class="grad">@atc('TICKET-ID')</span></div>
-    <h3>1:1 traceability, end to end. Every ATC links to a real TMS ticket; results flow back via NDJSON → atc_results.json → TMS sync. The manifest knows what exists in code; the result file knows what ran. Together: coverage you can defend to a PO.</h3>
-  </div>
-  <div class="notes">This traceability is what elevates KATA from 'tests that pass' to 'evidence of what is covered and why' — the artifact a quality conversation actually needs.</div>
-</section>
-
-<section class="slide center tc" data-title="Thanks">
-  <div>
-    <h1 class="h1"><span class="grad">Plan It, Code It to the Layers, Gate It Green.</span></h1>
-    <p class="lede" style="margin:14px auto">The craft: scope → plan → KATA layers → ATC identity → data → three-gate review. The acceleration: <kbd>/test-automation</kbd> drives all of it — you approve the plan and review the failures.</p>
-    <p class="lede" style="margin:14px auto">← → navigate · S speaker notes · O overview</p>
-  </div>
-  <div class="notes">Close by tying the two halves together: the AI does not replace the methodology — it executes the exact methodology you just learned, faster, with you in the loop.</div>
+  <div class="notes">Cierra atando las tres capas y la disciplina. La Trifuerza es cómo un defecto no cruza las tres capas sin ser visto.</div>
 </section>
 
 </div>
@@ -1938,5 +2086,58 @@ test.<span class="fn">describe</span>(<span class="str">'UPEX-411: Apply Discoun
   });
 })();
 
+</script>
+<script>
+/* defect-management :: interactive quiz — click to answer, reveals correct + explanation */
+(function(){
+  document.addEventListener('click', function(e){
+    var opt = e.target.closest ? e.target.closest('.opt') : null;
+    if(!opt) return;
+    var item = opt.closest('.qitem');
+    if(!item || item.classList.contains('answered')) return;
+    item.classList.add('answered');
+    var opts = item.querySelectorAll('.opt');
+    for(var i=0;i<opts.length;i++){
+      if(opts[i].dataset.correct) opts[i].classList.add('reveal-correct');
+    }
+    opt.classList.remove('reveal-correct');
+    opt.classList.add(opt.dataset.correct ? 'correct' : 'wrong');
+  }, true);
+})();
+</script>
+<script>
+/* deck :: mobile scale-to-fit — fixed 16:9 layout scaled into narrow/short viewports.
+   Desktop (vw>=1024 && vh>=640) is left untouched (native fluid). Preview iframes skipped. */
+(function(){
+  try{
+    if (new URLSearchParams(location.search).has('preview')) return;
+    var BASE_W = 1280, BASE_H = 720;
+    var deck = document.querySelector('.deck');
+    if (!deck) return;
+    function fit(){
+      var vw = window.innerWidth, vh = window.innerHeight;
+      if (vw >= 1024 && vh >= 640){
+        deck.style.transform = '';
+        deck.style.width = ''; deck.style.height = '';
+        deck.style.position = ''; deck.style.left = ''; deck.style.top = '';
+        document.documentElement.style.overflow = ''; document.body.style.overflow = '';
+        return;
+      }
+      var scale = Math.min(vw / BASE_W, vh / BASE_H);
+      deck.style.width = BASE_W + 'px';
+      deck.style.height = BASE_H + 'px';
+      deck.style.transformOrigin = 'top left';
+      deck.style.transform = 'scale(' + scale + ')';
+      deck.style.position = 'absolute';
+      deck.style.left = ((vw - BASE_W * scale) / 2) + 'px';
+      deck.style.top = ((vh - BASE_H * scale) / 2) + 'px';
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+    }
+    fit();
+    window.addEventListener('resize', fit);
+    window.addEventListener('orientationchange', function(){ setTimeout(fit, 60); });
+  }catch(e){ /* never break the deck over a fit error */ }
+})();
 </script>
 </body></html>

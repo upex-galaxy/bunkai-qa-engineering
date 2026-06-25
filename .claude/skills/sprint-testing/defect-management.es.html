@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Test Automation (KATA) — The Craft &amp; The AI</title>
+<title>Defect Management — Gestionar la Calidad por sus Incidencias</title>
 <style>
 /* html-ppt :: shared webfonts */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800;900&display=swap');
@@ -458,521 +458,660 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 /* fix: cover .speaker must not collide with the absolute .deck-footer */
 .tpl-howto .slide:has(> .speaker){padding-bottom:160px}
 .tpl-howto .slide .speaker{position:absolute;left:88px;right:88px;bottom:70px;margin-top:0;z-index:3}</style>
+<style>
+/* ===== defect-management :: extra components (quiz, lifecycle, metric cards) ===== */
+.tpl-howto .lifecycle{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:22px}
+.tpl-howto .lstate{padding:9px 15px;border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:13.5px;font-weight:600;border:1px solid;white-space:nowrap}
+.tpl-howto .lstate.new{color:var(--text-1);background:var(--surface-2);border-color:var(--border-strong)}
+.tpl-howto .lstate.prog{color:var(--warn);background:color-mix(in srgb,var(--warn) 13%,transparent);border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
+.tpl-howto .lstate.good{color:var(--good);background:color-mix(in srgb,var(--good) 13%,transparent);border-color:color-mix(in srgb,var(--good) 40%,transparent)}
+.tpl-howto .lstate.bad{color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent);border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
+.tpl-howto .arr{color:var(--text-3);font-weight:700;font-size:15px}
+
+/* triage fan */
+.tpl-howto .triage{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}
+.tpl-howto .tnode{padding:13px 16px;border:1px solid var(--border);border-radius:11px;background:var(--surface)}
+.tpl-howto .tnode .tt{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent);margin-bottom:5px}
+.tpl-howto .tnode .ts{font-size:13.5px;color:var(--text-2);line-height:1.5}
+.tpl-howto .tnode b{color:#fff;font-weight:600}
+
+/* horizontal bar chart (real data) */
+.tpl-howto .bars{display:grid;gap:11px;margin-top:22px}
+.tpl-howto .barrow{display:grid;grid-template-columns:150px 1fr 48px;align-items:center;gap:14px;font-size:14px}
+.tpl-howto .barrow .bl{color:var(--text-2);font-family:'JetBrains Mono',monospace;font-size:13px;text-align:right}
+.tpl-howto .barrow .bt{height:22px;border-radius:6px;background:var(--grad);min-width:3px}
+.tpl-howto .barrow .bt.muted{background:var(--surface-2);border:1px solid var(--border-strong)}
+.tpl-howto .barrow .bn{color:#fff;font-weight:700;font-family:'JetBrains Mono',monospace;font-size:14px}
+
+/* metric stat cards */
+.tpl-howto .mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:22px}
+.tpl-howto .mcard{padding:20px;border:1px solid var(--border);border-radius:14px;background:var(--surface);border-top:3px solid var(--accent)}
+.tpl-howto .mcard .mv{font-size:40px;font-weight:900;line-height:1;letter-spacing:-.03em}
+.tpl-howto .mcard .mk{font-size:13px;color:var(--text-3);margin-top:8px;font-family:'JetBrains Mono',monospace}
+.tpl-howto .mcard .md{font-size:13px;color:var(--text-2);margin-top:6px;line-height:1.5}
+
+/* ===== QUIZ ===== */
+.tpl-howto .quiz{margin-top:18px}
+.tpl-howto .qitem{margin-bottom:18px}
+.tpl-howto .qq{font-size:19px;font-weight:600;color:#fff;margin-bottom:12px;display:flex;gap:12px;line-height:1.4}
+.tpl-howto .qq .qn{flex:none;color:var(--accent);font-family:'JetBrains Mono',monospace}
+.tpl-howto .opts{display:grid;gap:9px}
+.tpl-howto .opt{display:flex;align-items:center;gap:13px;padding:12px 17px;border:1px solid var(--border);border-radius:11px;background:var(--surface);cursor:pointer;font-size:15px;color:var(--text-2);transition:border-color .15s,background .15s,color .15s}
+.tpl-howto .opt:hover{border-color:var(--border-strong);color:#fff}
+.tpl-howto .opt .mk{flex:none;width:26px;height:26px;border-radius:7px;background:var(--surface-2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--text-2)}
+.tpl-howto .opt.correct{border-color:var(--good);background:color-mix(in srgb,var(--good) 15%,transparent);color:#fff}
+.tpl-howto .opt.correct .mk{background:var(--good);border-color:var(--good);color:#03130b}
+.tpl-howto .opt.reveal-correct{border-color:var(--good);color:#fff}
+.tpl-howto .opt.reveal-correct .mk{background:var(--good);border-color:var(--good);color:#03130b}
+.tpl-howto .opt.wrong{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent);color:#fff}
+.tpl-howto .opt.wrong .mk{background:var(--bad);border-color:var(--bad);color:#190405}
+.tpl-howto .qitem.answered .opt{cursor:default}
+.tpl-howto .qexp{margin-top:11px;font-size:14px;color:var(--text-2);border-left:3px solid var(--good);padding:11px 16px;background:color-mix(in srgb,var(--good) 7%,transparent);border-radius:0 9px 9px 0;display:none;line-height:1.6}
+.tpl-howto .qitem.answered .qexp{display:block}
+.tpl-howto .qexp b{color:#fff}
+.tpl-howto .qhint{font-size:13px;color:var(--text-3);font-family:'JetBrains Mono',monospace;margin-top:6px}
+</style>
 </head>
-<body class="tpl-howto" style="--a1:#ffa657;--a2:#ff7b72;--a3:#d2a8ff">
+<body class="tpl-howto" style="--a1:#ff7b72;--a2:#f0883e;--a3:#d2a8ff">
 <div class="deck">
-<section class="slide" data-title="Cover">
-  <p class="kicker run">how-it-works · agentic-qa</p>
-  <h1 class="h1 anim-fade-up" data-anim="fade-up">From Acceptance Criteria to a <span class="grad">Trustworthy Suite</span></h1>
-  <p class="lede mt-m">How a QA engineer plans, codes, and reviews automated tests by hand — and how one slash command does it from the terminal.</p>
-  <div class="speaker"><div class="av"></div><div><b>The Craft → The Acceleration</b><span>part 1: KATA by hand · part 2: the /test-automation skill</span></div></div>
-  <div class="deck-footer"><span class="mono">Playwright · TypeScript · Plan → Code → Review</span><span class="slide-number" data-current="1" data-total="33"></span></div>
-  <div class="notes">Set the frame: turning a story's acceptance criteria into automated tests that are atomic, traceable, and stable — first as a craft, then accelerated by AI.</div>
+
+<!-- 1. COVER -->
+<section class="slide" data-title="Portada">
+  <p class="kicker run">how-it-works · agentic-qa · defect-management</p>
+  <h1 class="h1 anim-fade-up" data-anim="fade-up">Defect Management — Gestionar la <span class="grad">Calidad por sus Incidencias</span></h1>
+  <p class="lede mt-m">Bug, Defect, Improvement: el mismo síntoma, distinta estrategia de gestión. Cómo se reportan bajo el estándar UPEX, cómo viven en su workflow, y cómo se convierten en métricas que responden preguntas de calidad.</p>
+  <div class="speaker"><div class="av"></div><div><b>Del reporte a la métrica</b><span>parte 1: las 3 incidencias · parte 2: workflow + campos UPEX · parte 3: medir con datos reales de BK</span></div></div>
+  <div class="deck-footer"><span class="mono">Jira · estándar UPEX · proyecto Bunkai (BK)</span><span class="slide-number" data-current="1" data-total="34"></span></div>
+  <div class="notes">Encuadre: esto NO es sobre casos de prueba ni test plans — es sobre la gestión de incidencias de error (Bug/Defect/Improvement): cómo se reportan, cómo transitan y cómo se miden. La meta final es que el equipo de producto vea la salud de la app con sus propios ojos.</div>
 </section>
 
-<section class="slide center tc" data-title="Stat">
+<!-- 2. STAT HOOK -->
+<section class="slide center tc" data-title="Stat gancho">
   <div>
-    <p class="kicker">why this matters</p>
-    <div class="bigstat"><span class="grad">retries: 0</span></div>
-    <h3>The flaky-test tax — KATA's local default. If a test passes only on retry, it is flaky: a bug to investigate, not a pass to accept. No arbitrary <span class="mono">waitForTimeout</span>, no shared state, every test makes its own data.</h3>
+    <p class="kicker">el dato que duele</p>
+    <div class="bigstat"><span class="grad">1 / 33</span></div>
+    <h3>En BK, solo <b>1 de 33</b> incidencias tiene el campo <span class="mono">Components</span> relleno. La data existe — pero no responde ni una pregunta. Una incidencia mal documentada es una incidencia que no se puede medir.</h3>
   </div>
-  <div class="notes">Lead with the cultural rule that defines the whole method. Flakiness is the silent killer of automated suites; KATA refuses to hide it behind retries.</div>
+  <div class="notes">Arranca con la tesis: gestionar defectos no es abrir tickets, es generar datos que respondan preguntas. Si los campos están vacíos, el dashboard está ciego. Volveremos a este número en la parte 3.</div>
 </section>
 
+<!-- 3. AGENDA -->
 <section class="slide" data-title="Agenda">
-  <p class="kicker">what we'll cover</p>
-  <h2 class="h2" data-anim="fade-up">Two Halves: The Craft, then The Acceleration</h2>
+  <p class="kicker">qué cubriremos</p>
+  <h2 class="h2" data-anim="fade-up">Tres Partes: Distinguir, Gestionar, Medir</h2>
   <div class="stack mt-l anim-stagger-list">
-    <div class="agenda-row"><span class="anum">01</span><span class="at">The Craft — manual KATA: scope, plan, layered architecture, ATC identity, data, code, review gate</span><span class="ad">part 1</span></div>
-    <div class="agenda-row"><span class="anum">02</span><span class="at">The Acceleration — how /test-automation drives it: trigger, context, subagents, tools, artifacts</span><span class="ad">part 2</span></div>
-    <div class="agenda-row"><span class="anum">03</span><span class="at">Takeaways — the rules that keep a suite trustworthy at scale</span><span class="ad">close</span></div>
+    <div class="agenda-row"><span class="anum">01</span><span class="at">Las tres incidencias — Bug vs Defect vs Improvement: mismo término, distinta estrategia de gestión</span><span class="ad">distinguir</span></div>
+    <div class="agenda-row"><span class="anum">02</span><span class="at">El estándar UPEX — un solo workflow, los mismos campos, y el rol clave de Components</span><span class="ad">gestionar</span></div>
+    <div class="agenda-row"><span class="anum">03</span><span class="at">Medir la calidad — de campos rellenos a métricas y dashboards que responden preguntas (datos reales de BK)</span><span class="ad">medir</span></div>
   </div>
-  <div class="notes">Part 1 is the bulk — learn to do this by hand. Part 2 shows the AI doing exactly that, faster, with the human still in control.</div>
+  <p class="qhint mt-l">3 quizzes interactivos a lo largo del recorrido — haz clic en las respuestas.</p>
+  <div class="notes">La parte 3 es la más importante: las métricas. Las partes 1 y 2 construyen el vocabulario y la disciplina que hacen posible medir.</div>
 </section>
 
-<section class="slide divider" data-title="Part 1">
+<!-- 4. DIVIDER PART 1 -->
+<section class="slide divider" data-title="Parte 1">
   <div>
-    <p class="part-no">PART 01</p>
-    <h1 class="h1">The Craft<br><span class="grad">KATA by hand</span></h1>
-    <p class="lede">If the AI did not exist, what would a QA engineer do, step by step? Plan before code. Respect the layers. One ATC = one test case. Review every line against the checklist.</p>
+    <p class="part-no">PARTE 01</p>
+    <h1 class="h1">Las Tres Incidencias<br><span class="grad">Bug · Defect · Improvement</span></h1>
+    <p class="lede">El término no las distingue — léxicamente un bug ES un defecto. Lo que las distingue es <b>cuándo nacen</b> y <b>qué le dicen al equipo</b> sobre el estado del producto.</p>
   </div>
-  <div class="notes">Everything in Part 1 is the real method a human follows. The AI later automates this exact sequence — so master it first.</div>
+  <div class="notes">Insistir: la diferencia no es semántica, es estratégica. Es una decisión de gestión de incidencias, no de diccionario.</div>
 </section>
 
-<section class="slide" data-title="Pipeline">
-  <p class="kicker">the non-negotiable pipeline</p>
-  <h2 class="h2" data-anim="fade-up">Plan → Code → Review (Never Skip a Phase)</h2>
-  <div class="flow mt-m">
-    <div class="stage"><div class="sx">1</div><div><h4>Plan</h4><p>Write spec.md + automation-plan.md; choose scope, ATCs, fixture, data strategy.</p></div></div>
-    <div class="stage"><div class="sx">2</div><div><h4>Code</h4><p>types → component class → register fixture → test file → run + verify.</p></div></div>
-    <div class="stage"><div class="sx">3</div><div><h4>Review</h4><p>Run the KATA checklist; three gates (test / types / lint) all green = merge.</p></div></div>
-  </div>
-  <div class="callout mt-m"><h4>Each arrow is a GATE</h4><p>Do not start Code before the Plan is approved; do not close the ticket before Review passes.</p></div>
-  <div class="notes">This three-phase order is structural, not politeness. Coding the wrong scope is the most common failure — the Plan gate prevents it.</div>
+<!-- 5. SAME WORD DIFFERENT MANAGEMENT -->
+<section class="slide" data-title="Mismo término">
+  <p class="kicker">la idea central</p>
+  <h2 class="h2" data-anim="fade-up">Mismo Término, Distinta Gestión</h2>
+  <p class="lede mt-s">"Bug" y "defecto" son sinónimos en el lenguaje. La diferencia vive en la <b>línea de tiempo del producto</b>: ¿la funcionalidad sigue en desarrollo, o ya fue liberada?</p>
+  <div class="callout mt-l"><h4>El eje que decide todo</h4><p>Una falla detectada <b>durante el sprint</b>, sobre una funcionalidad que aún se está construyendo → <b>Defect</b>. La misma clase de falla, descubierta <b>después del release</b> sobre algo que ya funcionaba → <b>Bug</b>. El Improvement es el tercer camino: ni una ni otra, sino una mejora.</p></div>
+  <div class="notes">El usuario lo resume así: defecto = bajo sprint, en desarrollo; bug = regresión post-release; improvement = mejora, muchas veces trivial o reclasificada tras análisis de causa raíz.</div>
 </section>
 
-<section class="slide" data-title="Scopes">
-  <p class="kicker">phase 0 — pick your scope</p>
-  <h2 class="h2" data-anim="fade-up">Three Scopes, Three Sizes of Work</h2>
-  <table class="dtable mt-m">
-    <thead><tr><th>Scope</th><th>Input</th><th>Output</th><th>Use when</th></tr></thead>
+<!-- 6. DEFECT -->
+<section class="slide" data-title="Defect">
+  <p class="kicker">incidencia #1</p>
+  <h2 class="h2" data-anim="fade-up"><span class="grad">Defect</span> — la falla que cazamos en el sprint</h2>
+  <div class="grid g2 mt-m">
+    <div class="card card-accent">
+      <h4>Qué indica</h4>
+      <p class="dim">Que una <b>User Story bajo sprint</b> está saliendo defectuosa y hay que arreglarla <b>antes</b> de que suba a ambientes superiores.</p>
+    </div>
+    <div class="card card-accent">
+      <h4>Cuándo nace</h4>
+      <p class="dim">Durante el desarrollo / la fase de QA del sprint. Es lo <b>normal y deseable</b>: el sprint existe para destapar defectos y cerrarlos.</p>
+    </div>
+  </div>
+  <ul class="blist">
+    <li><b>Nace de una User Story.</b> Se enlaza a la US que se está construyendo (edge causation: la US <span class="mono">causes</span> el Defect).</li>
+    <li><b>Es contención, no escape.</b> Encontrarlo aquí es éxito de QA — el defecto nunca llegó al usuario.</li>
+    <li><b>Si el sprint hace bien su trabajo</b>, la US entra al release <b>libre de defectos</b>.</li>
+  </ul>
+  <div class="notes">Recalcar: destapar defectos en el sprint es la meta. Un sprint con muchos defectos detectados y cerrados es un sprint sano, no uno enfermo.</div>
+</section>
+
+<!-- 7. BUG -->
+<section class="slide" data-title="Bug">
+  <p class="kicker">incidencia #2</p>
+  <h2 class="h2" data-anim="fade-up"><span class="grad">Bug</span> — la regresión que escapó</h2>
+  <div class="grid g2 mt-m">
+    <div class="card card-accent">
+      <h4>Qué indica</h4>
+      <p class="dim">Que una funcionalidad <b>ya liberada y desplegada</b> está fallando. Algo que <b>se suponía debía funcionar</b> dejó de hacerlo.</p>
+    </div>
+    <div class="card card-accent">
+      <h4>Cuándo nace</h4>
+      <p class="dim">Pasado el sprint — semanas o meses después — típicamente como un <b>edge case</b> o una <b>regresión</b> sobre código ya validado.</p>
+    </div>
+  </div>
+  <ul class="blist">
+    <li><b>El Bug es el tipo de incidencia de las regresiones:</b> cada vez que algo que debería funcionar, falla.</li>
+    <li><b>Es un escape.</b> Cruzó la red del sprint y llegó a producción — eso es justo lo que las métricas deben vigilar.</li>
+    <li><b>Mismo síntoma que un Defect</b>, distinto momento → distinta lectura de gestión.</li>
+  </ul>
+  <div class="notes">El bug no es "peor" que un defecto por naturaleza — es peor por ubicación: ya está en manos del usuario. La distinción Defect/Bug es precisamente lo que hace medible el "escape".</div>
+</section>
+
+<!-- 8. TIMELINE EXAMPLE -->
+<section class="slide" data-title="Ejemplo carrito">
+  <p class="kicker">el mismo fallo, dos vidas</p>
+  <h2 class="h2" data-anim="fade-up">Caso: el Carrito de Compra</h2>
+  <div class="flow mt-s">
+    <div class="stage"><div class="sx">1</div><div><h4>Sprint — nueva US del carrito</h4><p>Se agrega una historia de usuario sobre el carrito. QA detecta que el cálculo del total falla. <span class="tag no">DEFECT</span> &nbsp;Está en desarrollo, se enlaza a la US, se arregla dentro del sprint.</p></div></div>
+    <div class="stage"><div class="sx">2</div><div><h4>Release — la US sale limpia</h4><p>El defecto se reparó. La funcionalidad del carrito entra al release <b>libre de defectos</b>. El usuario la recibe funcionando.</p></div></div>
+    <div class="stage"><div class="sx">3</div><div><h4>Meses después — un edge case</h4><p>Aparece un caso límite alrededor del mismo carrito (cupón + moneda extranjera + stock 0). Falla en producción. <span class="tag warn">BUG</span> &nbsp;Es una regresión descubierta post-sprint.</p></div></div>
+  </div>
+  <div class="notes">Este es el ejemplo canónico del usuario. El mismo componente (carrito) genera primero un Defect (en sprint) y luego un Bug (post-release). La taxonomía captura la diferencia de momento — y de ahí salen las métricas de escape.</div>
+</section>
+
+<!-- 9. IMPROVEMENT -->
+<section class="slide" data-title="Improvement">
+  <p class="kicker">incidencia #3</p>
+  <h2 class="h2" data-anim="fade-up"><span class="grad">Improvement</span> — ni falla, sino mejora</h2>
+  <p class="lede mt-s">Un work type de tipo <b>mejora</b>. A veces trivial; a veces el destino de un Bug o Defect que, tras análisis de causa raíz, resulta no ser una falla sino un asunto de requerimientos.</p>
+  <div class="grid g2 mt-m">
+    <div class="card card-accent">
+      <h4>Origen directo</h4>
+      <p class="dim">Una mejora pequeña detectada al usar el producto: copy, UX, un atajo. No rompe nada — eleva la calidad.</p>
+    </div>
+    <div class="card card-accent">
+      <h4>Origen por reclasificación</h4>
+      <p class="dim">Un Bug/Defect pasa por <b>RCA</b> y se descubre que el "error" era en realidad el comportamiento especificado. Se transforma: a Improvement, o a una nueva User Story.</p>
+    </div>
+  </div>
+  <div class="callout warn mt-m"><h4>En el workflow esto es literal</h4><p>La transición <span class="mono">is not a Bug</span> lleva un Bug/Defect desde <span class="mono">Open</span> al estado terminal <span class="mono">Enhancement</span> — la reclasificación está cableada en el flujo UPEX, no es informal.</p></div>
+  <div class="notes">Conectar con la parte 2: el estado terminal "Enhancement" y la transición "is not a Bug" son exactamente este camino. RCA puede convertir un reporte de error en un requerimiento.</div>
+</section>
+
+<!-- 10. COMPARISON TABLE -->
+<section class="slide" data-title="Tabla comparativa">
+  <p class="kicker">las tres, lado a lado</p>
+  <h2 class="h2" data-anim="fade-up">Defect vs Bug vs Improvement</h2>
+  <table class="dtable mt-s">
+    <thead><tr><th>Dimensión</th><th>Defect</th><th>Bug</th><th>Improvement</th></tr></thead>
     <tbody>
-      <tr><td><b>Module (Macro)</b></td><td>Module + candidate TCs</td><td>1 module plan + N ATC specs</td><td>Batch-automating an area, 10+ tests</td></tr>
-      <tr><td><b>Ticket (Medium)</b></td><td>One story ID + scenarios</td><td>1 implementation plan</td><td>One user story — default for sprint work</td></tr>
-      <tr><td><b>Regression (Micro)</b></td><td>One TC (post-bugfix)</td><td>1 ATC implementation plan</td><td>One regression test after a fix</td></tr>
+      <tr><td><b>Momento</b></td><td>Durante el sprint</td><td>Post-release</td><td>Cualquiera</td></tr>
+      <tr><td><b>Estado del producto</b></td><td>En desarrollo</td><td>Ya liberado</td><td>Funcional</td></tr>
+      <tr><td><b>Qué señala</b></td><td>US saliendo defectuosa</td><td>Regresión / escape</td><td>Mejora o reclasificación</td></tr>
+      <tr><td><b>Lectura de gestión</b></td><td>Contención (éxito de QA)</td><td>Fuga (riesgo a usuario)</td><td>Valor incremental / RCA</td></tr>
+      <tr><td><b>Nace de</b></td><td>Una User Story</td><td>Un edge case en prod</td><td>Uso real o un RCA</td></tr>
     </tbody>
   </table>
-  <p class="dim mt-s">When in doubt, ASK. Never assume "module" just because several TC IDs appear.</p>
-  <p class="dim mt-s">These scopes consume the <b>Candidate</b> verdicts from /test-documentation — mapping: Module ← module-driven · Ticket ← ticket-driven · Regression ← bug-driven · ad-hoc → wherever it fits. Manual and Deferred are terminal.</p>
-  <div class="notes">Scope dictates how much planning ceremony you produce. Only Candidate verdicts from test-documentation reach automation — Manual and Deferred are terminal.</div>
+  <div class="callout mt-m"><h4>Léelo como instrumentación, no como burocracia</h4><p>Elegir bien el work type no es papeleo: es lo que más adelante hace que la pregunta <i>"¿estamos deteniendo los defectos antes de que escapen?"</i> sea <b>medible</b>.</p></div>
+  <div class="notes">Esta tabla es el ancla conceptual de la parte 1. Cada fila es una decisión de gestión, no una etiqueta arbitraria.</div>
 </section>
 
-<section class="slide" data-title="Plan inputs">
-  <p class="kicker">plan phase — read first, in order</p>
-  <h2 class="h2" data-anim="fade-up">Inputs You Gather Before Drafting Anything</h2>
-  <ul class="blist anim-stagger-list">
-    <li><b>kata-manifest.json (root).</b> Authoritative registry of every Component and @atc('ID'). Load FIRST to avoid duplicates and ID collisions.</li>
-    <li><b>KATA references.</b> Doctrine for layers, ATC identity, fixture selection, import aliases.</li>
-    <li><b>tests/components/.</b> The existing Api/Page/Steps shapes on disk to match.</li>
-    <li><b>The synced Story folder.</b> Read the ENTIRE folder — ACs, scope, business rules, AND comments — not one field.</li>
-    <li><b>api/schemas/ + .env.</b> OpenAPI-derived types (refresh if stale); credentials via config.testUser — never hardcode.</li>
-  </ul>
-  <div class="notes">The manifest is the anti-duplication gate (Critical Rule #12). Skipping it produces duplicate Pages, duplicate ATC IDs, and missed reuse — all rejected at review.</div>
+<!-- 11. QUIZ 1 -->
+<section class="slide" data-title="Quiz 1">
+  <p class="kicker">quiz · parte 1</p>
+  <h2 class="h2" data-anim="fade-up">¿Bug, Defect o Improvement?</h2>
+  <div class="quiz">
+    <div class="qitem">
+      <div class="qq"><span class="qn">Q1</span><span>Durante el sprint, QA encuentra que el nuevo formulario de registro no valida el email. La US aún está en desarrollo.</span></div>
+      <div class="opts">
+        <div class="opt" data-correct="1"><span class="mk">A</span><span>Defect — falla detectada en sprint, sobre una US en desarrollo</span></div>
+        <div class="opt"><span class="mk">B</span><span>Bug — es una falla funcional</span></div>
+        <div class="opt"><span class="mk">C</span><span>Improvement — el formulario podría mejorar</span></div>
+      </div>
+      <div class="qexp"><b>Defect.</b> El criterio no es la gravedad sino el momento: la funcionalidad sigue en construcción dentro del sprint. Cazarlo aquí es contención, no fuga.</div>
+    </div>
+    <div class="qitem">
+      <div class="qq"><span class="qn">Q2</span><span>Tres meses tras el release, un usuario reporta que el login falla solo si la contraseña tiene emojis. Antes funcionaba.</span></div>
+      <div class="opts">
+        <div class="opt"><span class="mk">A</span><span>Defect — hay que arreglarlo</span></div>
+        <div class="opt" data-correct="1"><span class="mk">B</span><span>Bug — regresión / edge case sobre algo ya liberado</span></div>
+        <div class="opt"><span class="mk">C</span><span>Improvement — soportar emojis es una mejora</span></div>
+      </div>
+      <div class="qexp"><b>Bug.</b> Funcionalidad ya desplegada que deja de funcionar = regresión. Es un escape: cruzó la red del sprint y llegó al usuario.</div>
+    </div>
+  </div>
+  <div class="notes">Deja que el público haga clic — las explicaciones aparecen al responder. La lección: el criterio que distingue es momento + estado del producto, nunca la gravedad ni el síntoma. Tercer caso (Improvement): si tras RCA el comportamiento es el especificado pero el cliente lo quiere distinto, se reclasifica vía "is not a Bug" → Enhancement (ver slide 9).</div>
 </section>
 
-<section class="slide" data-title="What is an ATC">
-  <p class="kicker">the heart of KATA — what is an ATC?</p>
-  <h2 class="h2" data-anim="fade-up">ATC = Complete Test Case, Not a Click</h2>
+<!-- 12. DIVIDER PART 2 -->
+<section class="slide divider" data-title="Parte 2">
+  <div>
+    <p class="part-no">PARTE 02</p>
+    <h1 class="h1">El Estándar UPEX<br><span class="grad">Un Workflow, los Mismos Campos</span></h1>
+    <p class="lede">Las tres incidencias comparten <b>exactamente</b> el mismo esquema de workflow y los mismos campos. Reportar disciplinadamente hoy es lo que habilita medir mañana.</p>
+  </div>
+  <div class="notes">Aclarar que esto es un estándar UPEX — una recomendación de gestión, no una ley universal. Pero es un estándar probado y consistente entre proyectos UPEX en Jira.</div>
+</section>
+
+<!-- 13. SAME SCHEME -->
+<section class="slide" data-title="Mismo esquema">
+  <p class="kicker">hallazgo del esquema real</p>
+  <h2 class="h2" data-anim="fade-up">Bug, Defect e Improvement → Mismo Esquema</h2>
+  <div class="grid g3 mt-m">
+    <div class="card card-accent"><h4>Bug <span class="dim2 mono">#10021</span></h4><p class="dim">11 estados · 15 transiciones</p></div>
+    <div class="card card-accent"><h4>Defect <span class="dim2 mono">#10023</span></h4><p class="dim">11 estados · 15 transiciones</p></div>
+    <div class="card card-accent"><h4>Improvement <span class="dim2 mono">#10022</span></h4><p class="dim">11 estados · 15 transiciones</p></div>
+  </div>
+  <div class="callout mt-l"><h4>Idénticos byte por byte</h4><p>Mismos estados (Open, In Progress, In Review, Ready For QA, Closed…), mismas transiciones, mismos campos para rellenar. Cambias el <i>work type</i>, no la mecánica. Esto es deliberado: un solo modelo mental para gestionar las tres.</p></div>
+  <div class="notes">Verificado en .agents/jira-workflows.json: los tres comparten el mismo workflow_scheme. Para el equipo significa cero curva de aprendizaje extra al pasar de uno a otro.</div>
+</section>
+
+<!-- 14. LIFECYCLE -->
+<section class="slide" data-title="Lifecycle">
+  <p class="kicker">el flujo feliz</p>
+  <h2 class="h2" data-anim="fade-up">El Ciclo de Vida de una Incidencia</h2>
+  <div class="lifecycle">
+    <span class="lstate new">Open</span><span class="arr">→</span>
+    <span class="lstate prog">In Progress</span><span class="arr">→</span>
+    <span class="lstate prog">In Review</span><span class="arr">→</span>
+    <span class="lstate new">Ready For QA</span><span class="arr">→</span>
+    <span class="lstate good">Closed ✓</span>
+  </div>
+  <div class="grid g3 mt-l">
+    <div class="card card-soft"><h4 class="mono" style="font-size:15px">start fixing</h4><p class="dim">Open → In Progress. El dev toma la incidencia.</p></div>
+    <div class="card card-soft"><h4 class="mono" style="font-size:15px">Pull Request / Fixed &amp; Deployed</h4><p class="dim">In Progress → In Review → Ready For QA. El fix llega a QA para retest.</p></div>
+    <div class="card card-soft"><h4 class="mono" style="font-size:15px">ReTest Passed</h4><p class="dim">Ready For QA → Closed. QA verifica el fix (terminal de éxito).</p></div>
+  </div>
+  <div class="callout warn mt-m"><h4>Atajos y regresos cableados</h4><p><span class="mono">Hard pushed</span> salta el review (In Progress → Ready For QA). <span class="mono">back</span> reabre un Closed a Ready For QA cuando una regresión se cuela tras el sign-off.</p></div>
+  <div class="notes">Este es el camino principal. Los colores: gris=new, ámbar=indeterminate (trabajo en curso), verde=done. La categoría del estado importa para las métricas (parte 3).</div>
+</section>
+
+<!-- 15. TRIAGE -->
+<section class="slide" data-title="Triage">
+  <p class="kicker">la decisión más importante</p>
+  <h2 class="h2" data-anim="fade-up">Triage desde <span class="mono" style="font-size:.7em">Open</span> — 6 Caminos</h2>
+  <p class="lede mt-s">Open es el hub de triage. No todo reporte se arregla — la mitad del valor de gestión está en clasificar bien lo que <b>no</b> es un fix.</p>
+  <div class="triage">
+    <div class="tnode"><div class="tt">start fixing → In Progress</div><div class="ts"><b>Es real.</b> El dev lo toma y arranca el fix.</div></div>
+    <div class="tnode"><div class="tt">is duplicated → Duplicated</div><div class="ts"><b>Repetido.</b> Ya existe otro ticket. Terminal.</div></div>
+    <div class="tnode"><div class="tt">is WAD → REJECTED</div><div class="ts"><b>Working As Designed.</b> No es falla. Terminal.</div></div>
+    <div class="tnode"><div class="tt">is CNR → Cannot Reproduce</div><div class="ts"><b>No reproducible.</b> Sin repro, no hay fix. Terminal.</div></div>
+    <div class="tnode"><div class="tt">is not a Bug → Enhancement</div><div class="ts"><b>Reclasificación.</b> Era requerimiento → mejora. Terminal.</div></div>
+    <div class="tnode"><div class="tt">defer → Deferred</div><div class="ts"><b>Pospuesto.</b> Aceptado pero no ahora. Reanudable.</div></div>
+  </div>
+  <div class="notes">El triage es donde un Bug puede volverse Improvement (is not a Bug → Enhancement). Las cuatro salidas terminales (Duplicated, REJECTED, CNR, Enhancement) son "ruido" que las métricas de calidad-de-reporte deben vigilar.</div>
+</section>
+
+<!-- 16. TERMINAL STATES -->
+<section class="slide" data-title="Estados terminales">
+  <p class="kicker">cómo termina una incidencia</p>
+  <h2 class="h2" data-anim="fade-up">Estados Terminales y sus Categorías</h2>
+  <table class="dtable mt-s">
+    <thead><tr><th>Estado</th><th>Categoría</th><th>Significa</th><th>Lectura de métrica</th></tr></thead>
+    <tbody>
+      <tr><td><b>Closed</b></td><td><span class="tag ok">done</span></td><td>Fix verificado por QA</td><td>Trabajo resuelto — el numerador del progreso</td></tr>
+      <tr><td><b>Duplicated</b></td><td><span class="tag ok">done</span></td><td>Repetido de otro ticket</td><td>Ruido de reporte</td></tr>
+      <tr><td><b>REJECTED</b></td><td><span class="tag ok">done</span></td><td>Working As Designed</td><td>Falso positivo</td></tr>
+      <tr><td><b>Cannot Reproduce</b></td><td><span class="tag ok">done</span></td><td>Sin repro confirmable</td><td>Reporte incompleto</td></tr>
+      <tr><td><b>Enhancement</b></td><td><span class="tag ok">done</span></td><td>Reclasificado a mejora</td><td>Asunto de requerimiento</td></tr>
+      <tr><td><b>Deferred</b></td><td><span class="tag warn">indeterminate</span></td><td>Pospuesto, reanudable</td><td>Deuda viva (aging)</td></tr>
+      <tr><td><b>ABORTED</b></td><td><span class="tag ok">done</span></td><td>Abandonado sin fix</td><td>Descartado</td></tr>
+    </tbody>
+  </table>
+  <div class="notes">La categoría (new / indeterminate / done) es lo que Jira usa para colorear y para los gadgets. Duplicated+REJECTED+CNR juntos = la tasa de "ruido" — una métrica de calidad del proceso de reporte.</div>
+</section>
+
+<!-- 17. FIELDS -->
+<section class="slide" data-title="Campos">
+  <p class="kicker">qué se rellena al reportar</p>
+  <h2 class="h2" data-anim="fade-up">Los Campos del Estándar UPEX</h2>
+  <div class="grid g2 mt-s">
+    <div>
+      <h4 class="mb-s" style="color:var(--good)">Siempre (alta señal)</h4>
+      <ul class="blist" style="margin-top:6px">
+        <li><b>Summary</b> — <span class="mono">Épica: Componente: Síntoma</span></li>
+        <li><b>Steps to Reproduce</b> — pasos numerados</li>
+        <li><b>Actual</b> vs <b>Expected Result</b></li>
+        <li><b>Severity</b> · <b>Priority</b></li>
+        <li><b>Error Type</b> · <b>Test Environment</b></li>
+        <li><b>Evidence</b> — captura / trace / log</li>
+      </ul>
+    </div>
+    <div>
+      <h4 class="mb-s" style="color:var(--warn)">Después / contexto</h4>
+      <ul class="blist" style="margin-top:6px">
+        <li><b>Root Cause</b> — se fija tras el RCA</li>
+        <li><b>Fix</b> — bugfix vs hotfix</li>
+        <li><b>Workaround</b> — mitigación temporal</li>
+        <li><b>Components</b> — agrupación (¡clave! →)</li>
+        <li><b>Labels</b> — <span class="mono">bug</span>, dominio</li>
+        <li><b>Links</b> — US <span class="mono">causes</span> Bug</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout mt-m"><h4>Regla de oro</h4><p>Cada campo que dejas vacío es una pregunta que el dashboard <b>no podrá responder</b>. La disciplina al reportar ES la materia prima de la métrica.</p></div>
+  <div class="notes">Estos campos salen de .agents/jira-required.yaml (sección bug/defect). El summary sigue el patrón Épica:Componente:Síntoma — que ya es agrupable. Conecta con Components en la siguiente.</div>
+</section>
+
+<!-- 18. SEVERITY / PRIORITY -->
+<section class="slide" data-title="Severity">
+  <p class="kicker">clasificar el impacto</p>
+  <h2 class="h2" data-anim="fade-up">Severity → Priority</h2>
+  <table class="dtable mt-s">
+    <thead><tr><th>Severity</th><th>Criterio</th><th>Priority</th><th>Ejemplo</th></tr></thead>
+    <tbody>
+      <tr><td><b>Crítica</b></td><td>Core bloqueado, sin workaround, pérdida de datos</td><td>Highest</td><td>Login caído, checkout falla</td></tr>
+      <tr><td><b>Mayor</b></td><td>Feature principal rota, workaround difícil</td><td>High</td><td>Búsqueda devuelve resultados erróneos</td></tr>
+      <tr><td><b>Moderada</b></td><td>Issue con workaround fácil</td><td>Medium</td><td>Orden roto pero el filtro sirve</td></tr>
+      <tr><td><b>Menor</b></td><td>Bajo impacto, baja prioridad</td><td>Low</td><td>Validación de edge case faltante</td></tr>
+      <tr><td><b>Trivial</b></td><td>Solo cosmético</td><td>Lowest</td><td>Typo, leve desalineación</td></tr>
+    </tbody>
+  </table>
+  <div class="callout warn mt-m"><h4>Severity ≠ Priority</h4><p>Severity es <b>impacto técnico</b> (lo fija QA); Priority es <b>urgencia de negocio</b> (la fija el equipo). Un typo en el logo (Trivial) puede ser High priority antes de una demo. Sepáralos siempre.</p></div>
+  <div class="notes">El mapeo Severity→Priority es el default; el negocio puede sobreescribir Priority. Mantener ambos campos da dos ejes de medición distintos.</div>
+</section>
+
+<!-- 19. ERROR TYPE / ROOT CAUSE -->
+<section class="slide" data-title="Taxonomías">
+  <p class="kicker">dos taxonomías que alimentan métricas</p>
+  <h2 class="h2" data-anim="fade-up">Error Type (qué) vs Root Cause (por qué)</h2>
+  <div class="grid g2 mt-s">
+    <div class="card card-accent">
+      <h4>Error Type — el síntoma</h4>
+      <p class="dim mb-s">Se infiere al reportar, desde el comportamiento observado.</p>
+      <div class="row wrap" style="gap:8px">
+        <span class="tag">functional</span><span class="tag">visual</span><span class="tag">content</span><span class="tag">performance</span><span class="tag">crash</span><span class="tag">data</span><span class="tag">integration</span><span class="tag">security</span>
+      </div>
+    </div>
+    <div class="card card-accent">
+      <h4>Root Cause — la causa</h4>
+      <p class="dim mb-s">Se fija <b>después</b> del fix, en el post-mortem.</p>
+      <div class="row wrap" style="gap:8px">
+        <span class="tag">code_error</span><span class="tag">config_env_error</span><span class="tag">data_error</span><span class="tag">environment_error</span><span class="tag">integration_error</span><span class="tag">requirement_error</span><span class="tag">third_party_error</span><span class="tag">working_as_designed</span>
+      </div>
+    </div>
+  </div>
+  <div class="callout mt-m"><h4>Por qué importan las dos</h4><p>Error Type responde <i>"¿qué clase de fallas dominan?"</i> (¿somos débiles en seguridad? ¿en performance?). Root Cause responde <i>"¿de dónde vienen?"</i> (¿código? ¿requerimientos? ¿integraciones?). Dos preguntas, dos campos, dos gráficos.</p></div>
+  <div class="notes">Error Type es de cara al usuario (síntoma); Root Cause es de cara al proceso (causa, post-RCA). Juntos permiten preguntas de mejora de proceso, no solo de conteo.</div>
+</section>
+
+<!-- 20. COMPONENTS SPOTLIGHT -->
+<section class="slide" data-title="Components">
+  <p class="kicker">el campo subestimado</p>
+  <h2 class="h2" data-anim="fade-up"><span class="grad">Components</span> — Agrupar para Medir</h2>
+  <p class="lede mt-s">Un campo nativo de Jira, configurable para que aparezca en cada incidencia. Su superpoder: <b>agrupar</b> Bugs, Defects e Improvements por la parte del producto que afectan.</p>
+  <div class="grid g2 mt-m">
+    <div class="card card-accent">
+      <h4>Flexible según la estrategia del proyecto</h4>
+      <p class="dim">Los componentes se definen como convenga: por <b>features</b>, por <b>épicas</b>, por módulos. ¿20 épicas? → 20 components. Cada incidencia marca el/los componente(s) afectado(s).</p>
+    </div>
+    <div class="card card-accent">
+      <h4>Para qué sirve realmente</h4>
+      <p class="dim">"¿Qué parte de la app falla más?" se vuelve una sola query. Habilita <b>ownership</b> (qué equipo dueño de qué componente) y <b>routing</b> automático de incidencias.</p>
+    </div>
+  </div>
+  <div class="callout warn mt-m"><h4>Pero solo si se rellena</h4><p>En BK hoy: <b>1 de 33</b> incidencias tiene Components. Un dashboard por componente estaría <b>vacío</b>. Es la recomendación #1 de higiene — lo vemos en la parte 3.</p></div>
+  <div class="notes">Énfasis del usuario: Components es flexible (épicas/features) y poderoso para agrupar. Pero la data real de BK muestra que está sin usar — gran oportunidad de enseñanza sobre por qué configurar y rellenar este campo.</div>
+</section>
+
+<!-- 21. QUIZ 2 -->
+<section class="slide" data-title="Quiz 2">
+  <p class="kicker">quiz · parte 2</p>
+  <h2 class="h2" data-anim="fade-up">Workflow &amp; Campos</h2>
+  <div class="quiz">
+    <div class="qitem">
+      <div class="qq"><span class="qn">Q1</span><span>Triage de un Bug recién abierto: el equipo confirma que el comportamiento es exactamente el especificado. ¿Transición y estado?</span></div>
+      <div class="opts">
+        <div class="opt"><span class="mk">A</span><span><span class="mono">start fixing</span> → In Progress</span></div>
+        <div class="opt" data-correct="1"><span class="mk">B</span><span><span class="mono">is WAD</span> → REJECTED</span></div>
+        <div class="opt"><span class="mk">C</span><span><span class="mono">defer</span> → Deferred</span></div>
+      </div>
+      <div class="qexp"><b>is WAD → REJECTED.</b> Working As Designed: no es una falla, es comportamiento especificado. Estado terminal (categoría done). Si además el cliente quisiera cambiarlo, sería <span class="mono">is not a Bug</span> → Enhancement.</div>
+    </div>
+    <div class="qitem">
+      <div class="qq"><span class="qn">Q2</span><span>El equipo de producto quiere un dashboard de "¿qué parte de la app concentra más defectos?". ¿Qué campo lo habilita?</span></div>
+      <div class="opts">
+        <div class="opt"><span class="mk">A</span><span>Severity</span></div>
+        <div class="opt"><span class="mk">B</span><span>Priority</span></div>
+        <div class="opt" data-correct="1"><span class="mk">C</span><span>Components</span></div>
+      </div>
+      <div class="qexp"><b>Components.</b> Es el campo de agrupación por parte del producto (features/épicas). Sin él relleno, ese dashboard no se puede construir — exactamente el gap real de BK (1/33).</div>
+    </div>
+  </div>
+  <div class="notes">Refuerza: triage terminal (is WAD → REJECTED) y el rol de Components. Recuerda también el otro eje: un typo cosmético antes de una demo = Severity Trivial (impacto bajo) pero Priority High (urgencia alta) — ejes independientes, dos campos (ver slide 18).</div>
+</section>
+
+<!-- 22. DIVIDER PART 3 -->
+<section class="slide divider" data-title="Parte 3">
+  <div>
+    <p class="part-no">PARTE 03</p>
+    <h1 class="h1">Medir la Calidad<br><span class="grad">De Campos a Preguntas Respondidas</span></h1>
+    <p class="lede">Un dashboard no es una lista de datos — es un set de <b>respuestas</b>. La meta: que producto vea, con sus propios ojos, cómo va la app. Con datos reales de BK.</p>
+  </div>
+  <div class="notes">La parte que más le importa al usuario. El principio rector: nadie quiere ver métricas, quiere resolver dudas. Las métricas son el medio.</div>
+</section>
+
+<!-- 23. PHILOSOPHY -->
+<section class="slide" data-title="Filosofía">
+  <p class="kicker">el principio rector</p>
+  <h2 class="h2" data-anim="fade-up">Los Datos Solo Importan si Responden Preguntas</h2>
   <div class="vs">
-    <div class="card bad-side side"><h3>❌ NOT an ATC</h3><ul>
-      <li>clickLoginButton() — single interaction</li>
-      <li>fillEmailSuccessfully() — wraps one page.fill()</li>
-      <li>submitFormSuccessfully() — an interaction, not an outcome</li>
-    </ul></div>
+    <div class="card bad-side">
+      <h3>❌ Dashboard como vertedero</h3>
+      <ul>
+        <li>Lista de 200 tickets sin agrupar</li>
+        <li>Conteos sin contexto ("hay 33 bugs")</li>
+        <li>Métricas que nadie sabe leer</li>
+        <li>El equipo de producto no entiende nada</li>
+      </ul>
+    </div>
     <div class="mid">→</div>
-    <div class="card good-side side"><h3>✅ A real ATC</h3><ul>
-      <li>loginWithValidCredentials(data) — goto, fill, submit, assert redirect</li>
-      <li>createOrderSuccessfully(payload) — POST, assert 201, assert body.id, return tuple</li>
-    </ul></div>
+    <div class="card good-side">
+      <h3>✓ Dashboard como respuesta</h3>
+      <ul>
+        <li>"¿Estamos deteniendo defectos antes del escape?"</li>
+        <li>"¿Qué componente falla más?"</li>
+        <li>"¿La calidad del fix mejora o empeora?"</li>
+        <li>Producto abre Jira y <b>entiende</b> la salud</li>
+      </ul>
+    </div>
   </div>
-  <p class="dim mt-s">If the method one-line-wraps page.click(), delete it.</p>
-  <div class="notes">The single most important reframe. An ATC is an atomic mini-flow with its own fixed assertions, decorated @atc('TICKET-ID'), mapping 1:1 to a TMS ticket.</div>
+  <div class="notes">Primero la pregunta de calidad, luego la métrica, luego el campo, luego la query. Nunca al revés. Este orden es el corazón de la enseñanza.</div>
 </section>
 
-<section class="slide" data-title="TC identity">
-  <p class="kicker">TC identity rule</p>
-  <h2 class="h2" data-anim="fade-up">One TC = One Precondition + One Action</h2>
-  <div class="callout"><h4>The definition</h4><p>A test case is exactly two things: the PRECONDITION (state) and the ACTION (trigger). EVERY expected result from the same precondition + action is an assertion of the SAME TC — no matter which panel, endpoint, or section it validates.</p></div>
-  <div class="vs mt-m">
-    <div class="card bad-side side"><h3>❌ WRONG</h3><ul><li>TC-A: verify Pricing block</li><li>TC-B: verify Reviews block</li><li>TC-C: verify page structure</li></ul></div>
-    <div class="mid">→</div>
-    <div class="card good-side side"><h3>✅ RIGHT</h3><ul><li>One TC: "Open product detail page"</li><li>Pricing, Reviews, structure = its assertions</li></ul></div>
+<!-- 24. REAL BK DATA -->
+<section class="slide" data-title="BK real">
+  <p class="kicker">snapshot real · proyecto BK</p>
+  <h2 class="h2" data-anim="fade-up">Lo que BK Tiene Hoy</h2>
+  <div class="mgrid">
+    <div class="mcard"><div class="mv grad">33</div><div class="mk">familia de defectos</div><div class="md">27 Bug · 4 Defect · 2 Improvement (de 159 issues totales)</div></div>
+    <div class="mcard"><div class="mv grad">15</div><div class="mk">Closed (VERIFIED)</div><div class="md">8 Open · 5 Duplicated · 4 Ready For QA · 1 REJECTED</div></div>
+    <div class="mcard"><div class="mv grad">7</div><div class="mk">Críticas</div><div class="md">6 Mayor · 4 Moderada · 1 Menor — sobre 18 con Severity</div></div>
   </div>
-  <div class="notes">Splitting one action's assertions into multiple TCs is the most common over-counting mistake. It explodes the suite and breaks traceability. Collapse them.</div>
+  <div class="bars">
+    <div class="barrow"><span class="bl">Bug</span><span class="bt" style="width:82%"></span><span class="bn">27</span></div>
+    <div class="barrow"><span class="bl">Defect</span><span class="bt" style="width:12%"></span><span class="bn">4</span></div>
+    <div class="barrow"><span class="bl">Improvement</span><span class="bt" style="width:6%"></span><span class="bn">2</span></div>
+  </div>
+  <div class="notes">Datos reales pulidos del proyecto BK (jira.upexgalaxy.com) el 2026-06-25. 27 Bugs vs 4 Defects — guardar esta proporción para la slide de escape rate; tiene una lectura doble (escape real vs disciplina de taxonomía).</div>
 </section>
 
-<section class="slide" data-title="Equivalence partitioning">
-  <p class="kicker">equivalence partitioning</p>
-  <h2 class="h2" data-anim="fade-up">Same Output = One Parameterized ATC</h2>
-  <div class="vs">
-    <div class="card bad-side side"><h3>❌ Three ATCs, one outcome</h3><ul>
-      <li>@atc('T1') loginWithWrongEmail()</li>
-      <li>@atc('T2') loginWithWrongPassword()</li>
-      <li>@atc('T3') loginWithEmptyFields()</li>
-      <li>all return HTTP 401</li>
-    </ul></div>
-    <div class="mid">→</div>
-    <div class="card good-side side"><h3>✅ One parameterized ATC</h3><ul>
-      <li>@atc('T1') loginWithInvalidCredentials(payload)</li>
-      <li>test file parameterizes the inputs</li>
-      <li>all produce 401 + error body</li>
-    </ul></div>
+<!-- 25. HYGIENE REALITY -->
+<section class="slide" data-title="Higiene">
+  <p class="kicker">no puedes medir lo que no rellenas</p>
+  <h2 class="h2" data-anim="fade-up">La Realidad de los Campos en BK</h2>
+  <div class="bars">
+    <div class="barrow"><span class="bl">Priority</span><span class="bt" style="width:100%"></span><span class="bn">100%</span></div>
+    <div class="barrow"><span class="bl">Root Cause</span><span class="bt" style="width:79%"></span><span class="bn">79%</span></div>
+    <div class="barrow"><span class="bl">Resolution</span><span class="bt" style="width:76%"></span><span class="bn">76%</span></div>
+    <div class="barrow"><span class="bl">Severity</span><span class="bt" style="width:55%"></span><span class="bn">55%</span></div>
+    <div class="barrow"><span class="bl">Error Type</span><span class="bt" style="width:55%"></span><span class="bn">55%</span></div>
+    <div class="barrow"><span class="bl">Components</span><span class="bt muted" style="width:3%"></span><span class="bn">3%</span></div>
   </div>
-  <p class="dim mt-s">Actions inside change → different ATC. Only DATA changes but behavior is identical → same ATC, parameterized.</p>
-  <div class="notes">Different status codes, UI states, or business outcomes are separate ATCs. Same outcome, different data, is one. This keeps the ATC count honest.</div>
+  <div class="callout warn mt-m"><h4>El diagnóstico</h4><p><b>Buildable hoy:</b> type, status, priority, resolution, root cause. <b>Con asterisco:</b> severity y error type (~45% sin rellenar → toda gráfica necesita un slice "sin asignar"). <b>Imposible hoy:</b> Components (3%). La higiene de 3 campos duplicaría la cobertura medible.</p></div>
+  <div class="notes">Honestidad ante todo: las gráficas de Severity/Error Type deben mostrar el slice "Unset" (~45%) o filtrarse a los 18 tagueados. Priority está 100% pero 79% es el default "Medium" — cobertura ≠ calidad del dato.</div>
 </section>
 
-<section class="slide" data-title="AC is the floor">
-  <p class="kicker">test-design doctrine — the core principle</p>
-  <h2 class="h2" data-anim="fade-up">"All ACs covered" is the <span class="grad">floor</span>, not the success bar</h2>
-  <div class="grid g3 mt-l anim-stagger-list">
-    <div class="card card-accent"><h4>1 · Passing ≠ probing</h4><p class="dim">Green ACs confirm the contract. They don't prove the system is robust, safe, or error-resistant.</p></div>
-    <div class="card card-accent"><h4>2 · Floor, not ceiling</h4><p class="dim">"All ACs covered" is the entry bar. The ATC set must also cover risk-beyond-AC.</p></div>
-    <div class="card card-accent"><h4>3 · Criterion vs case</h4><p class="dim">A criterion is a business assertion. An ATC is its concrete exploration: precondition + action + assertions.</p></div>
-    <div class="card card-accent"><h4>4 · 1 : N by default</h4><p class="dim">One AC → many ATCs. EP-merge collapses WITHIN a partition only — never across partitions, boundaries, or states.</p></div>
-    <div class="card card-accent"><h4>5 · Risk lives outside</h4><p class="dim">Automate the invalid/boundary inputs, auth/error paths, state transitions, and anomalies the AC is silent on.</p></div>
-    <div class="card"><h4>EP ≠ BVA</h4><p class="dim"><b>Same-behavior merge hides off-by-one.</b> Wherever a range/limit/length/date-window exists, add explicit boundary ATCs.</p></div>
-  </div>
-  <div class="notes">Canon: agentic-qa-core/references/test-design-doctrine.md. The review gate (§3.4.1 input-domain, §3.4.2 state/temporal) enforces this in code.</div>
-</section>
-
-<section class="slide" data-title="Techniques by trigger">
-  <p class="kicker">test-design doctrine — derive by technique</p>
-  <h2 class="h2" data-anim="fade-up">One criterion → N ATCs, chosen by the AC's <span class="grad">shape</span></h2>
-  <table class="dtable mt-l">
-    <thead><tr><th>Trigger in the AC</th><th>Technique (binding)</th><th>ATCs it produces</th></tr></thead>
+<!-- 26. QUESTIONS -> METRICS (CENTERPIECE) -->
+<section class="slide" data-title="Preguntas→Métricas">
+  <p class="kicker">el mapa que importa</p>
+  <h2 class="h2" data-anim="fade-up">Pregunta de Calidad → Métrica → Campo</h2>
+  <table class="dtable mt-s" style="font-size:14px">
+    <thead><tr><th>La pregunta que el equipo se hace</th><th>Métrica que la responde</th><th>Campo(s)</th></tr></thead>
     <tbody>
-      <tr><td>Any input (always)</td><td><b>Equivalence Partitioning</b></td><td>same-behavior inputs → one parameterized ATC; distinct partitions → separate ATCs</td></tr>
-      <tr><td>A range / limit / length / date-window</td><td><b>Boundary Value Analysis</b></td><td>min-1·min·min+1 … max-1·max·max+1, zero / empty / null</td></tr>
-      <tr><td>A status / lifecycle field</td><td><b>State-Transition</b></td><td>every valid transition + every invalid transition</td></tr>
-      <tr><td>2+ interacting conditions</td><td><b>Decision Table</b></td><td>one ATC per surviving rule of the combo matrix</td></tr>
-      <tr><td>3+ combinable factors</td><td><b>Pairwise</b></td><td>all-pairs ATC set (log the reduction)</td></tr>
+      <tr><td>¿Detenemos los defectos antes de que escapen a prod?</td><td><b>Defect Escape Rate</b> = Bugs / (Bugs+Defects)</td><td>issuetype</td></tr>
+      <tr><td>¿Qué tan grave es lo que encontramos?</td><td>Distribución por <b>Severity</b> + Severity Index</td><td>Severity</td></tr>
+      <tr><td>¿Qué parte de la app falla más?</td><td>Defectos por <b>Component</b></td><td>Components</td></tr>
+      <tr><td>¿Por qué fallamos? (mejora de proceso)</td><td>Distribución por <b>Root Cause</b></td><td>Root Cause</td></tr>
+      <tr><td>¿Qué clase de fallas dominan?</td><td>Distribución por <b>Error Type</b></td><td>Error Type</td></tr>
+      <tr><td>¿Qué tan bueno es el fix? (¿reabrimos?)</td><td><b>Reopen Rate</b></td><td>historial de status (<span class="mono">back</span>/<span class="mono">re-open</span>)</td></tr>
+      <tr><td>¿Cuánto tardamos en cerrar?</td><td><b>Defect Age</b> / MTTR</td><td>created → resolved</td></tr>
+      <tr><td>¿Cuánto ruido genera el reporte?</td><td><b>Rejection Ratio</b> = (Dup+REJ+CNR)/total</td><td>resolution / status</td></tr>
     </tbody>
   </table>
-  <div class="notes">EP without BVA misses off-by-one. A status field with no invalid-transition ATC is an incomplete plan. The triggers are binding.</div>
+  <div class="notes">ESTA es la slide núcleo de la petición. El orden siempre: pregunta primero, métrica después, campo al final. Cada fila es directamente construible (o casi) con los campos UPEX. Escape Rate es la estrella — la siguiente slide la desarrolla.</div>
 </section>
 
-<section class="slide" data-title="ATC craft rules">
-  <p class="kicker">ATC craft rules</p>
-  <h2 class="h2" data-anim="fade-up">Five Rules That Decide Acceptance at Review</h2>
-  <ul class="blist anim-stagger-list">
-    <li><b>ATCs are atomic.</b> An ATC NEVER calls another ATC. Reusable chains live in a Steps module (no @atc).</li>
-    <li><b>Locators inline.</b> No locators/*.ts. Reused in 2+ ATCs of the same component? Promote to a private readonly arrow function.</li>
-    <li><b>Helpers vs ATCs.</b> Read-only GET is a helper (@step). A state-changing action is an ATC. A GET that verifies the action lives INSIDE the ATC.</li>
-    <li><b>Fixed inside, flow outside.</b> Status / required fields / redirect go in the ATC; combined-outcome checks go in the test file.</li>
-    <li><b>Max 2 positional params.</b> 3+ must use a named object param — fn(args: Args).</li>
-  </ul>
-  <div class="notes">These five are the recurring rejection reasons. Internalize them and most of your code passes review on the first pass.</div>
-</section>
+<!-- 27. JQL -->
+<section class="slide" data-title="JQL">
+  <p class="kicker">de la pregunta a la query</p>
+  <h2 class="h2" data-anim="fade-up">JQL — el Lenguaje de los Dashboards</h2>
+  <div class="terminal mt-s">
+    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>JQL · proyecto BK</span></div>
+<pre><span class="cmt"># Todos los defectos críticos aún abiertos</span>
+<span class="kw">project</span> = BK <span class="kw">AND</span> issuetype <span class="kw">in</span> (Bug, Defect) <span class="kw">AND</span> <span class="str">"Severity[Select List]"</span> = Crítica <span class="kw">AND</span> statusCategory != Done
 
-<section class="slide" data-title="Layers">
-  <p class="kicker">the architecture you must respect</p>
-  <h2 class="h2" data-anim="fade-up">KATA's Layers — Never Collapse Them</h2>
-  <div class="flow mt-m">
-    <div class="stage"><div class="sx">1</div><div><h4>TestContext</h4><p>config, logger, faker, environment accessors.</p></div></div>
-    <div class="stage"><div class="sx">2</div><div><h4>ApiBase / UiBase</h4><p>HTTP helpers (typed tuple returns) and Playwright helpers.</p></div></div>
-    <div class="stage"><div class="sx">3</div><div><h4>Domain Components + Steps</h4><p>UsersApi, LoginPage — @atc lives here. Steps = reusable ATC chains (no @atc).</p></div></div>
-    <div class="stage"><div class="sx">4</div><div><h4>Fixtures → Tests</h4><p>Api/Ui/Steps/Test fixtures inject; tests orchestrate ATCs into scenarios.</p></div></div>
+<span class="cmt"># Escape: bugs post-release vs defects in-sprint</span>
+<span class="kw">project</span> = BK <span class="kw">AND</span> issuetype = Bug      <span class="cmt">→ 27 (escaparon)</span>
+<span class="kw">project</span> = BK <span class="kw">AND</span> issuetype = Defect   <span class="cmt">→ 4  (contenidos)</span>
+
+<span class="cmt"># Agrupar por componente (necesita Components relleno)</span>
+<span class="kw">project</span> = BK <span class="kw">AND</span> issuetype = Bug <span class="kw">ORDER BY</span> component
+
+<span class="cmt"># Ruido de reporte: descartados</span>
+<span class="kw">project</span> = BK <span class="kw">AND</span> status <span class="kw">in</span> (Duplicated, REJECTED, <span class="str">"Cannot Reproduce"</span>)  <span class="cmt">→ 6</span></pre>
   </div>
-  <p class="dim mt-s">A higher layer may use a lower one, never the reverse.</p>
-  <div class="notes">Flattening these layers is an automatic rejection. The separation is what lets API helpers, UI helpers, and agnostic utilities stay in their correct homes.</div>
+  <div class="notes">JQL es el motor detrás de cada gadget de dashboard. Una pregunta de calidad bien planteada se traduce casi 1:1 a una cláusula JQL + un group-by. Mostrar que los campos son literalmente los filtros.</div>
 </section>
 
-<section class="slide" data-title="Fixture selection">
-  <p class="kicker">fixture selection — load-bearing every test</p>
-  <h2 class="h2" data-anim="fade-up">Pick the Fixture, Decide if a Browser Opens</h2>
-  <table class="dtable mt-m">
-    <thead><tr><th>Test type</th><th>Fixture</th><th>Browser?</th><th>Use when</th></tr></thead>
+<!-- 28. METRICS TERMINOLOGY -->
+<section class="slide" data-title="Terminología">
+  <p class="kicker">vocabulario de métricas de defectos</p>
+  <h2 class="h2" data-anim="fade-up">Las Métricas que Debes Nombrar</h2>
+  <table class="dtable mt-s" style="font-size:14px">
+    <thead><tr><th>Métrica</th><th>Qué mide</th><th>Fórmula (en términos UPEX)</th></tr></thead>
     <tbody>
-      <tr><td><b>API only</b></td><td>{ api }</td><td>No (lazy)</td><td>Pure API — default for tests/integration/**</td></tr>
-      <tr><td><b>UI only</b></td><td>{ ui }</td><td>Yes</td><td>UI-focused, no API setup</td></tr>
-      <tr><td><b>Hybrid</b></td><td>{ test }</td><td>Yes</td><td>Setup via API, drive via UI, verify via API</td></tr>
-      <tr><td><b>Precondition chains</b></td><td>{ steps }</td><td>Depends</td><td>3+ ATCs repeated across 3+ files</td></tr>
+      <tr><td><b>Defect Escape Rate</b></td><td>Fugas a producción</td><td>Bugs / (Bugs + Defects)</td></tr>
+      <tr><td><b>DDP / DRE</b></td><td>Eficiencia de detección</td><td>Defects / (Defects + Bugs) — el inverso del escape</td></tr>
+      <tr><td><b>Defect Density</b></td><td>Concentración</td><td>Defectos por Story / por Component / por módulo</td></tr>
+      <tr><td><b>Reopen Rate</b></td><td>Calidad del fix</td><td>reabiertos (<span class="mono">back</span>) / cerrados</td></tr>
+      <tr><td><b>Defect Age / MTTR</b></td><td>Velocidad de cierre</td><td>tiempo medio created → Closed</td></tr>
+      <tr><td><b>Rejection Ratio</b></td><td>Calidad del reporte</td><td>(Duplicated + REJECTED + CNR) / total</td></tr>
+      <tr><td><b>Severity Index</b></td><td>Gravedad ponderada</td><td>Σ(peso × conteo) / total</td></tr>
     </tbody>
   </table>
-  <p class="dim mt-s">Never request { ui } for a test that never touches the UI — it opens a browser for nothing.</p>
-  <div class="notes">Wrong fixture means a missing browser context or a needless slow browser launch. Playwright lazily instantiates only the fixtures a test requests.</div>
+  <div class="notes">Definir cada término en clave de gestión de incidencias, no de ejecución de tests. DDP/DRE y Escape Rate son inversos: cuánto contienes vs cuánto se fuga. Estas son las palabras que un Senior QA debe poder usar con propiedad.</div>
 </section>
 
-<section class="slide" data-title="Data strategy">
-  <p class="kicker">test data strategy — classify during PLANNING</p>
-  <h2 class="h2" data-anim="fade-up">Discover → Modify → Generate (Strict Priority)</h2>
-  <div class="steps s4 anim-stagger-list">
-    <div class="step"><div class="num">1</div><h4>Discover</h4><p>Query the system for data already in the required state. Zero DB impact. Preferred.</p></div>
-    <div class="step"><div class="num">2</div><h4>Modify</h4><p>Find existing data, mutate it via API into the required state. One mutation.</p></div>
-    <div class="step"><div class="num">3</div><h4>Generate</h4><p>Create from scratch via faker payload + POST. Last resort; pollutes the env.</p></div>
-    <div class="step"><div class="num">4</div><h4>Blocker</h4><p>No pattern feasible → flag NOT automatable, document the gap, escalate.</p></div>
+<!-- 29. ESCAPE RATE HERO -->
+<section class="slide" data-title="Escape rate">
+  <p class="kicker">la métrica estrella del shift-left</p>
+  <h2 class="h2" data-anim="fade-up">Defect vs Bug = tu Medidor de Escape</h2>
+  <p class="lede mt-s">Aquí la taxonomía paga. Como <b>Defect = en sprint</b> y <b>Bug = post-release</b>, su proporción <b>es</b>, literalmente, la salud del shift-left: ¿cuánto contenemos vs cuánto se fuga?</p>
+  <div class="mgrid mt-m">
+    <div class="mcard"><div class="mv grad">4</div><div class="mk">Defects (contenidos)</div><div class="md">cazados dentro del sprint</div></div>
+    <div class="mcard"><div class="mv grad">27</div><div class="mk">Bugs (escapados)</div><div class="md">descubiertos post-release</div></div>
+    <div class="mcard"><div class="mv" style="color:var(--bad)">87%</div><div class="mk">Escape Rate aparente</div><div class="md">27 / (27+4)</div></div>
   </div>
-  <p class="dim mt-s">Override: use Generate even when data could be discovered IF the test mutates state (avoid order dependencies).</p>
-  <div class="notes">This classification happens in the plan, never deferred to coding. Discover runs in beforeAll; if it finds nothing the test uses test.skip — never an expect on precondition data.</div>
+  <div class="callout warn mt-m"><h4>Lee el número con honestidad</h4><p>Un 87% aparente puede significar fugas reales — <b>o</b> que el equipo registra casi todo como "Bug" sin usar el work type Defect. La métrica revela el escape <b>y</b> la disciplina de taxonomía. Ambas son hallazgos accionables.</p></div>
+  <div class="notes">Punto crítico de honestidad: con solo 4 Defects registrados, el 87% probablemente refleja sub-uso del tipo Defect más que fuga pura. Eso mismo es un hallazgo: para que esta métrica sea fiable, hay que usar el work type Defect en sprint disciplinadamente. La distinción Bug/Defect del usuario es justo lo que la hace posible.</div>
 </section>
 
-<section class="slide" data-title="beforeAll trap">
-  <p class="kicker">the beforeAll trap</p>
-  <h2 class="h2" data-anim="fade-up">Never Put expect() Inside beforeAll</h2>
-  <div class="callout warn"><h4>Watch out</h4><p>A failing beforeAll assertion kills EVERY test in the describe block — including unrelated ones — and hides what really broke.</p></div>
-  <div class="callout mt-m"><h4>Right pattern</h4><p>beforeAll DISCOVERS only (no assertions, populates describe-scope vars). Each test guards its own precondition: <span class="mono">if (!order) return test.skip(true, 'No order available')</span>. The report then distinguishes "skipped — missing data" from "failed — real bug". Cleanup: Discover needs none; Modify restores in afterAll; Generate deletes in afterEach.</p></div>
-  <div class="notes">A subtle but high-impact rule. Assertions in shared setup turn one missing fixture into a wall of red failures that obscures the actual signal.</div>
-</section>
-
-<section class="slide" data-title="API component code">
-  <p class="kicker">code phase — the API component shape</p>
-  <h2 class="h2" data-anim="fade-up">A KATA API Component (Layer 3)</h2>
-  <div class="terminal mt-m">
-    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>OrdersApi.ts</span></div>
-<pre><span class="kw">export class</span> <span class="fn">OrdersApi</span> <span class="kw">extends</span> <span class="fn">ApiBase</span> {
-  <span class="kw">private readonly</span> baseEndpoint = <span class="str">'/api/v1/orders'</span>;
-
-  <span class="fn">@step</span>                                <span class="cmt">// helper — read-only, no @atc</span>
-  <span class="kw">async</span> <span class="fn">getOrderById</span>(id: <span class="kw">string</span>): Promise&lt;[APIResponse, Order]&gt; {
-    <span class="kw">return this</span>.<span class="fn">apiGET</span>&lt;Order&gt;(<span class="str">`${this.baseEndpoint}/${id}`</span>);
-  }
-
-  <span class="fn">@atc</span>(<span class="str">'TICKET-ID'</span>)                      <span class="cmt">// ATC — state-changing</span>
-  <span class="kw">async</span> <span class="fn">createOrderSuccessfully</span>(payload: CreateOrderRequest) {
-    <span class="kw">const</span> [response, body, sent] =
-      <span class="kw">await this</span>.<span class="fn">apiPOST</span>(<span class="kw">this</span>.baseEndpoint, payload);
-    <span class="fn">expect</span>(response.<span class="fn">status</span>()).<span class="fn">toBe</span>(<span class="num">201</span>);  <span class="cmt">// FIXED assertion</span>
-    <span class="fn">expect</span>(body.id).<span class="fn">toBeDefined</span>();       <span class="cmt">// FIXED assertion</span>
-    <span class="kw">return</span> [response, body, sent];       <span class="cmt">// 3-tuple: enables chaining</span>
-  }
-}</pre>
+<!-- 30. DASHBOARD BLUEPRINT -->
+<section class="slide" data-title="Dashboard">
+  <p class="kicker">el home de producto en jira</p>
+  <h2 class="h2" data-anim="fade-up">El Dashboard que Producto Quiere Ver</h2>
+  <div class="grid g3 mt-s">
+    <div class="card card-accent"><h4>Salud general</h4><p class="dim">Gadgets: por <b>type</b>, por <b>status</b> (lifecycle slice), Escape Rate. <span class="tag ok">listo en BK</span></p></div>
+    <div class="card card-accent"><h4>Gravedad &amp; causa</h4><p class="dim">Pie por <b>Severity</b>, por <b>Root Cause</b>, por <b>Error Type</b>. <span class="tag warn">con slice "sin asignar"</span></p></div>
+    <div class="card card-accent"><h4>Ownership</h4><p class="dim">Por <b>Component</b> + Reopen trend + Aging. <span class="tag no">bloqueado: rellenar Components</span></p></div>
   </div>
-  <div class="notes">Note the order: baseEndpoint, constructor, helpers, then ATCs. GET/DELETE return 2-tuples; POST/PUT/PATCH return 3-tuples so tests can compare what was sent against what came back.</div>
+  <div class="callout mt-m"><h4>El objetivo final</h4><p>Una página donde el PO/PM abre Jira y, sin preguntar a nadie, <b>ve</b>: cuántas incidencias vivas, qué tan graves, qué parte de la app sufre, si el fix mejora. La gestión de incidencias se vuelve transparente.</p></div>
+  <div class="notes">Cerrar el arco: el dashboard NO es de pruebas (eso es otra presentación) — es de gestión de incidencias. Lo construible hoy en BK vs lo que exige higiene primero. Tres bloques: salud, gravedad/causa, ownership.</div>
 </section>
 
-<section class="slide" data-title="Status matrix">
-  <p class="kicker">API status-code matrix</p>
-  <h2 class="h2" data-anim="fade-up">One ATC per Expected Outcome</h2>
-  <table class="dtable mt-m">
-    <thead><tr><th>Outcome</th><th>Status</th><th>ATC name pattern</th><th>Response type</th></tr></thead>
-    <tbody>
-      <tr><td><b>Created</b></td><td>201</td><td>create{Resource}Successfully</td><td>{Resource}Response</td></tr>
-      <tr><td><b>Read</b></td><td>200</td><td>get{Resource}Successfully</td><td>{Resource}/ListResponse</td></tr>
-      <tr><td><b>Delete</b></td><td>204/200</td><td>delete{Resource}Successfully</td><td>void</td></tr>
-      <tr><td><b>Validation error</b></td><td>400</td><td>create{Resource}WithInvalid{Field}</td><td>ApiErrorResponse</td></tr>
-      <tr><td><b>Unauthenticated</b></td><td>401</td><td>get{Resources}Unauthorized</td><td>ApiErrorResponse</td></tr>
-      <tr><td><b>Not found</b></td><td>404</td><td>get{Resource}WithNonExistentId</td><td>ApiErrorResponse</td></tr>
-      <tr><td><b>Conflict</b></td><td>409</td><td>create{Resource}WithDuplicate{Field}</td><td>ApiErrorResponse</td></tr>
-    </tbody>
-  </table>
-  <p class="dim mt-s">Each outcome's status AND shape differ → separate ATC. Error ATCs type the body as ApiErrorResponse.</p>
-  <div class="notes">Types come from @schemas/{domain}.types — only facade files import from @openapi. Forgetting to wire a new component into the fixture's setAuthToken is the #1 cause of surprise 401s.</div>
-</section>
-
-<section class="slide" data-title="UI component code">
-  <p class="kicker">code phase — the UI component & locators</p>
-  <h2 class="h2" data-anim="fade-up">A KATA Page Component with the Locator Ladder</h2>
-  <div class="terminal mt-m">
-    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>LoginPage.ts</span></div>
-<pre><span class="kw">export class</span> <span class="fn">LoginPage</span> <span class="kw">extends</span> <span class="fn">UiBase</span> {
-  <span class="cmt">// shared locator: used in 2+ ATCs → private readonly arrow (lazy)</span>
-  <span class="kw">private readonly</span> submitButton = () =&gt; <span class="kw">this</span>.page.<span class="fn">getByTestId</span>(<span class="str">'login_submit_button'</span>);
-
-  <span class="fn">@atc</span>(<span class="str">'TICKET-ID'</span>)
-  <span class="kw">async</span> <span class="fn">loginWithValidCredentials</span>(data: LoginData): Promise&lt;<span class="kw">void</span>&gt; {
-    <span class="kw">await this</span>.page.<span class="fn">getByTestId</span>(<span class="str">'email_input'</span>).<span class="fn">fill</span>(data.email);  <span class="cmt">// inline (used once)</span>
-    <span class="kw">await this</span>.page.<span class="fn">getByTestId</span>(<span class="str">'password_input'</span>).<span class="fn">fill</span>(data.password);
-    <span class="kw">await this</span>.<span class="fn">submitButton</span>().<span class="fn">click</span>();
-    <span class="kw">await</span> <span class="fn">expect</span>(<span class="kw">this</span>.page).<span class="fn">toHaveURL</span>(/.*dashboard.*/);            <span class="cmt">// fixed assertion</span>
-  }
-}
-<span class="cmt">// Locator ladder:  1 getByTestId  2 getByRole  3 getByLabel  4 getByText  5 CSS/XPath</span>
-<span class="cmt">// BANNED: .btn-primary · div &gt; form &gt; button:nth-child(3) · page.waitForTimeout(3000)</span></pre>
+<!-- 31. QUIZ 3 -->
+<section class="slide" data-title="Quiz 3">
+  <p class="kicker">quiz · parte 3</p>
+  <h2 class="h2" data-anim="fade-up">Métricas &amp; Dashboards</h2>
+  <div class="quiz">
+    <div class="qitem">
+      <div class="qq"><span class="qn">Q1</span><span>El PM pregunta: "¿estamos atrapando los problemas antes de que lleguen al usuario?". ¿Qué métrica responde?</span></div>
+      <div class="opts">
+        <div class="opt" data-correct="1"><span class="mk">A</span><span>Defect Escape Rate = Bugs / (Bugs+Defects)</span></div>
+        <div class="opt"><span class="mk">B</span><span>Severity Index</span></div>
+        <div class="opt"><span class="mk">C</span><span>Defect Age</span></div>
+      </div>
+      <div class="qexp"><b>Defect Escape Rate.</b> La proporción Bug/Defect mide exactamente la fuga, porque Defect=en sprint y Bug=post-release. Es la métrica núcleo del shift-left.</div>
+    </div>
+    <div class="qitem">
+      <div class="qq"><span class="qn">Q2</span><span>En BK, ¿cuál de estos dashboards NO se puede construir de forma fiable hoy?</span></div>
+      <div class="opts">
+        <div class="opt"><span class="mk">A</span><span>Incidencias por status</span></div>
+        <div class="opt"><span class="mk">B</span><span>Incidencias por root cause</span></div>
+        <div class="opt" data-correct="1"><span class="mk">C</span><span>Incidencias por componente</span></div>
+      </div>
+      <div class="qexp"><b>Por componente.</b> Solo 1 de 33 incidencias tiene Components relleno (3%). El gráfico saldría vacío. Status (100% implícito) y Root Cause (79%) sí son fiables.</div>
+    </div>
   </div>
-  <p class="dim mt-s">Coming from the getByRole-first standard? Here data-testid is rung 1 because the dev team provides them as a stable testing contract — getByRole remains the immediate fallback.</p>
-  <div class="notes">Prefer data-testid every time it exists. CSS-class and structural selectors decay on every refactor. UI ATCs return void; assertions live inside.</div>
+  <div class="notes">Conecta las ideas clave de la parte 3: escape rate como métrica estrella y la higiene de campos (Components 1/33). Una métrica más para nombrar: si muchos tickets se reabren vía "back" tras cerrarse, eso es Reopen Rate alto = fixes que no resolvieron de verdad, señal de calidad de desarrollo, no de QA (ver slide 28).</div>
 </section>
 
-<section class="slide" data-title="Test file code">
-  <p class="kicker">tests orchestrate; they don't implement</p>
-  <h2 class="h2" data-anim="fade-up">The Test File — Flows, Not Property Checks</h2>
-  <div class="terminal mt-m">
-    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>processCheckout.test.ts</span></div>
-<pre><span class="kw">import</span> { test, expect } <span class="kw">from</span> <span class="str">'@TestFixture'</span>;   <span class="cmt">// NOT from @playwright/test</span>
-
-test.<span class="fn">describe</span>(<span class="str">'UPEX-411: Apply Discount Code'</span>, () =&gt; {
-  <span class="cmt">// RIGHT: ONE test = complete flow with multiple assertions</span>
-  <span class="fn">test</span>(<span class="str">'UPEX-411: applies % discount when code is valid @critical'</span>,
-    <span class="kw">async</span> ({ api }) =&gt; {
-    <span class="kw">const</span> [, order] = <span class="kw">await</span> api.orders.<span class="fn">createOrderSuccessfully</span>(api.data.<span class="fn">createOrder</span>());
-    <span class="kw">const</span> totals = <span class="kw">await</span> api.orders.<span class="fn">getTotals</span>({ orderId: order.id });
-    <span class="fn">expect</span>(order.discountApplied).<span class="fn">toBe</span>(<span class="kw">true</span>);
-    <span class="fn">expect</span>(totals.finalAmount).<span class="fn">toBe</span>(totals.baseAmount - totals.discountAmount);
-  });
-});
-<span class="cmt">// WRONG: six tests each checking one field of the same response.</span>
-<span class="cmt">// Ticket-ID in describe AND every test(). One ticket per describe; never split across files.</span></pre>
+<!-- 32. BEST PRACTICES -->
+<section class="slide" data-title="Buenas prácticas">
+  <p class="kicker">checklist de higiene</p>
+  <h2 class="h2" data-anim="fade-up">Disciplina de Defect Management</h2>
+  <div class="grid g2 mt-s">
+    <ul class="blist">
+      <li><b>Usa el work type correcto</b> — Defect en sprint, Bug post-release. Es lo que hace medible el escape.</li>
+      <li><b>Rellena Components siempre</b> — sin él, no hay dashboard de ownership.</li>
+      <li><b>Severity ≠ Priority</b> — dos ejes, dos campos, dos preguntas.</li>
+      <li><b>Evidencia siempre</b> — captura, trace o log embebidos.</li>
+    </ul>
+    <ul class="blist">
+      <li><b>Fija Root Cause tras el RCA</b> — alimenta la mejora de proceso.</li>
+      <li><b>Triagea con honestidad</b> — Duplicated/WAD/CNR mantienen limpia la señal.</li>
+      <li><b>Enlaza US ↔ incidencia</b> — <span class="mono">causes</span> / <span class="mono">is blocked by</span> para trazabilidad.</li>
+      <li><b>Primero la pregunta, luego la métrica</b> — nunca el dashboard por el dashboard.</li>
+    </ul>
   </div>
-  <div class="notes">Naming hierarchy: directory = module, file = {verb}{Feature}.test.ts, describe = ticket, test = scenario. Separate tests only for fundamentally different flows, preconditions, or roles.</div>
+  <div class="notes">El checklist operativo. Cada punto es una palanca directa sobre la calidad de las métricas posteriores. La disciplina al reportar HOY es la métrica fiable de MAÑANA.</div>
 </section>
 
-<section class="slide" data-title="Verification loop">
-  <p class="kicker">code phase — the verification loop</p>
-  <h2 class="h2" data-anim="fade-up">Run + Verify, In This Exact Order</h2>
-  <div class="steps s4 anim-stagger-list">
-    <div class="step"><div class="num">1</div><h4>Build</h4><p>types → component class → register in fixture → test file.</p></div>
-    <div class="step"><div class="num">2</div><h4>Test</h4><p>bun run test &lt;path&gt; — all green, zero retries used.</p></div>
-    <div class="step"><div class="num">3</div><h4>Types + Lint</h4><p>types:check (tsc --noEmit), then lint:check. Fix tests BEFORE chasing lint.</p></div>
-    <div class="step"><div class="num">4</div><h4>Manifest</h4><p>kata:manifest → git add → kata:manifest:check (the husky pre-commit gate).</p></div>
+<!-- 33. TAKEAWAYS -->
+<section class="slide" data-title="Conclusiones">
+  <p class="kicker">para llevar</p>
+  <h2 class="h2" data-anim="fade-up">Tres Ideas que se Quedan</h2>
+  <div class="steps s3 mt-l">
+    <div class="step"><div class="num">1</div><h4>El momento define el tipo</h4><p>Bug = defecto = síntoma idéntico. Lo que cambia es cuándo nace y qué le dice al equipo. Defect contiene; Bug se fuga; Improvement mejora.</p></div>
+    <div class="step"><div class="num">2</div><h4>Un workflow, los mismos campos</h4><p>Estándar UPEX: las tres incidencias comparten esquema. La disciplina al rellenar — sobre todo Components — es la materia prima de toda métrica.</p></div>
+    <div class="step"><div class="num">3</div><h4>Mide preguntas, no datos</h4><p>Un dashboard es un set de respuestas. Pregunta primero, métrica después, campo al final. Escape Rate es la estrella del shift-left.</p></div>
   </div>
-  <p class="dim mt-s">Optional: bun allure:agent for an AI-readable markdown report per @atc block.</p>
-  <div class="notes">Order matters. A component not registered in its fixture is unreachable. The manifest must be regenerated and staged or the pre-commit hook blocks the commit.</div>
+  <div class="notes">El cierre de los tres conceptos. Si el público recuerda solo tres cosas, que sean estas.</div>
 </section>
 
-<section class="slide" data-title="Review gate">
-  <p class="kicker">review phase — the merge gate</p>
-  <h2 class="h2" data-anim="fade-up">A Clean Review Is the Merge Gate</h2>
-  <ul class="blist anim-stagger-list">
-    <li><b>Three shared checklists first.</b> Component / ATC / Test-file review — naming, layer extension, decorators, tuple returns, inline locators, ticket-ID prefix.</li>
-    <li><b>Then the delta.</b> E2E delta (locator quality, condition-based waits, session reuse) OR API delta (facade compliance, tuple discipline, status coverage, auth).</li>
-    <li><b>Coverage gates the handoff.</b> Beyond HTTP status: §3.4.1 input-domain (EP + BVA boundaries) and §3.4.2 state-transition / idempotency / concurrency / timeout must be covered or marked explicitly N/A.</li>
-    <li><b>Severity model.</b> CRITICAL &amp; HIGH block merge; MEDIUM recommended; LOW nice-to-have. A hardcoded waitForTimeout or missing @atc is CRITICAL.</li>
-    <li><b>Revision ceiling.</b> Max 2 revision loops. Still not APPROVED after 2 rounds? Escalate to the user; never loop forever.</li>
-    <li><b>Optional adversarial gate.</b> For high-risk changes (new fixtures, shared base edits) run a dual-judge review before commit.</li>
-  </ul>
-  <div class="notes">Every failed checklist item is a blocker. The handoff checklist ('ready for CI') must be all-true: zero CRITICAL, zero HIGH, all three gates green.</div>
-</section>
-
-<section class="slide" data-title="Bug protocol">
-  <p class="kicker">quality gates G1–G4 &amp; the bug protocol</p>
-  <h2 class="h2" data-anim="fade-up">When a Test Uncovers a Real Bug</h2>
-  <div class="callout"><h4>Named gates block progression</h4><p>G1 Plan exists → G2 Tests pass → G3 Review APPROVED → G4 Progress updated.</p></div>
-  <div class="callout warn mt-m"><h4>If G2 fails on a REAL product bug</h4><p>(1) search the tracker for an existing bug; (2) if reported, annotate <span class="mono">test.fail('Blocked by {BUG-KEY}')</span> or tag <span class="mono">@blocked:{BUG-KEY}</span> and keep it; (3) if not, show the observed-vs-expected diff, get confirmation, then file the bug; (4) record it in PROGRESS.md. Only THEN may G2 be soft-overridden. A failing test with no bug key behind it is never an acceptable override.</p></div>
-  <div class="notes">This keeps a found bug visible and traceable instead of silently skipped. The @blocked tag lets regression-testing exclude it from GO/NO-GO until the fix lands.</div>
-</section>
-
-<section class="slide divider" data-title="Part 2">
+<!-- 34. THANKS -->
+<section class="slide center tc" data-title="Cierre">
   <div>
-    <p class="part-no">PART 02</p>
-    <h1 class="h1">The Acceleration<br><span class="grad">one command does it all</span></h1>
-    <p class="lede">Everything in Part 1 — scope picking, the plan, the layered code, the three-gate review — is what /test-automation drives from the terminal. You stay the approver; the AI is the executor.</p>
+    <h1 class="h1"><span class="grad">Reporta con Disciplina. Mide con Preguntas.</span></h1>
+    <p class="lede" style="margin:14px auto">Distinguir (Bug/Defect/Improvement) → Gestionar (un workflow, los mismos campos) → Medir (de campos rellenos a dashboards que el equipo de producto entiende de un vistazo).</p>
+    <p class="lede" style="margin:14px auto">← → navegar · S notas del orador · O resumen · T tema</p>
   </div>
-  <div class="notes">Now we map the manual craft onto the skill. The human still gates the plan and reviews failures; the AI does the heavy reading and writing.</div>
-</section>
-
-<section class="slide" data-title="Trigger">
-  <p class="kicker">the trigger</p>
-  <h2 class="h2" data-anim="fade-up">How You Invoke It</h2>
-  <div class="terminal mt-m">
-    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>claude-code</span></div>
-<pre><span class="p">▸ </span><span class="c">/test-automation</span>
-
-<span class="o">Triggers on: "write test", "automate test", "create E2E test",</span>
-<span class="o">"create API test", "integration test", "KATA", "page object",</span>
-<span class="o">"API component", "ATC", "review test code", "automate this ticket".</span>
-
-<span class="p">▸ </span><span class="c">Write an E2E test for the checkout flow — add product to</span>
-<span class="c">  cart, go to checkout, confirm the purchase.</span>
-
-<span class="o">  ↳ Always loads BEFORE any test code — KATA fixture selection,</span>
-<span class="o">    inline-locator rule, ATC-identity rule, and import aliases</span>
-<span class="o">    differ from standard Playwright conventions.</span></pre>
-  </div>
-  <div class="notes">The skill auto-loads on these phrases. It explicitly will NOT trigger for running suites (regression-testing), documenting TCs (test-documentation), or onboarding a repo (project-discovery).</div>
-</section>
-
-<section class="slide" data-title="Preflight gate">
-  <p class="kicker">before everything — readiness preflight gate (MANDATORY)</p>
-  <h2 class="h2" data-anim="fade-up">The Readiness Gate Runs BEFORE Any Planning</h2>
-  <ul class="blist anim-stagger-list">
-    <li><b>Framework adapted.</b> No ATCs are written against the boilerplate's Example* scaffolds. Still generic? STOP — run /project-discovery → /adapt-framework first (the gate never auto-runs them).</li>
-    <li><b>Toolchain + manifest clean.</b> bun run test / types:check / lint:check resolve at t=0, not at Phase 3; kata:manifest:check clean before proposing components or ATCs.</li>
-    <li><b>Live environment + credentials.</b> Authored tests run against the active env: URL reachable, test users in .env (per role if applicable), Playwright browsers installed.</li>
-    <li><b>MCPs at PLAN-time.</b> The OpenAPI MCP (explore endpoints) and DBHub MCP (explore schema) are needed while DESIGNING ATCs and classifying data in Phase 1 — not just at run-time.</li>
-    <li><b>Two laws.</b> args-as-answers (what's already provided is never re-asked) and probe-don't-assume; gaps and REDs surface as ONE checklist, STOP on any blocking RED.</li>
-  </ul>
-  <p class="dim mt-s">After the gate comes Phase 0: if a prior session exists for the scope, it offers resume / restart / abort — you pick up exactly where you left off.</p>
-  <div class="notes">A recent, MANDATORY addition to the skill: it runs before the Phase 0 resume check and the scope picker. It prevents discovering mid-Code that a credential, an MCP, or the framework adaptation was missing. Distinct from Phase 1's anti-duplication pre-flight (which cross-checks the manifest for reuse); this gate is about tools and environment being ready to write and run code.</div>
-</section>
-
-<section class="slide" data-title="Auto-loaded context">
-  <p class="kicker">what it auto-loads</p>
-  <h2 class="h2" data-anim="fade-up">Context the Skill Pulls In For You</h2>
-  <div class="grid g2 mt-l anim-stagger-list">
-    <div class="card card-accent"><h4>Registry &amp; doctrine</h4><p class="dim">kata-manifest.json (anti-duplication gate, MANDATORY first read), the KATA architecture + typescript-patterns references, and the existing tests/components/ shapes.</p><span class="tag mt-s">read first</span></div>
-    <div class="card card-accent"><h4>Requirements &amp; types</h4><p class="dim">The Story folder synced via jira:sync-issues get &lt;KEY&gt; --include-comments (ACs, scope, rules, comments), the ATP, api/schemas/ types, and .env credentials.</p><span class="tag mt-s">per ticket</span></div>
-  </div>
-  <div class="notes">The subagent reads all this in its own context, not the orchestrator's — keeping the main thread lean. The manifest is included in every Plan and Code briefing.</div>
-</section>
-
-<section class="slide" data-title="Orchestration">
-  <p class="kicker">the orchestration pattern</p>
-  <h2 class="h2" data-anim="fade-up">Command Center + Subagents, One per Phase</h2>
-  <div class="flow mt-m">
-    <div class="stage"><div class="sx">1</div><div><h4>Plan — single subagent</h4><p>Returns spec.md + automation-plan.md as JSON; keeps KATA reads out of the orchestrator.</p></div></div>
-    <div class="stage"><div class="sx">2</div><div><h4>Code — sequential subagent</h4><p>Edits many files in isolation, returns a changed-files list + one-line summaries (orchestrator never reads diffs).</p></div></div>
-    <div class="stage"><div class="sx">3</div><div><h4>Review — 3 parallel verifiers</h4><p>One runs test, one types:check, one lint:check, simultaneously.</p></div></div>
-    <div class="stage"><div class="sx">4</div><div><h4>Aggregate — inline</h4><p>0 blockers → merge candidate; &gt;0 → reject and surface verbatim, NO auto-fix.</p></div></div>
-  </div>
-  <div class="notes">Each phase has distinct context-isolation needs. On any Verifier failure the orchestrator STOPS, returns the failing report verbatim, and does not re-dispatch Code without user approval.</div>
-</section>
-
-<section class="slide" data-title="Tools">
-  <p class="kicker">the tools it drives</p>
-  <h2 class="h2" data-anim="fade-up">CLI + MCP Under the Hood</h2>
-  <table class="dtable mt-m">
-    <thead><tr><th>Tool</th><th>Role</th></tr></thead>
-    <tbody>
-      <tr><td><b>bun run jira:sync-issues</b></td><td>Materialize Story/ATP/TC into local .md (reads fields acli view can't)</td></tr>
-      <tr><td><b>/acli</b></td><td>Jira writes — comment automated-test status back, transitions</td></tr>
-      <tr><td><b>/xray-cli (bun xray)</b></td><td>Xray TMS sync — test executions, run status (jira-xray modality)</td></tr>
-      <tr><td><b>test / types:check / lint:check</b></td><td>The three quality gates</td></tr>
-      <tr><td><b>kata:manifest(:check)</b></td><td>Regenerate + validate the Component/ATC registry</td></tr>
-      <tr><td><b>api:sync</b></td><td>Regenerate OpenAPI TypeScript types</td></tr>
-      <tr><td><b>/playwright-best-practices + /playwright-cli</b></td><td>Generic Playwright craft + live browser exploration</td></tr>
-    </tbody>
-  </table>
-  <p class="dim mt-s">Detailed reads via the sync script; writes via /acli; never acli view for customfield_*.</p>
-  <div class="notes">Reads and writes are split deliberately. The skill loads /playwright-best-practices in every Code subagent alongside itself — KATA rules here, generic Playwright craft there.</div>
-</section>
-
-<section class="slide" data-title="Artifacts">
-  <p class="kicker">what it emits, and where</p>
-  <h2 class="h2" data-anim="fade-up">Artifacts: Plans, Code, Session State</h2>
-  <div class="grid g2 mt-l anim-stagger-list">
-    <div class="card card-accent"><h4>Plans &amp; code</h4><p class="dim">spec.md, automation-plan.md, atc/*.md under .context/PBI/.../test-specs/&lt;scope&gt;/ (committed); component code in tests/components/{api,ui,steps}/; test files in tests/{e2e,integration}/{module}/.</p><span class="tag mt-s">committed</span></div>
-    <div class="card card-accent"><h4>Session &amp; traceability</h4><p class="dim">Session index + progress at .session/test-automation/&lt;scope&gt;/, archived on ACCEPT; kata-manifest.json updated; @atc('ID') linking each ATC to its TMS ticket; NDJSON → atc_results.json capture.</p><span class="tag mt-s">session state</span></div>
-  </div>
-  <div class="notes">The session plan.md is a thin index citing the canonical PBI artifacts — domain content lives once in the PBI tree, never duplicated. On a clean review the session is archived and a memory summary is saved.</div>
-</section>
-
-<section class="slide" data-title="Live transcript">
-  <p class="kicker">a realistic run</p>
-  <h2 class="h2" data-anim="fade-up">Live Transcript — Automating a Checkout Test</h2>
-  <div class="terminal mt-m">
-    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>claude-code</span></div>
-<pre><span class="p">▸ </span><span class="c">/test-automation</span>
-<span class="o">  Scope? (module / ticket / regression) — ticket UPEX-411</span>
-
-<span class="o">[Preflight] framework adapted ✓ toolchain ✓ env+creds ✓ manifest ✓ browsers ✓ — GREEN.</span>
-<span class="o">[Phase 0] No prior session for UPEX-411 → fresh start.</span>
-<span class="o">[Plan]   Syncing Story… jira:sync-issues get UPEX-411 --include-comments</span>
-<span class="o">         kata-manifest.json: CheckoutPage exists; reuse. New ATC: completeCheckoutSuccessfully.</span>
-<span class="o">         Wrote spec.md (3 TCs) + automation-plan.md. Fixture: { test }. Data: Discover. 1 question.</span>
-
-<span class="p">▸ </span><span class="c">Plan ready. 3 TCs, 1 new ATC, reuses CheckoutPage. Approve? (y/n)  y</span>
-
-<span class="o">[Code]   Coded CheckoutPage.completeCheckoutSuccessfully + processCheckout.test.ts</span>
-<span class="o">         test … 3 passed (0 retries)   types:check … clean   lint:check … clean</span>
-<span class="o">[Review] Verifier A/B/C parallel → 0 blockers.  ACCEPT.</span>
-<span class="o">         Manifest regenerated + staged. Session archived.</span>
-
-<span class="o">>> Local gate green. Ready for /git-flow-master: cut test/UPEX-411-checkout, push, PR.</span></pre>
-  </div>
-  <div class="notes">Note the human approval gate after Plan, the three parallel verifiers, and the explicit handoff. The skill stops at a clean local review — it does not branch, push, or open PRs itself.</div>
-</section>
-
-<section class="slide" data-title="Human in control">
-  <p class="kicker">how the human stays in control</p>
-  <h2 class="h2" data-anim="fade-up">The AI Executes; You Decide</h2>
-  <ul class="blist anim-stagger-list">
-    <li><b>Plan-before-code gate.</b> Phase 2 never starts without a written plan you approved; risky/blocker preconditions are surfaced for your call.</li>
-    <li><b>No silent auto-fix.</b> On any Verifier failure the AI STOPS and returns the failing report verbatim; it won't mutate code or re-run Code without approval.</li>
-    <li><b>Real-bug confirmation.</b> A found defect needs your yes before a bug is filed and the test is annotated.</li>
-    <li><b>Anti-duplication is enforced.</b> The manifest + husky pre-commit gate block duplicate components and ATC IDs mechanically.</li>
-    <li><b>Stops before Git.</b> Clean local review is the boundary; branching, pushing, and PRs stay with /git-flow-master on your command.</li>
-  </ul>
-  <div class="notes">The acceleration is in the typing and reading, not in the judgment. Every consequential decision — approve plan, confirm bug, push — remains yours.</div>
-</section>
-
-<section class="slide" data-title="Takeaways">
-  <p class="kicker">// takeaways</p>
-  <h2 class="h2" data-anim="fade-up">Three Rules That Keep a Suite Trustworthy</h2>
-  <div class="grid g3 mt-l anim-stagger-list">
-    <div class="card card-accent"><h4>1 · One ATC = one test case</h4><p class="dim">An atomic mini-flow with fixed assertions, decorated @atc('TICKET-ID'), never calling another ATC. Same output + different data = one parameterized ATC.</p></div>
-    <div class="card card-accent"><h4>2 · Plan → Code → Review, always</h4><p class="dim">Never jump to code; never skip the manifest check; never merge with a CRITICAL/HIGH finding or a non-green gate.</p></div>
-    <div class="card card-accent"><h4>3 · Stability is discipline</h4><p class="dim">retries: 0, no hardcoded waits, every test makes its own data, no expect() in beforeAll. A flaky pass is a bug.</p></div>
-  </div>
-  <div class="notes">If your audience remembers only three things, these are them. They are the difference between a suite people trust and one they ignore.</div>
-</section>
-
-<section class="slide center tc" data-title="Stat">
-  <div>
-    <p class="kicker">the payoff</p>
-    <div class="bigstat"><span class="grad">@atc('TICKET-ID')</span></div>
-    <h3>1:1 traceability, end to end. Every ATC links to a real TMS ticket; results flow back via NDJSON → atc_results.json → TMS sync. The manifest knows what exists in code; the result file knows what ran. Together: coverage you can defend to a PO.</h3>
-  </div>
-  <div class="notes">This traceability is what elevates KATA from 'tests that pass' to 'evidence of what is covered and why' — the artifact a quality conversation actually needs.</div>
-</section>
-
-<section class="slide center tc" data-title="Thanks">
-  <div>
-    <h1 class="h1"><span class="grad">Plan It, Code It to the Layers, Gate It Green.</span></h1>
-    <p class="lede" style="margin:14px auto">The craft: scope → plan → KATA layers → ATC identity → data → three-gate review. The acceleration: <kbd>/test-automation</kbd> drives all of it — you approve the plan and review the failures.</p>
-    <p class="lede" style="margin:14px auto">← → navigate · S speaker notes · O overview</p>
-  </div>
-  <div class="notes">Close by tying the two halves together: the AI does not replace the methodology — it executes the exact methodology you just learned, faster, with you in the loop.</div>
+  <div class="notes">Cierra atando las tres partes. La gestión de incidencias bien hecha es lo que convierte tickets sueltos en una imagen viva y honesta de la salud del producto.</div>
 </section>
 
 </div>
@@ -1938,5 +2077,58 @@ test.<span class="fn">describe</span>(<span class="str">'UPEX-411: Apply Discoun
   });
 })();
 
+</script>
+<script>
+/* defect-management :: interactive quiz — click to answer, reveals correct + explanation */
+(function(){
+  document.addEventListener('click', function(e){
+    var opt = e.target.closest ? e.target.closest('.opt') : null;
+    if(!opt) return;
+    var item = opt.closest('.qitem');
+    if(!item || item.classList.contains('answered')) return;
+    item.classList.add('answered');
+    var opts = item.querySelectorAll('.opt');
+    for(var i=0;i<opts.length;i++){
+      if(opts[i].dataset.correct) opts[i].classList.add('reveal-correct');
+    }
+    opt.classList.remove('reveal-correct');
+    opt.classList.add(opt.dataset.correct ? 'correct' : 'wrong');
+  }, true);
+})();
+</script>
+<script>
+/* deck :: mobile scale-to-fit — fixed 16:9 layout scaled into narrow/short viewports.
+   Desktop (vw>=1024 && vh>=640) is left untouched (native fluid). Preview iframes skipped. */
+(function(){
+  try{
+    if (new URLSearchParams(location.search).has('preview')) return;
+    var BASE_W = 1280, BASE_H = 720;
+    var deck = document.querySelector('.deck');
+    if (!deck) return;
+    function fit(){
+      var vw = window.innerWidth, vh = window.innerHeight;
+      if (vw >= 1024 && vh >= 640){
+        deck.style.transform = '';
+        deck.style.width = ''; deck.style.height = '';
+        deck.style.position = ''; deck.style.left = ''; deck.style.top = '';
+        document.documentElement.style.overflow = ''; document.body.style.overflow = '';
+        return;
+      }
+      var scale = Math.min(vw / BASE_W, vh / BASE_H);
+      deck.style.width = BASE_W + 'px';
+      deck.style.height = BASE_H + 'px';
+      deck.style.transformOrigin = 'top left';
+      deck.style.transform = 'scale(' + scale + ')';
+      deck.style.position = 'absolute';
+      deck.style.left = ((vw - BASE_W * scale) / 2) + 'px';
+      deck.style.top = ((vh - BASE_H * scale) / 2) + 'px';
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+    }
+    fit();
+    window.addEventListener('resize', fit);
+    window.addEventListener('orientationchange', function(){ setTimeout(fit, 60); });
+  }catch(e){ /* never break the deck over a fit error */ }
+})();
 </script>
 </body></html>
