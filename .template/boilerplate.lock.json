@@ -4,15 +4,15 @@
   "templateCommit": "",
   "perComponentCommit": {
     "claude-config": "f539bc96114e98ea9691f5cd8a7c53401f766e9b",
-    "scripts": "36e23cb24b50a7e5269f4033c90eef28c0681393",
+    "scripts": "be97d8b96f03caba6f7ad74a034f97e6ac39d7dd",
     "docs": "1441165aa14c13b998ae38265d67b0b55cf24f60",
     "cli": "bc869c81ae1a9a83c33ffc5840d1d5075213034e",
     "vscode": "57a2dfdfc1ecaf50b569114e328908e14e211aea",
     "husky": "12f869d346cc4bc05df88f61a12e18c75e9c9b43",
-    "agents-docs": "fdc7af826b833b2aa6c607b311a8aeef7fd80cc0",
+    "agents-docs": "be97d8b96f03caba6f7ad74a034f97e6ac39d7dd",
     "tooling": "57a2dfdfc1ecaf50b569114e328908e14e211aea",
     "commands": "02b93fbc43a3295d4c058e45443b17d8c6a8cfd1",
-    "skills": "36e23cb24b50a7e5269f4033c90eef28c0681393",
+    "skills": "2888403a719d9b18e023873c9c35d90caa0b8acb",
     "env-template": "fdc7af826b833b2aa6c607b311a8aeef7fd80cc0"
   },
   "syncedComponents": [],
@@ -25,6 +25,12 @@
         "api/.openapi-config.json",
         ".playwright-mcp/",
         ".backups/"
+      ]
+    },
+    ".gitignore": {
+      "lastSyncedSha": "f3184f5cef1aeb34e57079198388edbda3df5427",
+      "appendedLines": [
+        ".template/claude-md.upstream.sha"
       ]
     }
   },
@@ -43,6 +49,6 @@
     }
   },
   "cliVersion": "7.0",
-  "lastSyncedAt": "2026-06-11T14:14:49.040Z",
+  "lastSyncedAt": "2026-06-25T19:01:54.067Z",
   "variableSystemVersion": 1
 }
