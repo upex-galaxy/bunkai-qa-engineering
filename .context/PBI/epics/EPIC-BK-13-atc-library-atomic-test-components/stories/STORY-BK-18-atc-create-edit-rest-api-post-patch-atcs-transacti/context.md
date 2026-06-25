@@ -26,11 +26,10 @@ Per master-test-plan §1: ATC authoring is the **product's reason to exist** + t
 2. **DB seed data** — do staging fixtures exist for a project P-1 with module M-10, US-100, AC-1/AC-2 (and a cross-US AC-9, cross-project module M-99) to exercise the negative cross-entity scenarios? Stage 1 test-data identification must confirm or seed. RESOLVED — "Openapi Test Project" + cross-subtree module in "BK-9 Module Test Project".
 3. **Test isolation** — created ATCs pollute the shared staging DB. Need a cleanup strategy (delete created rows post-run, or tag with a session marker). Precedent: BK-15/BK-17 seeded → exercised → cleaned up via Supabase MCP. RESOLVED — smoke ATC DELETEd, cascade verified, counts restored to baseline.
 
-## Final Status
+## Final Status (RE-RUN 2026-06-20)
 
-**Result:** FAILED (12/13 TCs, 92%)
-**Workflow Complete:** 2026-06-08
-**Defect:** BK-96 (Major, non-blocking) — happy-path PATCH `/atcs/{id}` returns 412 instead of 200 though the edit commits.
-**BK-18 status:** BLOCKED (via `defect_reported`).
-**Artifacts:** ATP BK-94 · ATR BK-95 · Bug BK-96
-**Next:** Wait for BK-96 fix → re-run Stage 2 on H2 → repeat Stage 3. Do NOT QA Sign-Off until H2 returns 200.
+**Result:** PASSED (GO) — 12/12 TCs.
+**BK-96:** verified FIXED end-to-end (X-If-Match contract; PR #30 / 421a917). NOT reopened.
+**BK-18 status:** QA Approved (qa_sign_off).
+**Artifacts:** ATP BK-94 (updated) · Tests BK-149..160 · Pre-Condition BK-161 · Test Execution BK-95 (all PASSED).
+**Observation:** affected_test_ids returns null (contract said []).

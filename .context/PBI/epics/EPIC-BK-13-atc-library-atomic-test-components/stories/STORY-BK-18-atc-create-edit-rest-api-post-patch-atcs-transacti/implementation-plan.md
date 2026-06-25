@@ -9,7 +9,7 @@ Autor: Dev (sprint-development) · Canónico en Jira `spec*implementation*plan`,
 
 ## Resumen
 
-API REST transaccional para ***crear y editar ATCs**** (Atomic Test Components) con sus `steps` y `assertions` en una sola llamada. Cabeza de la cadena ATC — BK-19/20/21/22/23/27 dependen de este contrato. Consumidor primario = CLI/scripts vía ****PAT (bearer)***; la UI (BK-19) aún no existe.
+API REST transaccional para ***crear y editar ATCs**** (Acceptance Test Cases) con sus `steps` y `assertions` en una sola llamada. Cabeza de la cadena ATC — BK-19/20/21/22/23/27 dependen de este contrato. Consumidor primario = CLI/scripts vía ****PAT (bearer)***; la UI (BK-19) aún no existe.
 
 ## Hallazgo de diseño bloqueante (y su resolución)
 

@@ -177,3 +177,37 @@ BK-18 IS implemented at the API layer. Evidence:
 - **QA comment**: Template B (Story FAILED) posted on BK-18 — md-to-adf → `comment create --body-file`. Human-authored, no AI attribution.
 - **ATR cache materialization BLOCKED**: `bun run jira:sync-issues get BK-95` skips it — issue type `Test Execution` not declared under `work_types:` in `.agents/jira-required.yaml` (same Stage-1 gap affecting BK-94/BK-95). Did NOT hand-write the cache (rule). Fix = owner adds `test_execution`/`test_plan` work_type entries, then re-run sync.
 - **Errors during execution**: first bug-create attempt failed (option fields sent as `{value:"mayor"}` → "Specify a valid value" 400); corrected to option `{id:"10026"}` and succeeded on retry. No auto-retry of transitions; transition succeeded first try.
+
+---
+
+## RE-RUN 2026-06-20 (jira-xray, API+DB)
+
+### Defect retest verdict
+- BK-96 **FIXED** (verified E2E — gap left by Nahuel's code-review-only retest). Fix = optimistic-lock token moved to custom header **`X-If-Match`** (PR #30, commit 421a917). Legacy `If-Match` → 412 at Vercel edge (documented limitation). NOT reopened.
+
+### New TMS artifacts (Stage 1)
+- ATP BK-94 description REPLACED with refactored 12-TC parametrized ATP (EP+BVA, X-If-Match contract).
+- 12 Xray Manual Tests created + added to Test Plan BK-94 + linked `Test` to BK-18 (coverage 12/12):
+  | TC | Key | Focus | P |
+  |----|-----|-------|---|
+  | TC01 | BK-149 | POST happy 201 (layer UI/API/Unit) | P0 |
+  | TC02 | BK-150 | auth/scope gate (401/401/403) | P0 |
+  | TC03 | BK-151 | ac_outside_user_story 422 + rollback | P0 |
+  | TC04 | BK-152 | module_outside_project_subtree 422 + rollback | P0 |
+  | TC05 | BK-153 | steps_position_invalid (parametrized) | P1 |
+  | TC06 | BK-154 | request boundaries BVA (title/steps/tags/layer) | P1 |
+  | TC07 | BK-155 | transactional rollback DB-count | P0 |
+  | TC08 | BK-156 | PATCH happy 200 X-If-Match (BK-96 regression) | P0 |
+  | TC09 | BK-157 | optimistic lock X-If-Match (match/stale/absent) | P1 |
+  | TC10 | BK-158 | PATCH 404 not_found | P1 |
+  | TC11 | BK-159 | PATCH empty-body no-op | P2 |
+  | TC12 | BK-160 | immutable fields slug/US/module | P2 |
+
+### Pending cleanup
+- Probe ATCs 48f99904, 56a977c1 left in staging (DELETE=405, no endpoint). Clean via DBHub at Stage 2 end + any ATCs created during the matrix run.
+
+### Stage 2/3 results (RE-RUN)
+- Execution: 12/12 PASSED (API+DB). BK-96 verified fixed E2E (X-If-Match). DB rollback + persistence + cleanup verified (0/0/0). Final matrix: evidence/rerun-2026-06-20/FINAL-MATRIX.md.
+- Xray: 12 Tests populated with steps (add-step; create --step did NOT persist — gotcha) + shared Pre-Condition BK-161 linked to all 12. Test Execution BK-95: all 12 runs PASSED. ATR body published to BK-95 description.
+- Reporting: QA comment (PASSED) on BK-18. BK-18 transitioned In Test -> QA Approved (qa_sign_off).
+- Verdict: GO. Non-blocking observation: affected_test_ids returns null (contract said []).
