@@ -157,6 +157,20 @@ required:
     options: [blocked, failed, n_r, passed]
     description: Per-Test issue execution status (Jira-native TMS).
     used_by: [test-documentation]
+  # ---- Cross-work-type QA ownership (consumed by every work-type skill) ----
+  qa_assignee:
+    name: QA Assignee
+    type: user
+    fallback: { target: comment, label: QA Assignee }
+    description: |
+      The QA who owns testing for a work item — the QA-lane parallel of the native
+      `assignee` (dev owner), distinct from `reporter` (who raised it ≠ who retests it).
+      Set on EVERY work-type issue (story / tech_story / tech_debt / bug / defect /
+      improvement) to the authenticated session user (self-assign); NEVER overwrite an
+      existing owner except on an explicit, justified handover. Doctrine:
+      agentic-qa-core/references/defect-management-doctrine.md (Part 2).
+    used_by:
+      [sprint-testing, test-documentation, test-automation, regression-testing, shift-left-testing]
 
 optional:
   # Fields that enhance the workflow but won't break it if missing.

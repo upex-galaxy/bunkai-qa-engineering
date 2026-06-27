@@ -572,8 +572,9 @@ If G2 fails because a test uncovers a real product bug (not flaky, not a coding 
    - The `@blocked:{BUG-KEY}` tag lets `/regression-testing` filter the test out of GO/NO-GO decisions until the bug is fixed.
 3. **If the bug is NOT reported**:
    - Present the observed vs expected diff to the user and wait for explicit confirmation that it is a real defect.
-   - On approval, delegate bug-report creation to `/sprint-testing` (Stage 3 Reporting — see `sprint-testing/references/reporting-templates.md` §1).
-   - Once the bug key is issued, apply step 2 above.
+   - **Classify it first** — Bug vs Defect vs Improvement by the FEATURE's lifecycle stage, NOT by where the failing test ran (feature live above Staging → Bug; still pre-release → Defect; under-specified/absent AC surfaced by a test-beyond-AC → Improvement), per `agentic-qa-core/references/defect-management-doctrine.md` (Part 1). Also identify the affected product component. (This is the Jira classification — independent of the `@atc(...)` Allure severity, which is reporting metadata, not the Jira severity field.)
+   - On approval, delegate report creation to `/sprint-testing` (Stage 3 Reporting — see `sprint-testing/references/reporting-templates.md` §1), **passing the classification + affected component in the handoff** so `/sprint-testing` files the correct issue type. `/sprint-testing` performs the actual filing (QA Assignee, components, QA process epic).
+   - Once the issue key is issued, apply step 2 above.
 4. **Document in `PROGRESS.md`** — record each blocked test + bug key in the Session Log (and the Blocked tests table, see §13.2) so the next session does not re-investigate the same failure.
 
 Only after steps 1–4 can G2 be overridden and STEP 4 (Review) start. A failing test without a bug key behind it is never an acceptable override.
@@ -647,4 +648,4 @@ T01 ──┬──► T02 ──► T04
 | `signup > invalid email rejects` | UPEX-999 | Server-side validation missing | 2026-04-20 |
 ````
 
-The Blocked tests table is populated from §12.3 — every `@blocked:{BUG-KEY}` test must appear here with the reason and the date the block began. Remove a row only when the bug is closed and the test goes green.
+The Blocked tests table is populated from §12.3 — every test marked `test.fail('Blocked by {BUG-KEY}')` + tagged `@blocked:{BUG-KEY}` (the blocked-by-bug convention defined in `automation-standards.md` §7, distinct from `softFail` and `@flaky`) must appear here with the bug key, the reason, and the date the block began. Remove a row only when the bug is closed and the test goes green.

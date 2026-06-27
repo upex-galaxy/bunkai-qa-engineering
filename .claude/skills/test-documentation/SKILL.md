@@ -35,6 +35,7 @@ One hard prerequisite: the tests being documented must describe behavior that wa
 Requires `agentic-qa-core`. Loads on demand:
 
 - `agentic-qa-core/references/test-design-doctrine.md` — **MANDATORY before deriving TCs from acceptance criteria.** Governs the 1:N TC explosion, the formal-technique triggers, and the floor-not-ceiling coverage model. EP + BVA are operationalized here against the canon.
+- `agentic-qa-core/references/defect-management-doctrine.md` — **MANDATORY before parenting a Test or raising an Improvement.** Governs QA process-epic parenting (every `Test` hangs from the **QA Test Repository** epic, Part 4), the mandatory `components` axis (Part 3), and the Improvement bridge for under-specified ACs (Part 1). This skill files no Bugs.
 - `agentic-qa-core/references/briefing-template.md`, `./dispatch-patterns.md`, `./orchestration-doctrine.md`, `./session-management.md`, `./preflight-gate.md`, `./traceability-linking.md` — cited inline by the sections that use them.
 
 ## Compact Rules
@@ -138,8 +139,8 @@ Does this project have Xray installed and licensed on Jira?
 
 | Artifact | Modality jira-xray | Modality jira-native |
 |----------|---------------------------|---------------------------|
-| **ATP** (Acceptance Test Plan) | Xray `Test Plan` issue, named `Test Plan: {{PROJECT_KEY}}-{n}`, linked to US | Story `{{jira.acceptance_test_plan}}` field (source of truth); falls back to a `## Acceptance Test Plan (ATP)` comment only when the field is absent. No separate issue. |
-| **ATR** (Acceptance Test Results) | Xray `Test Execution` issue with Test Runs per TC, Environment, Begin/End Date, named `Test Results: {{PROJECT_KEY}}-{n}` | Story `{{jira.acceptance_test_results}}` field (source of truth); falls back to a `## Acceptance Test Results (ATR)` comment only when the field is absent. |
+| **ATP** (Acceptance Test Plan) | `Test Plan` issue titled `ATP: {STORY-KEY}: {story title}`, parented to the **QA Master Test Plan** epic, linked to the US | Same `Test Plan` issue **by excellence** (native Jira work type, Xray-independent); falls back to the Story `{{jira.acceptance_test_plan}}` field (then a `## Acceptance Test Plan (ATP)` comment) **only when the Test Plan work type is absent** from the instance. |
+| **ATR** (Acceptance Test Results) | `Test Execution` issue with Test Runs per TC, Environment, Begin/End Date, titled `ATR: {STORY-KEY}: Story Testing`, parented to the **QA Test Artifacts** epic | Same `Test Execution` issue **by excellence**; falls back to the Story `{{jira.acceptance_test_results}}` field (then a `## Acceptance Test Results (ATR)` comment) **only when the Test Execution work type is absent** from the instance. |
 | **TC** (Test Case) | Xray `Test` issue (type Manual / Cucumber / Generic) | Jira-native `Test` issue type (or `Task` with custom type), Description carries the full TC template |
 | **Test Set / Precondition / Test Plan** | First-class Xray issue types | Not available — use labels + Epic grouping |
 | **Result sync** | CI imports JUnit/Cucumber via `[TMS_TOOL] Import Results` -> Test Runs auto-update | Custom script updates Test Status field on each TC + comment with build context |
@@ -268,6 +269,8 @@ One AC yields **multiple** TCs by default. Derive them by the AC's shape, then l
 
 These are **candidate scenarios** derived by technique — not yet TMS work items. ROI (Phase 2) then decides which become **persistent regression TCs** (Candidate → automated, Manual → manual) and which stay **Deferred** (recorded in the prioritization report, **NOT created in the TMS**). Deriving widely is free; persisting is ROI-gated — most scenarios are Deferred. You document a scenario because it will be re-run, never to hit a count.
 
+> **Improvement bridge (`agentic-qa-core/references/defect-management-doctrine.md` Part 1).** When a test-beyond-AC exposes a gap **because the AC was under-specified or absent** — the system violated no defined criterion — the right artifact is an **Improvement** issue (filed per the doctrine, or delegated to `/sprint-testing`), NOT a regression TC and NOT a silent widening of the Story's ACs. Track the proposal as an Improvement; do not edit the Story's AC set after the fact.
+
 ---
 
 ## Phase 2 — Prioritize (ROI)
@@ -330,15 +333,17 @@ Every scenario ends in exactly one of these buckets. There is no fourth.
 
 Every documented TC must have a parent Regression Epic (single test repository for the project).
 
+> **This Regression Epic IS the QA Test Repository process epic** (`agentic-qa-core/references/defect-management-doctrine.md` Part 4). Resolve it **found-or-created** by the configured name `qa.qa_epics.test_repository_epic.name` (**"QA Test Repository"**); on absence create it once, write the test-repository strategy into its description, and cache its key into `.agents/project.yaml` `qa.qa_epics.test_repository_epic.key`. It is a **QA process epic — never a product/dev epic, never unparented.** Per the three-axis model this parent says only "which QA bucket tracks the Test"; the Test's **product area travels on `components`** (Part 3) and its **Story coverage travels on the issue link** (Part 4) — never on this parent.
+
 > **Prerequisite**: Load `/acli` skill before executing commands below.
 
 ```
 [ISSUE_TRACKER_TOOL] Search Issues:
   project: {{PROJECT_KEY}}
-  query: type = Epic AND (summary ~ "regression" OR summary ~ "test repository" OR labels = "test-repository")
+  query: type = Epic AND summary ~ "QA Test Repository"      # resolve by configured name qa.qa_epics.test_repository_epic.name
 ```
 
-If none exists, ask the user before creating one with name `{{PROJECT_KEY}} Test Repository` and labels `test-repository, regression`.
+If none exists, ask the user before creating one with name `QA Test Repository` (the value of `qa.qa_epics.test_repository_epic.name`) and labels `test-repository, regression`.
 
 ### Preflight: Test Set — feature organizer (1:1 with the Epic)
 
@@ -354,8 +359,8 @@ Four entities. **Traceability model (jira-xray):** the **Story links ONLY to its
 | Entity | Created | Naming | Main content |
 |--------|---------|--------|--------------|
 | **US** (Story) | Pre-existing | `{{PROJECT_KEY}}-{n}` | The requirement |
-| **ATP** | Stage 1 (or now, if missing) | `Test Plan: {{PROJECT_KEY}}-{n}` | Test Analysis + AC-to-TC coverage |
-| **ATR** | Stage 1 (or now, if missing) | `Test Results: {{PROJECT_KEY}}-{n}` | Test Report + execution results |
+| **ATP** | Stage 1 (or now, if missing) | `ATP: {STORY-KEY}: {story title}` | Test Analysis + AC-to-TC coverage |
+| **ATR** | Stage 1 (or now, if missing) | `ATR: {STORY-KEY}: Story Testing` | Test Report + execution results |
 | **TC** | Stage 4 (this phase) | `{US_ID}: TC#: should <expected outcome> [<connector> <condition>] [given <precondition>]` | Precondition + Action + Expected |
 | **Test Set** (xray only) | Lazily in Stage 4 if missing (ask first); else pre-existing (async) | `Test Set: <EPIC_KEY> <feature>` | Feature-level grouping (1:1 Epic) of promoted regression Tests. Native: replaced by a feature/Epic label, no entity. |
 
@@ -547,13 +552,13 @@ Resolve `[TMS_TOOL]` / `[ISSUE_TRACKER_TOOL]` via `CLAUDE.md` §Tool Resolution.
 ```
 [ISSUE_TRACKER_TOOL] Search Issues:
   project: {{PROJECT_KEY}}
-  query: type = Epic AND labels = "test-repository"
+  query: type = Epic AND summary ~ "QA Test Repository"   # resolve by configured name qa.qa_epics.test_repository_epic.name
 
 # If none, ask the user before creating:
 [ISSUE_TRACKER_TOOL] Create Issue:
   project: {{PROJECT_KEY}}
   issueType: Epic
-  title: "{{PROJECT_KEY}} Test Repository"
+  title: "QA Test Repository"
   labels: test-repository, regression, qa
 ```
 
@@ -563,9 +568,10 @@ Resolve `[TMS_TOOL]` / `[ISSUE_TRACKER_TOOL]` via `CLAUDE.md` §Tool Resolution.
 
 ```
 # ATP = Xray Test Plan issue
+# Parent Epic: QA Master Test Plan
 [TMS_TOOL] Create TestPlan:
   project: {{PROJECT_KEY}}
-  title: Test Plan: {{PROJECT_KEY}}-{n}
+  title: ATP: {STORY-KEY}: {story title}
   tests: []                       # filled as TCs are created
 
 [ISSUE_TRACKER_TOOL] Link Issues:
@@ -574,9 +580,10 @@ Resolve `[TMS_TOOL]` / `[ISSUE_TRACKER_TOOL]` via `CLAUDE.md` §Tool Resolution.
   inward:  {STORY_KEY}
 
 # ATR = Xray Test Execution issue
+# Parent Epic: QA Test Artifacts
 [TMS_TOOL] Create Execution:
   project: {{PROJECT_KEY}}
-  title: Test Results: {{PROJECT_KEY}}-{n}
+  title: ATR: {STORY-KEY}: Story Testing
   testPlan: {ATP_KEY}
   environment: {from .env or session context}
   tests: []                       # filled at Stage 3 or via CI import
@@ -587,6 +594,7 @@ Resolve `[TMS_TOOL]` / `[ISSUE_TRACKER_TOOL]` via `CLAUDE.md` §Tool Resolution.
   inward:  {STORY_KEY}
 
 # TC = Xray Test issue (Cucumber for Candidates; Manual for Manual-only)
+# Parent Epic: QA Test Repository
 [TMS_TOOL] Create Test:
   project: {{PROJECT_KEY}}
   type: Cucumber
@@ -615,12 +623,21 @@ Resolve `[TMS_TOOL]` / `[ISSUE_TRACKER_TOOL]` via `CLAUDE.md` §Tool Resolution.
   execution: {ATR_KEY}
 ```
 
-### Modality jira-native (no Xray)
+### Modality jira-native (no Xray) — DEGRADED FALLBACK ONLY
 
+> **Items first (both modalities)**: by excellence ATP is a native Jira `Test Plan` issue
+> (`ATP: {STORY-KEY}: {story title}`, parented to **QA Master Test Plan**) and ATR a `Test
+> Execution` issue (`ATR: {STORY-KEY}: Story Testing`, parented to **QA Test Artifacts**) — use
+> the `[TMS_TOOL] Create TestPlan` / `Create Execution` blocks above, since both are native Jira
+> work types regardless of Xray. The Story-field path below is the **degraded fallback**, used
+> ONLY when those work types are unavailable in the instance and cannot be created/linked. As
+> soon as the items exist they are the single source of truth and the fields are not used.
+> Mirrors `references/tms-architecture.md` §"Modality jira-native — DEGRADED FALLBACK ONLY".
+>
 > **Prerequisite**: Load `/acli` skill before executing commands below.
 
 ```
-# ATP = Story customfield (source of truth). NO separate issue.
+# ATP = Story customfield (fallback only). NO separate issue.
 [ISSUE_TRACKER_TOOL] Update Issue:
   issue: {STORY_KEY}
   fields:
@@ -634,7 +651,7 @@ Resolve `[TMS_TOOL]` / `[ISSUE_TRACKER_TOOL]` via `CLAUDE.md` §Tool Resolution.
     ## Acceptance Test Plan (ATP)
     {Test Analysis body}
 
-# ATR = Story customfield (source of truth). NO separate issue.
+# ATR = Story customfield (fallback only). NO separate issue.
 [ISSUE_TRACKER_TOOL] Update Issue:
   issue: {STORY_KEY}
   fields:

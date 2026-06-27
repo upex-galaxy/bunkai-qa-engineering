@@ -33,6 +33,7 @@ The same three-stage pipeline runs in every mode. Only the entry point and the b
 Requires `agentic-qa-core`. Loads on demand:
 
 - `agentic-qa-core/references/test-design-doctrine.md` — **MANDATORY before designing any ATP / TC coverage from acceptance criteria.** Governs the 5 principles, the floor-not-ceiling coverage model, the 1:N explode-default rule, and the formal-technique triggers.
+- `agentic-qa-core/references/defect-management-doctrine.md` — **MANDATORY before taking a Story into testing and before filing any Bug / Defect / Improvement.** Governs issue-type classification (Bug vs Defect vs Improvement by feature lifecycle), the QA-Assignee self-assign + never-overwrite rule, mandatory Components, the three-axis model (parent = QA process epic · link = source Story · components = product module), and Severity→Priority auto-derive.
 - `agentic-qa-core/references/briefing-template.md`, `./dispatch-patterns.md`, `./orchestration-doctrine.md`, `./session-management.md`, `./preflight-gate.md`, `./adr-doctrine.md` — cited inline by the sections that use them.
 
 ## Compact Rules
@@ -43,6 +44,14 @@ Requires `agentic-qa-core`. Loads on demand:
 - 1:N is the default: explode every non-trivial AC into multiple cases (EP partitions + boundaries + states + contexts). Collapsing an AC to one case requires a written "trivially atomic" justification.
 - Apply techniques by trigger: EP always; BVA wherever a range / limit / length / date-window exists; State-Transition for stateful entities; Decision Table when 2+ conditions interact; Pairwise when 3+ combinable factors (log the reduction); Error-Guessing charters for experience-based risk.
 - A criterion is a business assertion; a test case is a concrete exploration of it. Run the Test-Design Checklist before finalizing the ATP.
+
+**Defect-management doctrine (binding — full canon: `agentic-qa-core/references/defect-management-doctrine.md`):**
+
+- CLASSIFY before filing — stop hardcoding "Bug". **Bug** = affected feature already live above Staging (end-user visible); **Defect** = feature still pre-release (Staging or below), the normal output of sprint testing; **Improvement** = not a broken AC (an enhancement, or an under-specified/absent AC surfaced by a test-beyond-AC). Classification follows the FEATURE's lifecycle stage, not where the problem was found (Part 1).
+- `qa_assignee` (`{{jira.qa_assignee}}`) = the authenticated session user (self-assign). Set it when a Story is TAKEN INTO TESTING (start_testing) and on every filed Bug / Defect / Improvement. NEVER-OVERWRITE an existing owner (read-before-write); distinct from the native dev `assignee` (Part 2).
+- `components` (native, MANDATORY) = the affected product module/Epic, must pre-exist in the Jira Components module (Part 3).
+- Three-axis model: **parent** = QA Defect Management process epic (`qa.qa_epics.defect_epic`, found-or-created — NEVER a product/dev epic, NEVER the Story); **issue link** = the source Story (traceability); **components** = product module (Part 4).
+- `priority` (native) is auto-derived from `{{jira.severity}}` (critica→Highest, mayor→High, moderada→Medium, menor→Low, trivial→Lowest); override with a 1-line justification (Part 5.1).
 
 **Sprint-testing operational rules:**
 
@@ -235,7 +244,7 @@ Batch-sprint mode: Phase 0 fires once per ticket as the loop enters it (NOT once
 
 Every invocation starts by initializing the session, even in batch mode. Session Start:
 
-0. **Resolve TMS modality** (Xray on Jira vs Jira-native). This determines whether ATP/ATR will be created as Xray `Test Plan` / `Test Execution` issues (Modality jira-xray) or as Story custom-field + comment mirrors (Modality jira-native). Full resolution algorithm lives in `test-documentation/SKILL.md` §Phase 0 — apply the same four-step probe here (CLAUDE.md -> master-test-plan.md -> list issue types -> ask the user). Persist the result into `test-session-memory.md`.
+0. **Resolve TMS modality** (Xray on Jira vs Jira-native). By excellence ATP/ATR are real Jira items — a `Test Plan` issue (`ATP: {STORY-KEY}: {story title}`) parented to the **QA Master Test Plan** epic, and a `Test Execution` issue (`ATR: {STORY-KEY}: Story Testing`) parented to the **QA Test Artifacts** epic; the Story custom-field + comment mirror (Modality jira-native) is a **fallback ONLY** when those work types are unavailable. The modality probe decides which path is live. Title grammar + epic parenting + the Feature-altitude FTP/FTR names: `references/acceptance-test-planning.md`. Full resolution algorithm lives in `test-documentation/SKILL.md` §Phase 0 — apply the same four-step probe here (CLAUDE.md -> master-test-plan.md -> list issue types -> ask the user). Persist the result into `test-session-memory.md`.
 0.1. **Load required tool skills** — based on the TMS modality resolved in Step 0:
    - Always load `/acli` (Jira WRITE operations: comment, transition, link, custom-field update, bug creation). Detailed READS (ACs, ATP/ATR, description, comments) do NOT use `/acli` — they use `bun run jira:sync-issues get <KEY> --include-comments` then read the synced `.md`. See `agentic-qa-core/references/acli-integration.md` §"Reads vs writes".
    - In **Modality jira-xray**: also load `/xray-cli` for Test / Test Execution / Test Plan / Test Run operations and traceability reads.
