@@ -691,20 +691,20 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <p class="kicker">la regla que más importa</p>
   <h2 class="h2" data-anim="fade-up">El Formato Canónico del Título</h2>
   <div class="nameline">
-    <div class="seg id"><span class="sv">GX-101</span><span class="sl">US_ID o TS_ID</span></div>
+    <div class="seg id"><span class="sv">GX-101</span><span class="sl">US_ID — siempre la Story</span></div>
     <div class="sep">:</div>
     <div class="seg tc"><span class="sv">TC1</span><span class="sl">TC# secuencial</span></div>
     <div class="sep">:</div>
     <div class="seg cond"><span class="sv">should</span><span class="sl">verbo literal (BDD)</span></div>
     <div class="seg core"><span class="sv">log in successfully</span><span class="sl">BEHAVIOR — qué hace</span></div>
-    <div class="seg cond"><span class="sv">when credentials are valid</span><span class="sl">CONDITION — when + condición</span></div>
+    <div class="seg cond"><span class="sv">when credentials are valid</span><span class="sl">CONDITION — when/if · opcional</span></div>
   </div>
   <div class="grid g2 mt-l">
     <div class="card card-soft"><h4><span class="mono">BEHAVIOR</span> — el comportamiento</h4><p class="dim">qué hace el sistema: <span class="mono">log in successfully</span>, <span class="mono">show an authentication error</span>, <span class="mono">create the order</span>.</p></div>
     <div class="card card-soft"><h4><span class="mono">CONDITION</span> — la condición que distingue</h4><p class="dim"><span class="mono">when credentials are valid</span>, <span class="mono">when password is incorrect</span>, <span class="mono">when exceeding 5 failed attempts</span>.</p></div>
   </div>
-  <div class="callout mt-m"><h4>Reglas estructurales</h4><p>Separador literal <span class="mono">: </span> (dos puntos + espacio). El verbo <span class="mono">should</span> abre el comportamiento; <span class="mono">when</span> introduce la condición. <span class="mono">TC#</span> = <span class="mono">TC</span> + número, sin guion ni ceros (<span class="mono">TC1</span>, no <span class="mono">TC-01</span>). Prefijo = TS_ID con Xray+Test Sets, US_ID en el resto.</p></div>
-  <div class="notes">Formato: {US_ID o TS_ID}: TC#: should <BEHAVIOR> when <CONDITION>. El verbo del TC es should (BDD); Validate se reserva para el Set/Suite (slide siguiente). El vocabulario sale del domain-glossary — términos canónicos.</div>
+  <div class="callout mt-m"><h4>Reglas estructurales</h4><p>Separador literal <span class="mono">: </span> (dos puntos + espacio). El verbo <span class="mono">should</span> abre el comportamiento; el conector <span class="mono">when</span> (o <span class="mono">if</span>) introduce la condición — opcional, igual que un <span class="mono">given &lt;precondición&gt;</span> al final. <span class="mono">TC#</span> = <span class="mono">TC</span> + número, sin guion ni ceros (<span class="mono">TC1</span>, no <span class="mono">TC-01</span>). El prefijo es <b>SIEMPRE el US_ID</b> de la Story, en toda modalidad; la membresía a un Test Set es un <b>link</b>, nunca el prefijo.</p></div>
+  <div class="notes">Formato: {US_ID}: TC#: should <BEHAVIOR> [when/if <CONDITION>] [given <PRECONDITION>]. El prefijo es SIEMPRE el US_ID de la Story en toda modalidad — la membresía a un Test Set es un link, nunca el prefijo. El verbo del TC es should (BDD); Validate se reserva para el Set/Suite (slide siguiente). El vocabulario sale del domain-glossary — términos canónicos.</div>
 </section>
 
 <!-- 12. GOOD VS BAD TITLES -->
@@ -760,17 +760,17 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <thead><tr><th>Artefacto</th><th>Formato</th><th>Ejemplo</th></tr></thead>
     <tbody>
       <tr><td>User Story</td><td><span class="mono">{KEY}-{n}</span></td><td><span class="mono">PROJ-123</span></td></tr>
-      <tr><td>ATP (Test Plan)</td><td><span class="mono">Test Plan: {KEY}-{n}</span></td><td><span class="mono">Test Plan: PROJ-123</span></td></tr>
-      <tr><td>ATR (Test Results)</td><td><span class="mono">Test Results: {KEY}-{n}</span></td><td><span class="mono">Test Results: PROJ-123</span></td></tr>
-      <tr><td><b>Test Set</b> (agrupa)</td><td><span class="mono">Validate &lt;feature&gt;</span></td><td><span class="mono">Validate login</span></td></tr>
-      <tr><td><b>Test Case</b> (asevera)</td><td><span class="mono">{US_ID/TS_ID}: TC#: should &lt;BEHAVIOR&gt; when &lt;COND&gt;</span></td><td><span class="mono">GX-101: TC1: should log in successfully when…</span></td></tr>
-      <tr><td>Test Execution</td><td><span class="mono">&lt;Strategy&gt;: &lt;ID&gt;: &lt;SUMMARY&gt;</span></td><td><span class="mono">Regression: TP-50: Sprint 50</span></td></tr>
-      <tr><td>ReTesting (bug)</td><td><span class="mono">ReTest: &lt;BUGID&gt;: &lt;SUMMARY&gt;</span></td><td><span class="mono">ReTest: GX-202: wrong error on bad password</span></td></tr>
-      <tr><td>Precondition</td><td><span class="mono">&lt;EPIC&gt;: &lt;COMPONENT&gt;: PRC: For &lt;ACTION&gt;</span></td><td><span class="mono">CheckoutFlow: Payment: PRC: For processing card</span></td></tr>
+      <tr><td>ATP — Story Test Plan</td><td><span class="mono">ATP: {STORY-KEY}: {story title}</span></td><td><span class="mono">ATP: PROJ-123: Apply discount at checkout</span></td></tr>
+      <tr><td>ATR — Story Test Execution</td><td><span class="mono">ATR: {STORY-KEY}: Story Testing</span></td><td><span class="mono">ATR: PROJ-123: Story Testing</span></td></tr>
+      <tr><td>STP/STR — Sprint</td><td><span class="mono">STP/STR: Sprint#{N}: Regression[ Testing]</span></td><td><span class="mono">STR: Sprint#30: Regression Testing</span></td></tr>
+      <tr><td><b>Test Set</b> (agrupa)</td><td><span class="mono">TS: {EPIC-KEY|module}: Validate &lt;feature&gt;</span></td><td><span class="mono">TS: GX-101: Validate credit card payment</span></td></tr>
+      <tr><td><b>Test Case</b> (asevera)</td><td><span class="mono">{US_ID}: TC#: should &lt;BEHAVIOR&gt; when &lt;COND&gt;</span></td><td><span class="mono">GX-101: TC1: should log in successfully when…</span></td></tr>
+      <tr><td>ReTesting (bug)</td><td><span class="mono">ReTest: {BUG-KEY}: {summary}</span></td><td><span class="mono">ReTest: GX-202: wrong error on bad password</span></td></tr>
+      <tr><td>Precondition</td><td><span class="mono">PRC: {COMPONENT}: {required state}</span></td><td><span class="mono">PRC: Payment: Authenticated user with a saved card</span></td></tr>
     </tbody>
   </table>
-  <div class="callout mt-m"><h4>Dos niveles: <span class="mono">Validate</span> agrupa, <span class="mono">should</span> asevera</h4><p>El <b>Set</b> nombra la feature — <span class="mono">Validate login</span> — y bajo él cada <b>TC</b> asevera un comportamiento: <span class="mono">should redirect to dashboard when credentials are valid</span>, <span class="mono">should show an error when password is incorrect</span>. El verbo te dice el nivel: <span class="mono">Validate</span> = suite, <span class="mono">should</span> = caso.</p></div>
-  <div class="notes">El nombrado embebe la trazabilidad: el ATP/ATR llevan el key del Story; el Set agrupa por feature (Validate <feature>); el TC asevera con should…when y lleva el prefijo del Story/TS. Validate=nivel suite, should=nivel caso — el verbo señala el nivel.</div>
+  <div class="callout mt-m"><h4>Dos niveles: <span class="mono">Validate</span> agrupa, <span class="mono">should</span> asevera</h4><p>El <b>Set</b> nombra la feature — <span class="mono">TS: GX-101: Validate login</span> — y bajo él cada <b>TC</b> asevera un comportamiento: <span class="mono">should redirect to dashboard when credentials are valid</span>, <span class="mono">should show an error when password is incorrect</span>. El prefijo acrónimo (<span class="mono">ATP/ATR/STP/STR/TS/PRC</span>) revela altitud y plan-vs-run en el primer token; el verbo te dice el nivel: <span class="mono">Validate</span> = suite, <span class="mono">should</span> = caso.</p></div>
+  <div class="notes">El nombrado embebe la trazabilidad: cada Plan/Run lleva un prefijo acrónimo de 3 letras (ATP/ATR/STP/STR/FTP/FTR) + el key de la cosa bajo prueba; el Set agrupa por feature (TS: {EPIC|module}: Validate <feature>); el TC asevera con should…when y lleva SIEMPRE el prefijo US_ID del Story — la membresía al Set es un link. Validate=nivel suite, should=nivel caso — el verbo señala el nivel.</div>
 </section>
 
 <!-- 15. CODE-SIDE NAMING -->
@@ -1365,7 +1365,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="card card-accent">
       <h4>Test Status — el ciclo de vida</h4>
       <p class="dim mb-s">"¿Dónde está el TC en su vida de documentación/automatización?" Persiste entre corridas.</p>
-      <div class="row wrap" style="gap:6px"><span class="tag">Draft</span><span class="tag">In Design</span><span class="tag">Ready</span><span class="tag">In Review</span><span class="tag">Candidate</span><span class="tag">Automated</span><span class="tag">Manual</span><span class="tag">Deprecated</span></div>
+      <div class="row wrap" style="gap:6px"><span class="tag">Draft</span><span class="tag">In Design</span><span class="tag">Ready</span><span class="tag">In Review</span><span class="tag">Candidate</span><span class="tag">In Automation</span><span class="tag">Pull Request</span><span class="tag">Automated</span><span class="tag">Manual</span><span class="tag">Deprecated</span></div>
     </div>
     <div class="card card-accent">
       <h4>Execution Status — el resultado de la corrida</h4>
@@ -1388,6 +1388,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <span class="lstate prog">In Review</span><span class="arr">→</span>
     <span class="lstate good">Candidate</span><span class="arr">→</span>
     <span class="lstate prog">In Automation</span><span class="arr">→</span>
+    <span class="lstate new">Pull Request</span><span class="arr">→</span>
     <span class="lstate good">Automated ✓</span>
   </div>
   <div class="lifecycle mt-m">
@@ -1411,8 +1412,8 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <div class="terminal mt-s">
     <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>modelo de trazabilidad (jira-xray)</span></div>
 <pre>User Story (PROJ-123)
-   ├── <span class="gk">is tested by</span> ──→ ATP (Test Plan: PROJ-123)
-   └── <span class="gk">is tested by</span> ──→ ATR (Test Results: PROJ-123)
+   ├── <span class="gk">is tested by</span> ──→ ATP (ATP: PROJ-123: Apply discount at checkout)
+   └── <span class="gk">is tested by</span> ──→ ATR (ATR: PROJ-123: Story Testing)
             ATP <span class="fn">designs</span>          ATR <span class="fn">executes</span>
                   ╲              ╱
                    ▼            ▼
