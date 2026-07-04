@@ -171,7 +171,7 @@ export const config = {
   auth: {
     loginEndpoint: '/auth/signin',
     signupEndpoint: '/auth/signup',
-    tokenEndpoint: '/auth/signin', // Endpoint to intercept for token (used by page.waitForResponse)
+    tokenEndpoint: '/tokens', // PAT mint endpoint (session-authenticated); also intercepted for token via page.waitForResponse
     meEndpoint: '/me',
     tokenLifetimeSeconds: 86400, // 24 hours (1 day) — PATs default to no expiry; this is just the local-cache hint
     // Storage paths for authenticated sessions

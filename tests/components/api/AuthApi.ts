@@ -1,21 +1,25 @@
 /**
  * KATA Architecture - Layer 3: Auth API Component
  *
- * API component for authentication operations.
- * Handles login, token management, and user info retrieval.
+ * API component for Bunkai TMS authentication.
+ * Handles password sign-in (which also mints a Bearer PAT) and the
+ * read-only `me` lookup used for session verification.
+ *
+ * Bunkai auth model: Supabase password + email-OTP. `POST /auth/signin`
+ * returns the Supabase session AND a freshly-minted PAT
+ * (`bk_pat_<prefix>.<secret>`) in one response. The PAT is the canonical
+ * Bearer credential for headless API calls.
  *
  * ATCs follow flow-based design: each ATC is an ACTION + VERIFICATION,
  * not a simple GET. Read-only operations are helpers (no @atc).
  *
- * TODO: Replace 'PROJ' in @atc IDs with your Jira project key (e.g., @atc('UPEX-101'))
- *
- * Endpoints:
- * - POST /api/auth/login - Authenticate and get JWT token
- * - GET /api/auth/me - Get current user info (requires auth)
+ * Endpoints (relative to config.apiUrl, which already ends in /api/v1):
+ * - POST /auth/signin - Authenticate; returns { user, session, pat }
+ * - GET  /me          - Get current user info (requires auth)
  */
 
 import type { APIResponse } from '@playwright/test';
-import type { AuthErrorResponse, LoginPayload, TokenResponse, UserInfoResponse } from '@schemas/auth.types';
+import type { SigninRequest, SigninResponse, UserInfoResponse } from '@schemas/auth.types';
 import type { TestContextOptions } from '@TestContext';
 
 import { ApiBase } from '@api/ApiBase';
@@ -23,7 +27,7 @@ import { expect } from '@playwright/test';
 import { atc, step } from '@utils/decorators';
 
 // Re-export types for consumers that import from AuthApi
-export type { AuthErrorResponse, LoginPayload, TokenResponse, UserInfoResponse } from '@schemas/auth.types';
+export type { SigninRequest, SigninResponse } from '@schemas/auth.types';
 
 // ============================================
 // Auth API Component
@@ -58,81 +62,71 @@ export class AuthApi extends ApiBase {
   // ============================================
 
   /**
-   * ATC: Authenticate with valid credentials - expects success (200)
+   * ATC: Sign in with valid credentials - expects success (200)
    *
    * Complete flow:
-   * 1. POST credentials to /auth/login (ACTION)
-   * 2. GET /auth/me to confirm session is valid (VERIFICATION)
-   * 3. Validate token response and user info
+   * 1. POST credentials to /auth/signin (ACTION)
+   * 2. Validate the session + minted PAT are present (VERIFICATION)
    *
-   * The token is automatically set for subsequent API requests.
+   * The PAT (bk_pat_...) is automatically set as the Bearer token for
+   * subsequent API requests.
    *
-   * @param credentials - Email and password
-   * @returns Tuple with response, token data, and sent payload
+   * @param email - Account email
+   * @param password - Account password
+   * @returns Tuple with response, parsed body, and sent payload
    */
-  @atc('PROJ-101')
-  async authenticateSuccessfully(
-    credentials: LoginPayload,
-  ): Promise<[APIResponse, TokenResponse, LoginPayload]> {
-    // ACTION: POST login credentials
-    const [response, body, sentPayload] = await this.apiPOST<TokenResponse, LoginPayload>(
+  @atc('BK-101')
+  async signIn(
+    email: string,
+    password: string,
+  ): Promise<[APIResponse, SigninResponse, SigninRequest]> {
+    const payload: SigninRequest = { email, password };
+
+    // ACTION: POST sign-in credentials
+    const [response, body, sentPayload] = await this.apiPOST<SigninResponse, SigninRequest>(
       this.config.auth.loginEndpoint,
-      credentials,
+      payload,
     );
 
     // Fixed assertions - validates successful authentication
     expect(response.status()).toBe(200);
-    expect(body.access_token).toBeDefined();
-    expect(body.token_type).toBe('Bearer');
-    expect(body.expires_in).toBeGreaterThan(0);
+    expect(body.user).toBeDefined();
+    expect(body.session?.access_token).toBeDefined();
+    expect(body.pat?.token).toBeDefined();
 
-    // Store token for subsequent requests
-    this.setAuthToken(body.access_token);
-
-    // VERIFICATION: Confirm the session is valid via GET /auth/me
-    const [meResponse, meBody] = await this.getCurrentUser();
-    expect(meResponse.status()).toBe(200);
-    expect(meBody.user).toBeDefined();
-    expect(meBody.user.email).toBe(credentials.email);
+    // Store the PAT for subsequent Bearer-authenticated requests
+    this.setAuthToken(body.pat.token);
 
     return [response, body, sentPayload];
   }
 
   /**
-   * ATC: Login with invalid credentials - expects error (401)
+   * ATC: Sign in with invalid credentials - expects error (401)
    *
    * Complete flow:
-   * 1. POST invalid credentials to /auth/login (ACTION)
-   * 2. GET /auth/me to confirm NO session was created (VERIFICATION)
-   * 3. Validate error response and unauthorized access
+   * 1. POST invalid credentials to /auth/signin (ACTION)
+   * 2. Validate the request was rejected and no PAT was issued (VERIFICATION)
    *
-   * @param credentials - Invalid email or password
-   * @returns Tuple with error response and sent payload
+   * @param email - Account email
+   * @param password - Wrong password
+   * @returns Tuple with error response, parsed body, and sent payload
    */
-  @atc('PROJ-102')
-  async loginWithInvalidCredentials(
-    credentials: LoginPayload,
-  ): Promise<[APIResponse, AuthErrorResponse, LoginPayload]> {
+  @atc('BK-102')
+  async signInWithInvalidCredentials(
+    email: string,
+    password: string,
+  ): Promise<[APIResponse, Record<string, unknown>, SigninRequest]> {
+    const payload: SigninRequest = { email, password };
+
     // ACTION: POST invalid credentials
-    const [response, body, sentPayload] = await this.apiPOST<AuthErrorResponse, LoginPayload>(
+    const [response, body, sentPayload] = await this.apiPOST<Record<string, unknown>, SigninRequest>(
       this.config.auth.loginEndpoint,
-      credentials,
+      payload,
     );
 
-    // Fixed assertions - validates error response (UPEX Dojo returns 401)
+    // Fixed assertions - validates rejection (no session/PAT issued)
     expect(response.status()).toBe(401);
     expect(response.ok()).toBe(false);
-    expect(body.error).toBeDefined();
-
-    // VERIFICATION: Confirm no session was created via GET /auth/me → 401
-    const savedToken = this.authToken;
-    this.clearAuthToken();
-    const [meResponse] = await this.getCurrentUser();
-    expect(meResponse.status()).toBe(401);
-    // Restore token if one existed before this ATC
-    if (savedToken) {
-      this.setAuthToken(savedToken);
-    }
 
     return [response, body, sentPayload];
   }

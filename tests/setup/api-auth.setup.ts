@@ -1,8 +1,8 @@
 /**
  * KATA Architecture - API Auth Setup (Project)
  *
- * Authenticates via API directly using AuthApi.authenticateSuccessfully() ATC.
- * Generates a JWT token for use by Integration tests.
+ * Authenticates via the Bunkai API directly using AuthApi.signIn() ATC.
+ * Persists the minted PAT (bk_pat_...) to api-state.json for Integration tests.
  *
  * Dependencies: global-setup
  * Dependents: integration
@@ -20,38 +20,41 @@ const apiStateFile = config.auth.apiStatePath;
 /**
  * API Authentication Setup
  *
- * 1. Uses AuthApi.authenticateSuccessfully() ATC
- * 2. Saves token to api-state.json for integration tests
+ * 1. Uses AuthApi.signIn() ATC (POST /auth/signin)
+ * 2. Saves the minted PAT to api-state.json for integration tests
  */
 setup('API Setup: authenticate via API', async ({ api }) => {
   console.log('[API Setup] Starting API authentication...');
   console.log(`[API Setup] Target: ${config.apiUrl}${config.auth.loginEndpoint}`);
 
-  // Use AuthApi ATC (UPEX Dojo uses 'email' field)
-  const credentials = {
-    email: config.testUser.email,
-    password: config.testUser.password,
-  };
-  const [response, tokenData] = await api.auth.authenticateSuccessfully(credentials);
+  // Use AuthApi ATC — returns the Supabase session + a freshly-minted PAT
+  const [response, body] = await api.auth.signIn(
+    config.testUser.email,
+    config.testUser.password,
+  );
 
-  // Attach to Allure for debugging
+  // Attach to Allure for debugging (mask the raw PAT)
   await attachRequestResponseToAllure({
     url: response.url(),
     method: 'POST',
-    responseBody: tokenData,
-    requestBody: { email: credentials.email, password: '***' },
+    responseBody: { ...body, pat: { ...body.pat, token: '***' } },
+    requestBody: { email: config.testUser.email, password: '***' },
   });
 
   console.log('[API Setup] Authentication successful');
-  console.log(`[API Setup] Token type: ${tokenData.token_type}`);
-  console.log(`[API Setup] Expires in: ${tokenData.expires_in} seconds`);
+  console.log(`[API Setup] PAT scopes: ${body.pat.scopes.join(', ')}`);
 
-  // Save token to file for use by integration tests
+  // Compute a local-cache hint from the PAT expiry, if present.
+  const expiresIn = body.pat.expires_at
+    ? Math.max(0, Math.floor((Date.parse(body.pat.expires_at) - Date.now()) / 1000))
+    : config.auth.tokenLifetimeSeconds;
+
+  // Save the PAT to file for use by integration tests
   const apiState: ApiState = {
-    token: tokenData.access_token,
-    tokenType: tokenData.token_type,
-    expiresIn: tokenData.expires_in,
-    refreshToken: tokenData.refresh_token ?? null,
+    token: body.pat.token,
+    tokenType: 'Bearer',
+    expiresIn,
+    refreshToken: body.session?.refresh_token ?? null,
     source: 'api-login',
     createdAt: new Date().toISOString(),
   };

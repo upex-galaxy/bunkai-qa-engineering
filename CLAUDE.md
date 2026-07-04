@@ -419,6 +419,20 @@ In order of severity:
 
 ---
 
+## 13.1 FRAMEWORK ADAPTATION (generated 2026-06-29 by `/adapt-framework`)
+
+KATA wired to Bunkai TMS staging. Status: **adapted, smoke-green** (`repo:check` exit 0; api-setup + ui-setup + `@critical` smoke pass on staging).
+
+- **Auth**: hybrid Supabase — cookie session + Bearer PAT (`bk_pat_<prefix>.<secret>`). Signin `POST /api/v1/auth/signin` `{email,password}` → `{user, session, pat}`. Password rule min 8. PATs CANNOT mint PATs (cookie session only → use a browser session). Per-run mint, no auto-refresh.
+- **First entity wired**: `AtcApi` (`@api/AtcApi`) — real surface only: create (POST `/atcs` 201), update (PATCH `/atcs/{id}` 200), search (GET `/atcs/search` 200). No GET-list / GET-single / DELETE exist on ATCs.
+- **OpenAPI source**: URL `https://staging-upexbunkai.vercel.app/api/openapi` (40 endpoints). Facades: `@schemas/auth.types`, `@schemas/atc.types` (only files importing `@openapi`).
+- **Test user**: dedicated owner in `.env` `STAGING_USER_*` (workspace `bunkai-qa-auto-ec8c39`, role owner). member/admin/viewer NOT yet created (Supabase email rate limit); reusable script at `scratchpad/invite-users.sh`.
+- **Smoke**: `tests/e2e/auth/smoke.test.ts` `@critical` — owner email-first login lands on `/projects`. ATC keys: BK-101/102 (auth), BK-201/202/203 (atc).
+- **Discovery gaps**: invited-role users pending rate-limit reset; first real ATC create needs a project→module→user-story→AC hierarchy (defer to `/test-automation`); LOCAL env unprovisioned (staging-only for now); `.env` `ATLASSIAN_URL` = `upexgalaxy69.atlassian.net` vs `project.yaml` `jira.upexgalaxy.com` (drift, harmless).
+- **Gotcha**: a stale EXPORTED shell env `STAGING_USER_*` can shadow `.env` (bun does not override already-set `process.env`). After editing creds, RESTART the session — or export from `.env` inline for local runs.
+
+---
+
 ## 14. GIT STRATEGY
 
 <!-- git-flow-master:strategy:github-flow -->

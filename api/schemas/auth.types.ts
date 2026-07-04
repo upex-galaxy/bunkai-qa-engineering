@@ -1,53 +1,91 @@
 /**
  * KATA Framework - Type Facade: Auth Domain
  *
- * Type definitions for authentication endpoints.
- * When openapi-types.ts is available (after `bun run api:sync`),
- * migrate Custom Types to Schema/Endpoint Types using @openapi imports.
+ * Real Bunkai auth contract pulled from the generated OpenAPI types
+ * (`api/openapi-types.ts`, refreshed via `bun run api:sync`).
+ *
+ * Bunkai auth model: Supabase password + email-OTP. `signin` and `confirm`
+ * both return the Supabase session AND a freshly-minted Bearer PAT
+ * (`bk_pat_<prefix>.<secret>`) in one response. PATs are minted via
+ * `POST /api/v1/tokens` under a cookie session (a PAT cannot mint a PAT).
  *
  * Consumed by: tests/components/api/AuthApi.ts
  *
- * Migration example:
- *   import type { components, paths } from '@openapi';
- *   export type TokenResponse = components['schemas']['TokenResponse'];
- *   type LoginPath = paths['/api/auth/login']['post'];
- *   export type LoginRequest = LoginPath['requestBody']['content']['application/json'];
+ * NOTE: this facade is the ONLY place allowed to import `@openapi`.
+ * Components import the named types below from `@schemas/auth.types`.
  */
+
+import type { components, paths } from '@openapi';
+
+// ============================================================================
+// Endpoint Types - POST /api/v1/auth/signin (password sign-in + auto-minted PAT)
+// ============================================================================
+
+type SigninPath = paths['/api/v1/auth/signin']['post'];
+
+/** Sign-in request body (email + password, optional PAT shaping). */
+export type SigninRequest = SigninPath['requestBody']['content']['application/json'];
+
+/** Sign-in success (200): { user, session, pat, warning }. */
+export type SigninResponse = SigninPath['responses']['200']['content']['application/json'];
+
+// ============================================================================
+// Endpoint Types - POST /api/v1/auth/confirm (verify email OTP → session + PAT)
+// ============================================================================
+
+type ConfirmPath = paths['/api/v1/auth/confirm']['post'];
+
+/** Confirm (email OTP) request body. */
+export type ConfirmRequest = ConfirmPath['requestBody']['content']['application/json'];
+
+/** Confirm success (200): same shape as signin. */
+export type ConfirmResponse = ConfirmPath['responses']['200']['content']['application/json'];
+
+// ============================================================================
+// Endpoint Types - POST /api/v1/auth/check-email (email-first routing probe)
+// ============================================================================
+
+type CheckEmailPath = paths['/api/v1/auth/check-email']['post'];
+
+/** Check-email request body. */
+export type CheckEmailRequest = CheckEmailPath['requestBody']['content']['application/json'];
+
+/** Check-email success (200): email registration/confirmation status. */
+export type CheckEmailResponse = CheckEmailPath['responses']['200']['content']['application/json'];
+
+// ============================================================================
+// Endpoint Types - POST /api/v1/tokens (mint a PAT; cookie-session only)
+// ============================================================================
+
+type CreateTokenPath = paths['/api/v1/tokens']['post'];
+
+/** Create-token request body (name, scopes, optional workspace + TTL). */
+export type CreateTokenRequest = CreateTokenPath['requestBody']['content']['application/json'];
+
+/** Create-token success (201): raw `token` shown exactly once. */
+export type CreateTokenResponse = CreateTokenPath['responses']['201']['content']['application/json'];
 
 // ============================================================================
 // Schema Types (from components.schemas)
 // ============================================================================
 
-// TODO: Uncomment after running `bun run api:sync` and replace Custom Types below
-// import type { components, paths } from '@openapi';
-// export type TokenResponse = components['schemas']['TokenResponse'];
-// export type UserInfo = components['schemas']['UserInfoModel'];
+/**
+ * Minted Personal Access Token block returned inline by signin/confirm.
+ * No standalone `Pat` schema exists in the spec — it lives inside SigninResponse.
+ */
+export type Pat = components['schemas']['SigninResponse']['pat'];
 
 // ============================================================================
-// Endpoint Types - POST /api/auth/login
+// Legacy Custom Types (RETAINED — consumed by AuthApi.ts + ui-auth.setup.ts)
 // ============================================================================
-
-// TODO: Uncomment after running `bun run api:sync`
-// type LoginPath = paths['/api/auth/login']['post'];
-// export type LoginPayload = LoginPath['requestBody']['content']['application/json'];
-// export type LoginSuccessResponse = LoginPath['responses']['200']['content']['application/json'];
-// export type LoginErrorResponse = LoginPath['responses']['401']['content']['application/json'];
-
-// ============================================================================
-// Endpoint Types - GET /api/auth/me
-// ============================================================================
-
-// TODO: Uncomment after running `bun run api:sync`
-// type MePath = paths['/api/auth/me']['get'];
-// export type MeResponse = MePath['responses']['200']['content']['application/json'];
-
-// ============================================================================
-// Custom Types (pre-sync definitions — replace with OpenAPI types when available)
-// ============================================================================
+//
+// These pre-date the OpenAPI sync and are still imported by un-migrated
+// components/setup. Kept to preserve the build; prefer the OpenAPI-backed
+// types above for new code.
 
 /**
  * Login request payload.
- * TODO: Replace with OpenAPI endpoint type after sync.
+ * @deprecated Prefer `SigninRequest` (OpenAPI-backed).
  */
 export interface LoginPayload {
   email: string
@@ -56,8 +94,7 @@ export interface LoginPayload {
 
 /**
  * Token response from authentication endpoints.
- * Compatible with IdentityServer4 token response.
- * TODO: Replace with OpenAPI schema type after sync.
+ * @deprecated Prefer `SigninResponse` (OpenAPI-backed; carries `pat`, `session`).
  */
 export interface TokenResponse {
   access_token: string
@@ -69,7 +106,7 @@ export interface TokenResponse {
 
 /**
  * Error response for failed authentication.
- * TODO: Replace with OpenAPI endpoint type after sync (if documented in spec).
+ * @deprecated Bunkai errors use the `ErrorEnvelope` schema; kept for legacy consumers.
  */
 export interface AuthErrorResponse {
   error: string
@@ -82,8 +119,8 @@ export interface AuthErrorResponse {
 }
 
 /**
- * User info response from /api/auth/me.
- * TODO: Replace with OpenAPI endpoint type after sync.
+ * User info response from the `me` endpoint.
+ * @deprecated Prefer the OpenAPI `MeResponse` schema.
  */
 export interface UserInfoResponse {
   user: {

@@ -26,21 +26,17 @@ export interface TestCredentials {
 }
 
 // ============================================
-// Project-Specific Types (example structure)
+// Project-Specific Types (Bunkai TMS)
 // ============================================
 
-export interface TestHotel {
-  name: string
-  organizationId?: number
-  invoiceCap?: number
-}
-
-export interface TestBooking {
-  confirmationNumber: string
-  hotelId: number
-  stayValue: number
-  checkInDate: string
-  emailHash?: string
+/**
+ * Minimal ATC (Atomic Test Component) test data.
+ * Only the human-authored fields; the full create payload (steps,
+ * assertions, AC links) is assembled in-test against a real hierarchy.
+ */
+export interface TestAtc {
+  title: string
+  description?: string
 }
 
 // ============================================

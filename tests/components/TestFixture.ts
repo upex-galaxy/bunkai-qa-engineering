@@ -15,13 +15,13 @@
  *
  * Usage in E2E tests:
  *   test('example', async ({ test }) => {
- *     await test.ui.login.loginSuccessfully(credentials);
+ *     await test.ui.login.loginAs(email, password);
  *     await test.api.auth.getCurrentUser();
  *   });
  *
  * Usage in API-only tests:
  *   test('example', async ({ api }) => {
- *     await api.auth.authenticateSuccessfully(credentials);
+ *     await api.auth.signIn(email, password);
  *   });
  */
 

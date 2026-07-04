@@ -1,37 +1,32 @@
 /**
  * KATA Architecture - UI Auth Setup
  *
- * Authenticates via the login page UI and intercepts the JWT token
- * using page.waitForResponse() - single authentication, no separate API call.
+ * Authenticates via the Bunkai email-first login page and saves the browser
+ * session (storageState) for E2E tests.
  *
- * This provides BOTH:
- * - Browser session (storageState) for UI tests
- * - API token (intercepted) for API calls within E2E tests
+ * NOTE: Bunkai's normal login does NOT hit a separate /tokens endpoint — the
+ * PAT arrives inside the /auth/signin response. For UI E2E tests we only need
+ * the browser session cookie (sb-<ref>-auth-token), so we save storageState
+ * and gate on the post-login redirect to /projects. Integration tests get a
+ * Bearer PAT from api-auth.setup.ts instead.
  *
  * Dependencies: global-setup
  * Dependents: e2e
  */
 
-import type { ApiState } from '@data/types';
-import type { TokenResponse } from '@schemas/auth.types';
-
-import { writeFileSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { test as setup } from '@TestFixture';
-import { attachRequestResponseToAllure } from '@utils/allure';
 import { config } from '@variables';
 
 const storageStateFile = config.auth.storageStatePath;
-const apiStateFile = config.auth.apiStatePath;
 
 /**
  * UI Authentication Setup
  *
- * 1. Navigates to login page (via LoginPage.goto())
- * 2. Sets up response interception BEFORE triggering login
- * 3. Uses LoginPage.loginSuccessfully() ATC (triggers login + token fetch)
- * 4. Captures JWT token from intercepted response
- * 5. Saves storageState (cookies) for UI tests
- * 6. Saves api-state (token) for API integration
+ * 1. Navigates to the login page (via LoginPage.goto())
+ * 2. Runs the email-first login flow (LoginPage.loginAs())
+ * 3. Waits for the redirect to /projects
+ * 4. Saves storageState (cookies) for UI tests
  */
 setup('UI Setup: authenticate via UI', async ({ ui, page }) => {
   console.log('[UI Setup] Starting UI authentication...');
@@ -40,62 +35,22 @@ setup('UI Setup: authenticate via UI', async ({ ui, page }) => {
   // Navigate to login page (outside of ATC)
   await ui.login.goto();
 
-  // Credentials for login
-  const credentials = {
-    email: config.testUser.email,
-    password: config.testUser.password,
-  };
-
-  // Set up response interception BEFORE triggering login
-  // The login UI calls /api/auth/login after successful NextAuth sign-in
-  const tokenPromise = page.waitForResponse(
-    resp => resp.url().includes(config.auth.tokenEndpoint)
-      && resp.request().method() === 'POST'
-      && resp.status() === 200,
-    { timeout: 30000 },
-  );
-
-  // Use LoginPage ATC - triggers NextAuth sign-in + token fetch
-  await ui.login.loginSuccessfully(credentials);
+  // Run the email-first login flow (asserts redirect away from /login)
+  await ui.login.loginAs(config.testUser.email, config.testUser.password);
   console.log('[UI Setup] UI login successful');
 
-  // Capture JWT token from intercepted response
-  console.log('[UI Setup] Intercepting token from login response...');
-  const response = await tokenPromise;
-  const tokenData = (await response.json()) as TokenResponse;
-
-  // Attach to Allure for debugging
-  await attachRequestResponseToAllure({
-    url: response.url(),
-    method: 'POST',
-    responseBody: tokenData,
-    requestBody: { email: credentials.email, password: '***' },
-  });
-
-  // Verify token was obtained
-  if (!tokenData?.access_token) {
-    throw new Error('Token response missing access_token');
-  }
-
-  console.log('[UI Setup] Token intercepted successfully');
+  // Confirm we landed on the authenticated app shell
+  await page.waitForURL(/\/projects/, { timeout: 15000 });
+  console.log(`[UI Setup] Current URL: ${page.url()}`);
 
   // Save storage state (cookies + localStorage) for UI tests
   await page.context().storageState({ path: storageStateFile });
   console.log(`[UI Setup] Storage state saved to ${storageStateFile}`);
 
-  // Save the token for API calls within E2E tests
-  const apiState: ApiState = {
-    token: tokenData.access_token,
-    tokenType: tokenData.token_type,
-    expiresIn: tokenData.expires_in,
-    refreshToken: tokenData.refresh_token ?? null,
-    source: 'ui-login',
-    createdAt: new Date().toISOString(),
-  };
-
-  writeFileSync(apiStateFile, JSON.stringify(apiState, null, 2));
-  console.log(`[UI Setup] API token saved to ${apiStateFile}`);
+  // Verify the storageState file was written and is non-empty
+  if (!existsSync(storageStateFile) || statSync(storageStateFile).size === 0) {
+    throw new Error(`Storage state file is missing or empty: ${storageStateFile}`);
+  }
 
   console.log('[UI Setup] Authentication successful');
-  console.log(`[UI Setup] Current URL: ${page.url()}`);
 });
