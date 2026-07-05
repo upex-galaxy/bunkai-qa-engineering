@@ -130,16 +130,18 @@ Missing per-skill CLIs do not exit the installer. Install them lazily when the o
 | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `direnv` | Auto-loads `.env` on `cd` so the bare `claude` / `opencode` binaries see MCP credentials. Without it, the `bun run claude` / `bun run opencode` wrappers (powered by `dotenv-cli`, already a project devDep) do the same thing cross-platform. | `cli/doctor.ts` (`detectDirenv`) reports `direnv.installed`, `version`, `envrc_allowed`, `hook_in_rc`. The installer offers `direnv allow` + a shell-hook nudge. **Windows users**: skip — PowerShell support is experimental (direnv 2.37+); Git Bash works but the wrapper is simpler. The installer offers the prompt anyway; decline freely. |
 
-### MCP credentials — 8 env vars filled into `.env`
+### MCP credentials — 7 env vars filled into `.env`
 
 `cli/doctor.ts:39` declares `REQUIRED_VARS` consumed by the 6 canonical MCPs plus the ATLASSIAN_* family used by acli + scripts/sync-jira-*.ts. Missing keys do not block setup, but every `bun run setup:doctor` will list them under `pending_actions` with the canonical `where` URL (token-generation page) until they are filled.
 
 ```
 TAVILY_API_KEY                                  → https://app.tavily.com/ → API keys
 ATLASSIAN_URL, ATLASSIAN_EMAIL, ATLASSIAN_API_TOKEN → https://id.atlassian.com/manage-profile/security/api-tokens
-API_BASE_URL, OPENAPI_SPEC_PATH, API_TOKEN      → your backend admin / API portal
+API_BASE_URL, OPENAPI_SPEC_PATH                 → your backend admin / API portal
 POSTMAN_API_KEY                                 → https://postman.com → settings → API keys
 ```
+
+The OpenAPI MCP is schema-read-only — no credential is injected into it. Authenticated API calls at the agentic-testing level go through `bun run api:login` → `.auth/tokens.env` → curl (`agentic-qa-core/references/api-testing-doctrine.md`). `API_TOKEN` in `.env.example` is legacy/unused — leave it blank.
 
 ### Where to verify your status
 

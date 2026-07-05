@@ -92,14 +92,16 @@ These are **not optional** for the workflow — each one is required by a specif
 
 ### MCP credentials (`.env` keys)
 
-`.mcp.json` (Claude Code) and `opencode.jsonc` ship with `${VAR}` / `{env:VAR}` placeholders that read from `.env`. Eight keys are required for the 7 canonical MCPs:
+`.mcp.json` (Claude Code) and `opencode.jsonc` ship with `${VAR}` / `{env:VAR}` placeholders that read from `.env`. Seven keys are required for the 7 canonical MCPs:
 
 ```
 TAVILY_API_KEY
 ATLASSIAN_URL · ATLASSIAN_EMAIL · ATLASSIAN_API_TOKEN
-API_BASE_URL · OPENAPI_SPEC_PATH · API_TOKEN
+API_BASE_URL · OPENAPI_SPEC_PATH
 POSTMAN_API_KEY
 ```
+
+> The OpenAPI MCP is schema-read-only — it never receives a credential. Authenticated API calls at the agentic-testing level go through `bun run api:login` → `.auth/tokens.env` → curl (see `agentic-qa-core/references/api-testing-doctrine.md`). `API_TOKEN` in `.env.example` is legacy/unused — leave it blank.
 
 `.env.example` has the full template with per-var comments. Run `bun run setup:doctor` at any time to see which are still missing — it prints `pending_actions[].where` URLs for every credential.
 

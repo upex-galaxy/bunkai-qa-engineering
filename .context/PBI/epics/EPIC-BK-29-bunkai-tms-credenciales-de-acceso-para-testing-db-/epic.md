@@ -79,21 +79,20 @@ Verificá las vars ANTES de lanzar el agente. Ojo importante: `bun run claude` /
 
 Si falta una var, DBHub inserta el literal `${VAR}` como si fuera el valor real y da un fallo de auth críptico (no falla al arrancar).
 
-## 🔌 Auth a nivel API (OpenAPI MCP)
+## 🔌 Auth a nivel API (OpenAPI MCP + curl)
 
-El OpenAPI MCP no tiene archivo de config: se maneja con 3 variables de entorno. Seteá en tu `.env` (apuntando a staging):
+El OpenAPI MCP es **solo lectura de schema** — nunca recibe credencial. Seteá en tu `.env` (apuntando a staging) las 2 variables que sí consume:
 
 ```bash
-# .env — OpenAPI MCP
+# .env — OpenAPI MCP (schema-only)
 API*BASE*URL=https://staging-upexbunkai.vercel.app
 OPENAPI*SPEC*PATH=https://staging-upexbunkai.vercel.app/api/openapi
-API_TOKEN=
 ```
 
-El `API_TOKEN` es PERSONAL — NO lo copies de nadie, lo generás vos con TU usuario. Dos formas:
+`API_TOKEN` es legacy/sin uso — dejalo en blanco. Para ejecutar requests autenticados usás el maneuver agentic de 3 pasos (`agentic-qa-core/references/api-testing-doctrine.md`): MCP para schema, `api:login` para mintear el token, curl para ejecutar.
 
-- Rápida (recomendada): `bun run api:login:staging --role owner`. El script ya está adaptado a Bunkai TMS: mintea tu PAT y lo escribe solo en tu `.env` como `API_TOKEN=`. Reiniciá la terminal después (el MCP cachea env al spawn).
-- Manual: `POST /api/v1/auth/signin` con tu email + password → devuelve `pat.token` (`bk*pat*<prefix>.<secret>`). Pegalo en `API_TOKEN`.
+- `bun run api:login:staging --role owner` mintea tu PAT (`bk*pat*<prefix>.<secret>`) — el script ya está adaptado a Bunkai TMS. Lo escribe en `.auth/tokens.env` (sourceable: `export API_TOKEN_<ROLE>_<ENV>='<token>'`) y `.auth/tokens.json` (metadata). Nada se escribe en `.env`, ningún MCP recibe la credencial — **no hace falta reiniciar terminal**.
+- Ejecutar autenticado: `source .auth/tokens.env && curl -H "Authorization: Bearer $API_TOKEN_OWNER_STAGING" "$API_BASE_URL/<path>"`.
 
 Nota: los usuarios de magic-link no tienen password, así que para el camino headless usá `POST /api/v1/auth/signup` una vez (te provisiona password + mintea PAT) o el camino híbrido browser → `/tokens`.
 
