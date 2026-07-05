@@ -3,12 +3,13 @@
  * API Login CLI - Authentication Token Generator
  *
  * Authenticates against the project API and stores the token for:
- *   1. Playwright tests  → .auth/api-state.json
- *   2. OpenAPI MCP tools → .env (API_TOKEN var, consumed at MCP-server spawn
- *      via .mcp.json `${API_TOKEN}` and opencode.jsonc `{env:API_TOKEN}`)
- *
- * After running this command, RESTART the terminal session before re-launching
- * Claude Code or OpenCode — MCP servers cache env vars at spawn time.
+ *   1. Playwright tests        → .auth/api-state.json (untouched)
+ *   2. Agentic curl API-testing maneuver → .auth/tokens.env (sourceable
+ *      `export API_TOKEN_<ROLE>_<ENV>='<token>'`) + .auth/tokens.json
+ *      (metadata for freshness checks). See
+ *      agentic-qa-core/references/api-testing-doctrine.md — the OpenAPI MCP
+ *      is schema-read-only; no credential is ever injected into any MCP, so
+ *      no restart is required after login.
  *
  * Usage:
  *   bun run api:login                 # Uses TEST_ENV from .env (default: local)
@@ -102,8 +103,10 @@ const testUser = resolveTestUser(role as Parameters<typeof resolveTestUser>[0]);
 // ============================================
 
 const PROJECT_ROOT = resolve(import.meta.dir, '..');
-const ENV_FILE = resolve(PROJECT_ROOT, '.env');
-const ENV_TOKEN_KEY = 'API_TOKEN';
+const AUTH_DIR = resolve(PROJECT_ROOT, '.auth');
+const TOKENS_ENV_FILE = resolve(AUTH_DIR, 'tokens.env');
+const TOKENS_JSON_FILE = resolve(AUTH_DIR, 'tokens.json');
+const KEY_PREFIX = `${env.current.toUpperCase()}_${role.toUpperCase()}`;
 
 // ╔══════════════════════════════════════════════════════════════════╗
 // ║  PROJECT-SPECIFIC AUTHENTICATION — Bunkai TMS                   ║
@@ -332,27 +335,41 @@ function saveApiState(apiState: ApiState): void {
 }
 
 // ============================================
-// Token Storage: .env (consumed by MCP servers at spawn)
+// Token Storage: .auth/tokens.env + .auth/tokens.json
 // ============================================
 //
-// Both .mcp.json (Claude Code) and opencode.jsonc (OpenCode) reference the
-// API_TOKEN env var via expansion (`${API_TOKEN}` and `{env:API_TOKEN}`).
-// We only need to keep .env in sync — never write secrets into the committed
-// config files. After this runs, the user must restart their terminal
-// session so MCP servers pick up the new value at spawn time.
+// Per agentic-qa-core/references/api-testing-doctrine.md: the OpenAPI MCP is
+// schema-read-only and NEVER receives a credential. Authenticated requests at
+// the agentic-testing level run through curl, sourcing the token minted here.
+// Nothing is written to .env and no MCP config is touched — so no restart.
 
-function updateEnvFile(token: string): void {
-  if (!existsSync(ENV_FILE)) {
-    log(`.env not found at ${ENV_FILE} — copy .env.example to .env first.`, 'error');
-    log('Token saved to .auth/api-state.json only. MCP servers will not see it.', 'warn');
-    return;
-  }
+interface TokenMetadata {
+  token: string
+  tokenType: string
+  expiresIn: number
+  createdAt: string
+}
 
-  const raw = readFileSync(ENV_FILE, 'utf-8');
-  const trailingNewline = raw.endsWith('\n');
-  const lines = raw.split('\n');
-  const linePattern = new RegExp(`^${ENV_TOKEN_KEY}\\s*=`);
-  const replacement = `${ENV_TOKEN_KEY}=${token}`;
+/** Write via a tmp file + renameSync so a crash mid-write never leaves a truncated file. */
+function writeFileAtomic(targetPath: string, content: string): void {
+  const tmpFile = `${targetPath}.tmp`;
+  writeFileSync(tmpFile, content);
+  renameSync(tmpFile, targetPath);
+}
+
+/** Single-quote a value for a POSIX-sourceable `export KEY='<value>'` line. */
+function shellSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, '\'\\\'\'')}'`;
+}
+
+/** Upsert `export API_TOKEN_<keyPrefix>='<token>'` in .auth/tokens.env, preserving other roles/envs. */
+function saveTokensEnv(keyPrefix: string, token: string): void {
+  const varName = `API_TOKEN_${keyPrefix}`;
+  mkdirSync(AUTH_DIR, { recursive: true });
+  const raw = existsSync(TOKENS_ENV_FILE) ? readFileSync(TOKENS_ENV_FILE, 'utf-8') : '';
+  const lines = raw.split('\n').filter(line => line.trim() !== '');
+  const linePattern = new RegExp(`^export ${varName}=`);
+  const replacement = `export ${varName}=${shellSingleQuote(token)}`;
 
   let replaced = false;
   const updated = lines.map((line) => {
@@ -362,25 +379,35 @@ function updateEnvFile(token: string): void {
     }
     return line;
   });
-
   if (!replaced) {
-    if (trailingNewline) {
-      // Drop the empty trailing element split() produced, append new line, restore newline.
-      if (updated[updated.length - 1] === '') {
-        updated.pop();
-      }
-      updated.push(replacement);
-      updated.push('');
-    }
-    else {
-      updated.push(replacement);
-    }
+    updated.push(replacement);
   }
 
-  const tmpFile = `${ENV_FILE}.tmp`;
-  writeFileSync(tmpFile, updated.join('\n'));
-  renameSync(tmpFile, ENV_FILE);
-  log(`Token saved to .env (${ENV_TOKEN_KEY})`, 'success');
+  writeFileAtomic(TOKENS_ENV_FILE, `${updated.join('\n')}\n`);
+  log(`Token saved to .auth/tokens.env (export ${varName})`, 'success');
+}
+
+/** Upsert metadata keyed by `<keyPrefix>` in .auth/tokens.json, preserving other roles/envs. */
+function saveTokensJson(keyPrefix: string, apiState: ApiState): void {
+  mkdirSync(AUTH_DIR, { recursive: true });
+  let data: Record<string, TokenMetadata> = {};
+  if (existsSync(TOKENS_JSON_FILE)) {
+    try {
+      data = JSON.parse(readFileSync(TOKENS_JSON_FILE, 'utf-8')) as Record<string, TokenMetadata>;
+    }
+    catch {
+      log('.auth/tokens.json is corrupt/unreadable — resetting it (other roles/envs lost).', 'warn');
+      data = {};
+    }
+  }
+  data[keyPrefix] = {
+    token: apiState.token,
+    tokenType: apiState.tokenType,
+    expiresIn: apiState.expiresIn,
+    createdAt: apiState.createdAt,
+  };
+  writeFileAtomic(TOKENS_JSON_FILE, `${JSON.stringify(data, null, 2)}\n`);
+  log(`Metadata saved to .auth/tokens.json (${keyPrefix})`, 'success');
 }
 
 // ============================================
@@ -414,9 +441,10 @@ function showHelp(): void {
 
 \x1B[1mTOKEN STORAGE\x1B[0m
   .auth/api-state.json    Used by Playwright test fixtures
-  .env (API_TOKEN)        Read by .mcp.json (\${API_TOKEN}) and
-                          opencode.jsonc ({env:API_TOKEN}) at MCP-server spawn.
-                          RESTART your terminal after login so MCPs pick it up.
+  .auth/tokens.env        Sourceable: export API_TOKEN_<ROLE>_<ENV>='<token>'
+                          Powers the agentic curl API-testing maneuver.
+  .auth/tokens.json       Metadata (tokenType, expiresIn, createdAt) for
+                          freshness checks. No .env write, no MCP restart.
 
 \x1B[1mREQUIRED .env VARIABLES\x1B[0m  ({ENV} = LOCAL|STAGING, {ROLE} = USER|ADMIN|...)
   signin:   {ENV}_{ROLE}_EMAIL, {ENV}_{ROLE}_PASSWORD
@@ -456,13 +484,13 @@ log('Authentication successful', 'success');
 log(`Token type: ${apiState.tokenType}`);
 log(`Expires in: ${apiState.expiresIn} seconds`);
 
-// 2. Save token to api-state.json
+// 2. Save token to api-state.json (Playwright, untouched).
 saveApiState(apiState);
 
-// 3. Sync API_TOKEN into .env so MCP servers pick it up at next spawn.
-updateEnvFile(apiState.token);
+// 3. Save token for the agentic curl API-testing maneuver \u2014 no .env write,
+// no MCP credential injection (agentic-qa-core/references/api-testing-doctrine.md).
+saveTokensEnv(KEY_PREFIX, apiState.token);
+saveTokensJson(KEY_PREFIX, apiState);
 
 console.log('\n\x1B[32m\u2713 Login completed!\x1B[0m');
-console.log('\n\x1B[33m\u26A0\x1B[0m  RESTART your terminal session before re-launching Claude Code or OpenCode.');
-console.log('   MCP servers cache env vars at spawn time \u2014 they will not pick up the');
-console.log('   new API_TOKEN until the parent shell is restarted.\n');
+console.log(`\nExecute authenticated requests with: source .auth/tokens.env && curl -H "Authorization: Bearer $API_TOKEN_${KEY_PREFIX}" "$API_BASE_URL/<path>"\n`);
