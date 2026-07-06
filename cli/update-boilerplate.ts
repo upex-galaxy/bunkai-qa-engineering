@@ -7,9 +7,9 @@
  * rollback flag) live here; everything else lives in core.
  */
 
+import type { ProtectedWatchEntry } from './lib/updater-drift';
 import type { Component, ReportSink, RunSummary, UpdaterConfig } from './lib/updater-types';
 import { execSync, spawnSync } from 'node:child_process';
-import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -17,6 +17,7 @@ import * as path from 'node:path';
 import pc from 'picocolors';
 import * as tui from './lib/tui';
 import { cleanupTempDir, detectGitVersion, gitVersionMeetsMin, runUpdate } from './lib/updater-core';
+import { makeProtectedDriftHook } from './lib/updater-drift';
 import { parseDotEnvExampleKeys, requiredNow, VAR_MANIFEST } from './lib/variables-manifest.ts';
 
 // --- CONFIGURATION ---
@@ -61,8 +62,13 @@ interface ParsedArgs {
   help: boolean
   dryRun: boolean
   rollback: boolean
-  auto: boolean
-  force: boolean
+  interactive: boolean
+  /**
+   * Legacy flags (pre-default-force). Parsed only to print an informational
+   *  note — they no longer change behavior (default IS force).
+   */
+  legacyAuto: boolean
+  legacyForce: boolean
 }
 
 function parseArgs(args: string[]): ParsedArgs {
@@ -73,17 +79,19 @@ function parseArgs(args: string[]): ParsedArgs {
     help: false,
     dryRun: false,
     rollback: false,
-    auto: false,
-    force: false,
+    interactive: false,
+    legacyAuto: false,
+    legacyForce: false,
   };
   const valid = new Set(COMPONENTS.map(c => c.name).concat(['all', 'help', 'rollback']));
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === 'help' || a === '--help' || a === '-h') { out.help = true; }
-    else if (a === '--auto') { out.auto = true; }
+    else if (a === '--interactive' || a === '-i') { out.interactive = true; }
+    else if (a === '--auto') { out.legacyAuto = true; }
     else if (a === '--dry-run') { out.dryRun = true; }
     else if (a === '--rollback' || a === 'rollback') { out.rollback = true; }
-    else if (a === '--force') { out.force = true; }
+    else if (a === '--force') { out.legacyForce = true; }
     else if (a === '--list') { out.listSkills = true; }
     else if (a === '--skill' || a === '--skills') {
       const next = args[i + 1];
@@ -114,27 +122,34 @@ USO:
 COMPONENTES: ${COMPONENTS.map(c => c.name).join(', ')}
 ATAJOS:      all, rollback, help
 
+COMPORTAMIENTO POR DEFECTO (sin flags):
+  Sincroniza TODO el boilerplate sin preguntar: copia archivos nuevos,
+  sobreescribe divergencias con la versión upstream y borra archivos que el
+  upstream eliminó. El boilerplate es canónico (match 1:1). Antes de escribir
+  corre un gate de seguridad: si hay cambios sin commitear en rutas que este
+  updater sincroniza, aborta y las lista (commitea/stashea y re-ejecuta).
+  Cambios fuera de esas rutas (tests/, tu código) nunca bloquean. Todo lo
+  sobrescrito tiene backup (.backups/) restaurable con --rollback, y el diff
+  exacto queda visible en git.
+
 FLAGS:
-  --auto                 Modo no-interactivo: sincroniza TODO el boilerplate
-                         (copia archivos nuevos + sobreescribe divergencias con
-                         la versión upstream). NO borra archivos que upstream
-                         eliminó. El boilerplate es canónico (match 1:1).
-  --force                Como --auto pero TAMBIÉN borra archivos que el upstream
-                         eliminó. Hay backup + --rollback de respaldo.
+  --interactive, -i      Modo con preguntas: revisar componente por componente,
+                         resolver divergencias y confirmar borrados uno a uno.
   --dry-run              Preview, sin escribir
   --rollback             Restaura backup mas reciente
   --skill a,b,c          Sincroniza solo los skills indicados (subcomando skills)
   --list                 Lista los skills disponibles en el template
   --help, -h             Esta ayuda
+  --auto, --force        LEGACY: ya no hacen falta — el comportamiento por
+                         defecto ya es ese. Se aceptan sin error.
 
 EJEMPLOS:
-  bun up                                 # Flujo interactivo (5 fases)
+  bun up                                 # Sincroniza todo (default = force)
+  bun up --interactive                   # Flujo interactivo (5 fases)
   bun up skills                          # Solo agent skills
   bun up skills --skill a,b,c            # Skills especificos
   bun up --list                          # Listar skills disponibles
   bun up commands docs                   # Multiples componentes
-  bun up --auto                          # CI mode (seguro, preserva lo tuyo)
-  bun up --force                         # Forzar todo del upstream (sin preguntar)
   bun up --dry-run                       # Preview
   bun up --rollback                      # Restaurar backup
 `;
@@ -642,102 +657,35 @@ async function resolveSkillFilter(skills: string[]): Promise<Component[]> {
   return [{ name: 'skills', type: 'directory', paths: selectedPaths }];
 }
 
-// --- CLAUDE.md UPSTREAM-DRIFT ADVISORY (afterApply hook) ---
+// --- PROTECTED-FILE DRIFT ADVISORY (afterApply hook) ---
 //
-// Root `CLAUDE.md` is a per-project file: heavily customized (project identity,
-// env URLs, Jira fields, custom rules) and deliberately NOT a synced component —
-// `bun up` never overwrites it. But the boilerplate's OWN `CLAUDE.md` keeps
-// evolving (doctrine, behavioral rules, workflow conventions), so a downstream
-// project would silently miss those improvements.
-//
-// This advisory NEVER edits `CLAUDE.md`. It prints a copy-paste prompt the user
-// hands to their AI, which fetches the canonical `CLAUDE.md` and SEMANTICALLY
-// merges the upstream improvements while preserving every project-specific value.
-//
-// Noise control: the local file ALWAYS differs from the generic upstream, so
-// "they differ" alone would fire every run. Instead we fire ONLY when the
-// upstream `CLAUDE.md` actually CHANGED since the last advice, tracked by a
-// content hash in `.template/claude-md.upstream.sha`. One nudge per upstream
-// change — never on dry-run (the whole afterApply hook is skipped there).
+// Watchlist of files the updater NEVER syncs because every downstream project
+// adapts them. When the boilerplate evolves one of them, the hook (in
+// `./lib/updater-drift.ts`) prints an advisory + a copy-paste AI prompt for a
+// surgical merge, and persists it to `.agents/prompts/` (gitignored). It never
+// edits any watched file. CLAUDE.md keeps its legacy sha marker so previously
+// nudged repos are not re-nudged.
 
-const CLAUDE_MD_SHA_MARKER = '.template/claude-md.upstream.sha';
+const PROTECTED_WATCHLIST: ProtectedWatchEntry[] = [
+  { path: 'CLAUDE.md', reason: 'per-project AI memory (identity, env URLs, custom rules)', markerPath: '.template/claude-md.upstream.sha' },
+  { path: 'allurerc.mjs', reason: 'report name + dashboard layout adapted per project' },
+  { path: 'playwright.config.ts', reason: 'projects, timeouts and reporters adapted per stack' },
+  { path: 'config/variables.ts', reason: 'environment/variable map adapted per project' },
+  { path: 'tests/components/TestContext.ts', reason: 'KATA L1 base adapted to the target stack' },
+  { path: 'tests/components/TestFixture.ts', reason: 'KATA L4 fixture registry adapted per project' },
+  { path: 'tests/components/ApiFixture.ts', reason: 'API fixture wiring adapted per project' },
+  { path: 'tests/components/UiFixture.ts', reason: 'UI fixture wiring adapted per project' },
+  { path: 'tests/components/api/ApiBase.ts', reason: 'KATA L2 HTTP base adapted to the target API' },
+  { path: 'tests/components/ui/UiBase.ts', reason: 'KATA L2 UI base adapted to the target app' },
+  { path: 'scripts/api-login.ts', reason: 'project auth flow (excluded from script sync)' },
+  { path: '.mcp.json', reason: 'MCP registry with project-specific servers/vars' },
+  { path: 'opencode.jsonc', reason: 'OpenCode MCP registry (paired with .mcp.json)' },
+  { path: '.github/workflows/regression.yml', reason: 'CI suite adapted (secrets, envs, jobs)' },
+  { path: '.github/workflows/smoke.yml', reason: 'CI suite adapted (secrets, envs, jobs)' },
+  { path: '.github/workflows/sanity.yml', reason: 'CI suite adapted (secrets, envs, jobs)' },
+];
 
-/** Whitespace-insensitive normalization for the "already identical" short-circuit. */
-function normalizeForCompare(s: string): string {
-  return s.replace(/\r\n/g, '\n').replace(/[ \t]+$/gm, '').replace(/\n+$/g, '\n');
-}
-
-/**
- * Build the `afterApply` hook that detects upstream `CLAUDE.md` improvements and
- * emits a copy-paste AI prompt to merge them into the local (per-project) file.
- * Mirrors makeEnvDriftHook — captures `tempDir` (upstream clone) and `templateRepo`
- * (for the canonical raw URL); never mutates the consumer `CLAUDE.md`.
- */
-function makeClaudeMdDriftHook(
-  tempDir: string,
-  templateRepo: string,
-  sink: ReportSink,
-): (summary: RunSummary) => Promise<void> {
-  return async (_summary: RunSummary): Promise<void> => {
-    const upstreamPath = path.join(tempDir, 'CLAUDE.md');
-    const localPath = path.join(process.cwd(), 'CLAUDE.md');
-    // Need BOTH the boilerplate's canonical copy and the project's own.
-    if (!fs.existsSync(upstreamPath) || !fs.existsSync(localPath)) { return; }
-
-    let upstreamContent: string;
-    let localContent: string;
-    try {
-      upstreamContent = fs.readFileSync(upstreamPath, 'utf8');
-      localContent = fs.readFileSync(localPath, 'utf8');
-    }
-    catch { return; }
-
-    // Project tracks the boilerplate verbatim → nothing to suggest.
-    if (normalizeForCompare(upstreamContent) === normalizeForCompare(localContent)) { return; }
-
-    // Fire only when the UPSTREAM file changed since our last advice.
-    const upstreamSha = crypto.createHash('sha256').update(upstreamContent, 'utf8').digest('hex');
-    const markerPath = path.join(process.cwd(), CLAUDE_MD_SHA_MARKER);
-    let lastSha = '';
-    try {
-      if (fs.existsSync(markerPath)) { lastSha = fs.readFileSync(markerPath, 'utf8').trim(); }
-    }
-    catch { /* unreadable marker — treat as first advice */ }
-
-    if (lastSha === upstreamSha) { return; } // no NEW upstream change since last nudge
-
-    // Persist the marker FIRST so this is one nudge per upstream change, even if the
-    // user ignores it (non-fatal if the write fails — worst case we advise again).
-    try {
-      fs.mkdirSync(path.dirname(markerPath), { recursive: true });
-      fs.writeFileSync(markerPath, `${upstreamSha}\n`);
-    }
-    catch { /* non-fatal */ }
-
-    const rawUrl = `https://raw.githubusercontent.com/${templateRepo}/main/CLAUDE.md`;
-    const firstAdvice = lastSha === '';
-
-    sink.warn(firstAdvice
-      ? 'El `CLAUDE.md` del boilerplate trae mejoras que tu `CLAUDE.md` local podría no tener (es un archivo per-proyecto: el updater nunca lo sobrescribe).'
-      : 'El `CLAUDE.md` del boilerplate cambió desde la última vez. Tu `CLAUDE.md` local no se actualiza solo (es per-proyecto).');
-    sink.step('No tocamos tu `CLAUDE.md`. Copia el prompt de abajo y pégalo en tu IA para traer SOLO las mejoras, preservando lo específico de tu proyecto:');
-
-    const prompt = [
-      'Sync the local ./CLAUDE.md with the upstream boilerplate, pulling ONLY the improvements.',
-      '',
-      `1. Fetch the canonical boilerplate CLAUDE.md: ${rawUrl}`,
-      `   (use your web-fetch tool, or run: curl -fsSL ${rawUrl})`,
-      '2. Diff it against the local ./CLAUDE.md.',
-      '3. Merge in ONLY the upstream improvements: new or updated rules, doctrine, behavioral guidance, workflow conventions, and sections this project lacks.',
-      '4. PRESERVE every project-specific value verbatim — project identity, env URLs, Jira keys/fields, credential references, and any custom rule or section this project added. Never replace a local customization with a generic boilerplate placeholder.',
-      '5. On any genuine conflict (same rule, divergent intent), surface it for my decision instead of silently overwriting. Keep the rule numbering coherent after merging.',
-      '6. Show me a concise before/after diff of what you changed and why BEFORE writing the file.',
-    ].join('\n');
-
-    // Plain stdout (no log-prefix bullets) so the block copy-pastes cleanly.
-    process.stdout.write(`\n${pc.dim('────────  COPY PROMPT BELOW  ────────')}\n${prompt}\n${pc.dim('────────  COPY PROMPT ABOVE  ────────')}\n\n`);
-  };
-}
+const DRIFT_PROMPT_PATH = path.join('.agents', 'prompts', 'boilerplate-drift-prompt.md');
 
 // --- SINK ---
 function abortOnCancel<T>(v: T | symbol): T {
@@ -919,6 +867,19 @@ async function main(): Promise<void> {
   if (parsed.rollback) { rollbackFromBackup(); process.exit(0); }
   if (parsed.listSkills) { await listAvailableSkills(); process.exit(0); }
 
+  // Legacy flags: informational only — never an error, never a behavior change.
+  if (parsed.legacyForce) {
+    tui.log.info('Nota: --force ya no hace falta — el comportamiento por defecto ya sincroniza y borra todo lo del upstream (backup + --rollback disponibles). Usa --interactive si prefieres el modo con preguntas.');
+  }
+  if (parsed.legacyAuto) {
+    tui.log.info('Nota: --auto fue reemplazado por el comportamiento por defecto (sin preguntas). Usa --interactive si prefieres el modo con preguntas.');
+  }
+
+  // Two modes only: default (non-interactive, force semantics: overwrite +
+  // delete-upstream, gated by the scoped dirty check in runUpdate) and
+  // --interactive (per-file prompts). The core still consumes auto/force.
+  const nonInteractive = !parsed.interactive;
+
   ensureGitVersion();
   await validatePrerequisites();
 
@@ -982,11 +943,16 @@ async function main(): Promise<void> {
         : composeHooks(
             sink,
             makeSkillsRegistryHook(sink),
-            makeEnvDriftHook(TEMP_DIR, sink, parsed.auto),
-            makeGitStrategyUpsertHook(TEMP_DIR, sink, parsed.auto),
-            makeYamlBackfillHook(QA_EPICS_BACKFILL, TEMP_DIR, sink, parsed.auto),
-            makeYamlBackfillHook(QA_ASSIGNEE_BACKFILL, TEMP_DIR, sink, parsed.auto),
-            makeClaudeMdDriftHook(TEMP_DIR, TEMPLATE_REPO, sink),
+            makeEnvDriftHook(TEMP_DIR, sink, nonInteractive),
+            makeGitStrategyUpsertHook(TEMP_DIR, sink, nonInteractive),
+            makeYamlBackfillHook(QA_EPICS_BACKFILL, TEMP_DIR, sink, nonInteractive),
+            makeYamlBackfillHook(QA_ASSIGNEE_BACKFILL, TEMP_DIR, sink, nonInteractive),
+            makeProtectedDriftHook({
+              entries: PROTECTED_WATCHLIST,
+              tempDir: TEMP_DIR,
+              templateRepo: TEMPLATE_REPO,
+              promptOutPath: path.join(process.cwd(), DRIFT_PROMPT_PATH),
+            }, sink),
           ),
     },
   };
@@ -994,10 +960,10 @@ async function main(): Promise<void> {
   tui.intro(tui.headline(`UPEX QA Boilerplate Updater v${CLI_VERSION}`));
 
   const summary = await runUpdate(cfg, sink, {
-    auto: parsed.auto,
+    auto: nonInteractive,
     dryRun: parsed.dryRun,
     rollback: false,
-    force: parsed.force,
+    force: nonInteractive,
   });
 
   process.stdout.write(`${tui.successBox([
