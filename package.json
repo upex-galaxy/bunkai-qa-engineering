@@ -110,7 +110,8 @@
     "lint-staged": "^16.2.7",
     "openapi-typescript": "^7.10.1",
     "prettier": "^3.7.4",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "allure-js-commons": "^3.10.2"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [

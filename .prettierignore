@@ -88,3 +88,6 @@ api/.openapi-config.json
 
 # ----- 2026-06-05 (sync) -----
 .backups/
+
+# ----- 2026-07-06 (sync) -----
+packages/decks/
