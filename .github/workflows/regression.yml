@@ -204,6 +204,11 @@ jobs:
     if: ${{ always() && github.event.inputs.generate_allure != 'false' }}
 
     steps:
+      # Full repo checkout: the report is generated with the repo's own
+      # allurerc.mjs + allure devDependency (identical to local runs).
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Get Allure History
         uses: actions/checkout@v4
         with:
@@ -268,32 +273,46 @@ jobs:
           path: merged-allure-results/
           retention-days: 10
 
-      - name: Build Allure Report
+      - name: Setup Bun
         if: steps.check_allure.outputs.has_results == 'true'
-        uses: simple-elf/allure-report-action@master
+        uses: oven-sh/setup-bun@v2
         with:
-          gh_pages: gh-pages
-          subfolder: ${{ env.TEST_ENV }}/regression
-          allure_results: merged-allure-results
-          allure_report: allure-report
-          allure_history: allure-history
-          keep_reports: 3
+          bun-version: latest
 
-      - name: Deploy to GitHub Pages
+      - name: Install Dependencies
         if: steps.check_allure.outputs.has_results == 'true'
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: allure-history/${{ env.TEST_ENV }}/regression
-          destination_dir: ${{ env.TEST_ENV }}/regression
-          keep_files: true
+        run: bun install
 
-      - name: Post Report URL
+      # Allure 3 generate + publish: same allurerc.mjs as local (Awesome report
+      # served directly, trends via historyPath), real retention, latest redirect.
+      # PRIVATE portal mode is opt-in: when the PORTAL_URL secret is set, the
+      # report goes to the auth-walled Test Report Portal (R2) INSTEAD of
+      # public GitHub Pages. Runbook: .claude/skills/regression-testing/
+      # references/private-hosting-setup.md
+      - name: Build & Publish Allure Report (Allure 3)
         if: steps.check_allure.outputs.has_results == 'true'
+        env:
+          PORTAL_URL: ${{ secrets.PORTAL_URL }}
+          PORTAL_PROJECT: ${{ secrets.PORTAL_PROJECT }}
+          PORTAL_API_KEY: ${{ secrets.PORTAL_API_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
-          echo "## Allure Report" >> $GITHUB_STEP_SUMMARY
-          echo "View the report: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ env.TEST_ENV }}/regression/" >> $GITHUB_STEP_SUMMARY
+          if [ -n "$PORTAL_URL" ]; then
+            bun scripts/ci/publish-allure-portal.ts \
+              --env "${{ env.TEST_ENV }}" --suite regression \
+              --run "${{ github.run_number }}" \
+              --results merged-allure-results
+          else
+            bun scripts/ci/publish-allure-pages.ts \
+              --env "${{ env.TEST_ENV }}" --suite regression \
+              --run "${{ github.run_number }}" \
+              --results merged-allure-results --pages gh-pages --keep 10
+            echo "## Allure Report" >> $GITHUB_STEP_SUMMARY
+            echo "View the report: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ env.TEST_ENV }}/regression/" >> $GITHUB_STEP_SUMMARY
+          fi
 
   # ============================================
   # TODO: Implement Slack notification job
