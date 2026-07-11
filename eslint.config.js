@@ -21,6 +21,10 @@ export default antfu({
     // Generated report decks (HTML/CSS/JS artifacts, not hand-edited source)
     '.context/reports/**',
     'cli/legacy/**',
+    // JXA (JavaScript for Automation) dialect — runs under macOS osascript,
+    // not bun/node; JXA globals (ObjC, $) and osascript's run(argv) entry
+    // point false-positive against every Node-oriented rule set.
+    'cli/slack-clip.js',
     '*.min.js',
     // Documentation files (contain code examples that shouldn't be linted)
     '**/*.md',
@@ -28,6 +32,9 @@ export default antfu({
     '.github/**',
     // Generated files (auto-generated, not manually edited)
     'api/openapi-types.ts',
+    // Git worktrees placed under .claude/worktrees/ are another branch's full
+    // checkout — never lint another tree from this one.
+    '.claude/worktrees/**',
     // Skill templates — copied to target repos at install time, not linted here
     '.claude/skills/*/templates/**',
     // Skills (committed QA-specific + community installed via `bunx skills add`
