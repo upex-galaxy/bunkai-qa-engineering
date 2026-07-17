@@ -91,3 +91,8 @@ api/.openapi-config.json
 
 # ----- 2026-07-06 (sync) -----
 packages/decks/
+
+# ----- 2026-07-17 (sync) -----
+scripts/contribution-audit/out/
+scripts/contribution-audit/roster.local.json
+scripts/contribution-audit/report_template.html

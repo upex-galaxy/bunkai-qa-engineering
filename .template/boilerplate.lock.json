@@ -12,20 +12,23 @@
     "agents-docs": "be97d8b96f03caba6f7ad74a034f97e6ac39d7dd",
     "tooling": "57a2dfdfc1ecaf50b569114e328908e14e211aea",
     "commands": "7e36931604d22605ce08b5a8729340337c455b92",
-    "skills": "88563b09328c12616ba0ccbd0ad2a4d996577a51",
+    "skills": "82eaf1daad1a01de1ed522a61b7554a5dd7b5e68",
     "env-template": "e6308736aeb99e0511f18219602a8747261a199d"
   },
   "syncedComponents": [],
   "ignoreFileSync": {
     ".prettierignore": {
-      "lastSyncedSha": "642f57f0d23c79095d66c0edd02994c983ec7ca9",
+      "lastSyncedSha": "5976ac77f0a92296eca72803773618c7d317227e",
       "appendedLines": [
         ".claude/worktrees/",
         "api/openapi*",
         "api/.openapi-config.json",
         ".playwright-mcp/",
         ".backups/",
-        "packages/decks/"
+        "packages/decks/",
+        "scripts/contribution-audit/out/",
+        "scripts/contribution-audit/roster.local.json",
+        "scripts/contribution-audit/report_template.html"
       ]
     },
     ".gitignore": {
@@ -53,6 +56,6 @@
     }
   },
   "cliVersion": "7.0",
-  "lastSyncedAt": "2026-07-09T23:29:13.726Z",
+  "lastSyncedAt": "2026-07-17T01:31:30.072Z",
   "variableSystemVersion": 1
 }
