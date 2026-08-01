@@ -671,7 +671,7 @@ XRAY_PROJECT_KEY
 ATLASSIAN_URL
 ATLASSIAN_EMAIL
 ATLASSIAN_API_TOKEN
-JIRA_TEST_STATUS_FIELD      # default: customfield_10100 — Jira-specific operational param, not a credential
+JIRA_TEST_STATUS_FIELD      # no default — instance-specific id; read the `test_status` slug from .agents/jira-fields.json
 
 # Reporting
 ALLURE_RESULTS_DIR          # default: ./allure-results
