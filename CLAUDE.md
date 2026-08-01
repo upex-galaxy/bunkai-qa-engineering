@@ -197,6 +197,7 @@ Full contract: `.claude/skills/agentic-qa-core/references/skill-composition-stra
 | `/master-test-plan` | Refresh `.context/master-test-plan.md` (what to test and why). |
 | `/break-down-tests` | Plain-English breakdown of automated tests for a module / spec. |
 | `/fix-traceability` | Repair broken US-ATP-ATR-TC traceability links in TMS. |
+| `/jira-instance-migration` | Repoint the repo at a new Atlassian instance (`.env` + `.agents/project.yaml` + machine-global `acli` session) and regenerate the `.agents/` catalogs the migration invalidated. Takes source + target instance as arguments; asks for whatever is missing. |
 
 ### MCPs (decision rules)
 
@@ -488,8 +489,18 @@ KATA wired to Bunkai TMS staging. Status: **adapted, smoke-green** (`repo:check`
 - **OpenAPI source**: URL `https://staging-upexbunkai.vercel.app/api/openapi` (40 endpoints). Facades: `@schemas/auth.types`, `@schemas/atc.types` (only files importing `@openapi`).
 - **Test user**: dedicated owner in `.env` `STAGING_USER_*` (workspace `bunkai-qa-auto-ec8c39`, role owner). member/admin/viewer NOT yet created (Supabase email rate limit); reusable script at `scratchpad/invite-users.sh`.
 - **Smoke**: `tests/e2e/auth/smoke.test.ts` `@critical` — owner email-first login lands on `/projects`. ATC keys: BK-101/102 (auth), BK-201/202/203 (atc).
-- **Discovery gaps**: invited-role users pending rate-limit reset; first real ATC create needs a project→module→user-story→AC hierarchy (defer to `/test-automation`); LOCAL env unprovisioned (staging-only for now); `.env` `ATLASSIAN_URL` = `upexgalaxy69.atlassian.net` vs `project.yaml` `jira.upexgalaxy.com` (drift, harmless).
+- **Discovery gaps**: invited-role users pending rate-limit reset; first real ATC create needs a project→module→user-story→AC hierarchy (defer to `/test-automation`); LOCAL env unprovisioned (staging-only for now).
 - **Gotcha**: a stale EXPORTED shell env `STAGING_USER_*` can shadow `.env` (bun does not override already-set `process.env`). After editing creds, RESTART the session — or export from `.env` inline for local runs.
+
+### Jira instance — `upexgalaxy71` (migrated 2026-08-01 by `/jira-instance-migration`)
+
+Jira moved `upexgalaxy69` → `upexgalaxy71`. All three config points now agree (`.env` `ATLASSIAN_URL`, `.agents/project.yaml` `atlassian_url`, machine-global `acli` session) and the earlier `jira.upexgalaxy.com` drift is closed.
+
+- **`71` is a RESTORE of `69`, not a rename** — different cloudId, but same project `BK` (id `10005`) and same issue keys. The restore **reassigned custom-field IDs**: 121 ids kept their number while pointing at a different field, and 64 of 90 catalog slugs moved. A write with a stale id returns `200 OK` into the wrong field. Never carry a `customfield_*` id across instances.
+- **Vanity `jira.upexgalaxy.com` already 302s to `71`** — published `/browse/` links survive. `scripts/sync-jira-issues.ts` `toDisplayUrl()` still rewrites the real host to the vanity for display links only; the REST API must keep hitting `upexgalaxy<N>.atlassian.net`.
+- **`.env` `JIRA_TEST_STATUS_FIELD` is an instance-specific pin** (`customfield_10118` → `customfield_10082`). It is the one field id that lives outside `.agents/jira-fields.json`; re-read the `test_status` slug from that catalog after any migration. `config/variables.ts` no longer ships a hardcoded default.
+- **Known gap**: `tests/utils/jiraSync.ts:179` reads `config.tms.jira.testStatusField` directly — the slug-resolution fallback promised by the `variables.ts` comment is NOT implemented. Until it is, the `.env` pin is load-bearing.
+- **`.agents/jira-required.yaml` is `bootstrapOnly`** — `bun run up` never syncs it. It had drifted far behind upstream (3 of 13 work types, no `fallback:` mechanism, 4 missing fields); ported from upstream verbatim on the same date. Re-check it against upstream after any boilerplate update.
 
 ---
 
