@@ -1,12 +1,12 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-06-29T05:32:45.149Z",
+  "generatedAt": "2026-08-09T20:37:44.672Z",
   "components": {
     "api": [
       {
         "name": "AtcApi",
         "file": "AtcApi.ts",
-        "relativePath": "tests/components/api/AtcApi.ts",
+        "relativePath": "tests\\components\\api\\AtcApi.ts",
         "atcs": [
           {
             "id": "BK-201",
@@ -28,7 +28,7 @@
       {
         "name": "AuthApi",
         "file": "AuthApi.ts",
-        "relativePath": "tests/components/api/AuthApi.ts",
+        "relativePath": "tests\\components\\api\\AuthApi.ts",
         "atcs": [
           {
             "id": "BK-101",
@@ -47,7 +47,7 @@
       {
         "name": "LoginPage",
         "file": "LoginPage.ts",
-        "relativePath": "tests/components/ui/LoginPage.ts",
+        "relativePath": "tests\\components\\ui\\LoginPage.ts",
         "atcs": [
           {
             "id": "BK-101",

@@ -1,6 +1,6 @@
 # Skill Registry (auto-generated)
 
-> Generated: `2026-08-01T21:26:12.453Z`
+> Generated: `2026-08-09T20:34:41.062Z`
 > Generator: `bun scripts/build-skill-registry.ts`
 > Protocol: `.claude/skills/agentic-qa-core/references/skill-resolver.md`
 
@@ -8,7 +8,7 @@ This file is the per-session compact-rules cache for the Skill Resolver protocol
 The orchestrator copies one or more `## Skill: <slug>` blocks below into every subagent briefing under `## Project Standards (auto-resolved)`.
 Subagents trust those compact rules and only read the full SKILL.md when explicitly instructed.
 
-Skills indexed: 18
+Skills indexed: 15
 
 ---
 ## Skill: acli
@@ -35,7 +35,7 @@ Skills indexed: 18
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.claude/skills/acli/SKILL.md` · phase: `unknown` · extraction strategy: B
+> Source: `.claude\skills\acli\SKILL.md` · phase: `unknown` · extraction strategy: B
 
 ---
 
@@ -55,7 +55,7 @@ Skills indexed: 18
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.claude/skills/agentic-qa-core/SKILL.md` · phase: `unknown` · extraction strategy: B
+> Source: `.claude\skills\agentic-qa-core\SKILL.md` · phase: `unknown` · extraction strategy: B
 
 ---
 
@@ -83,7 +83,7 @@ Skills indexed: 18
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.claude/skills/agentic-qa-onboard/SKILL.md` · phase: `bootstrap` · extraction strategy: B
+> Source: `.claude\skills\agentic-qa-onboard\SKILL.md` · phase: `bootstrap` · extraction strategy: B
 
 ---
 
@@ -111,7 +111,7 @@ Skills indexed: 18
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.claude/skills/bug-screenshot-annotation/SKILL.md` · phase: `unknown` · extraction strategy: B
+> Source: `.claude\skills\bug-screenshot-annotation\SKILL.md` · phase: `unknown` · extraction strategy: B
 
 ---
 
@@ -139,7 +139,7 @@ Skills indexed: 18
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.claude/skills/framework-development/SKILL.md` · phase: `unknown` · extraction strategy: B
+> Source: `.claude\skills\framework-development\SKILL.md` · phase: `unknown` · extraction strategy: B
 
 ---
 
@@ -167,7 +167,7 @@ Skills indexed: 18
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.claude/skills/git-flow-master/SKILL.md` · phase: `implementation` · extraction strategy: B
+> Source: `.claude\skills\git-flow-master\SKILL.md` · phase: `implementation` · extraction strategy: B
 
 ---
 
@@ -195,50 +195,7 @@ Skills indexed: 18
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.claude/skills/judgment-day/SKILL.md` · phase: `unknown` · extraction strategy: B
-
----
-
-## Skill: playwright-best-practices
-
-**Purpose**: Use when writing Playwright tests, fixing flaky tests, debugging failures, implementing Page Object Model, configuring CI/CD, optimizing...
-
-**Compact Rules**:
-- **Run tests**: `npx playwright test --reporter=list`
-- **If tests fail**:
-- Review error output and trace (`npx playwright show-trace`)
-- Fix locators, waits, or assertions
-- Re-run tests
-- **Only proceed when all tests pass**
-- **Run multiple times** for critical tests: `npx playwright test --repeat-each=5`
-
-**Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
-
-> Source: `.claude/skills/playwright-best-practices/SKILL.md` · phase: `unknown` · extraction strategy: B
-
----
-
-## Skill: playwright-cli
-
-**Purpose**: Automate browser interactions, test web pages and work with Playwright tests.
-
-**Compact Rules**:
-- Page URL: https://example.com/
-- Page Title: Example Domain
-- **Running and Debugging Playwright tests** [references/playwright-tests.md](references/playwright-tests.md)
-- **Request mocking** [references/request-mocking.md](references/request-mocking.md)
-- **Running Playwright code** [references/running-code.md](references/running-code.md)
-- **Browser session management** [references/session-management.md](references/session-management.md)
-- **Spec-driven testing (plan / generate / heal)** [references/spec-driven-testing.md](references/spec-driven-testing.md)
-- **Storage state (cookies, localStorage)** [references/storage-state.md](references/storage-state.md)
-- **Test generation** [references/test-generation.md](references/test-generation.md)
-- **Tracing** [references/tracing.md](references/tracing.md)
-- **Video recording** [references/video-recording.md](references/video-recording.md)
-- **Inspecting element attributes** [references/element-attributes.md](references/element-attributes.md)
-
-**Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
-
-> Source: `.claude/skills/playwright-cli/SKILL.md` · phase: `unknown` · extraction strategy: B
+> Source: `.claude\skills\judgment-day\SKILL.md` · phase: `unknown` · extraction strategy: B
 
 ---
 
@@ -266,7 +223,7 @@ Skills indexed: 18
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.claude/skills/pr-review-lead/SKILL.md` · phase: `unknown` · extraction strategy: B
+> Source: `.claude\skills\pr-review-lead\SKILL.md` · phase: `unknown` · extraction strategy: B
 
 ---
 
@@ -294,7 +251,7 @@ Skills indexed: 18
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.claude/skills/project-discovery/SKILL.md` · phase: `unknown` · extraction strategy: B
+> Source: `.claude\skills\project-discovery\SKILL.md` · phase: `unknown` · extraction strategy: B
 
 ---
 
@@ -322,35 +279,7 @@ Skills indexed: 18
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.claude/skills/regression-testing/SKILL.md` · phase: `unknown` · extraction strategy: B
-
----
-
-## Skill: resend-cli
-
-**Purpose**: Operate the Resend platform from the terminal — send emails (including React Email .tsx templates via --react-email), manage domains, con...
-
-**Compact Rules**:
-- Supply ALL required flags. The CLI will NOT prompt when stdin is not a TTY.
-- Pass `--quiet` (or `-q`) to suppress spinners and status messages.
-- Exit `0` = success, `1` = error.
-- Error JSON goes to stderr, success JSON goes to stdout:
-- Use `--api-key` or `RESEND_API_KEY` env var. Never rely on interactive login.
-- All `delete`/`rm` commands require `--yes` in non-interactive mode.
-- **Sending or reading emails** → [references/emails.md](references/emails.md)
-- **Setting up or verifying a domain** → [references/domains.md](references/domains.md)
-- **Managing API keys** → [references/api-keys.md](references/api-keys.md)
-- **Creating or sending broadcasts** → [references/broadcasts.md](references/broadcasts.md)
-- **Managing contacts, segments, or topics** → [references/contacts.md](references/contacts.md), [references/segments.md](references/segments.md), [references/topics.md](references/topics.md)
-- **Defining contact properties** → [references/contact-properties.md](references/contact-properties.md)
-- **Working with templates** → [references/templates.md](references/templates.md)
-- **Viewing API request logs** → [references/logs.md](references/logs.md)
-- **Creating automations or sending events** → [references/automations.md](references/automations.md)
-- (truncated — read full SKILL.md for the rest)
-
-**Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
-
-> Source: `.claude/skills/resend-cli/SKILL.md` · phase: `unknown` · extraction strategy: B
+> Source: `.claude\skills\regression-testing\SKILL.md` · phase: `unknown` · extraction strategy: B
 
 ---
 
@@ -371,7 +300,7 @@ Skills indexed: 18
 
 **Read full SKILL.md when**: running the batch grooming pipeline, writing the per-Story `shift-left-refinement.md`, or handling the PO/Dev handoff.
 
-> Source: `.claude/skills/shift-left-testing/SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.claude\skills\shift-left-testing\SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -399,7 +328,7 @@ Skills indexed: 18
 
 **Read full SKILL.md when**: starting a sprint cold, resuming a session, or handling a bug-triage / batch-sprint flow not covered by the rules above.
 
-> Source: `.claude/skills/sprint-testing/SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.claude\skills\sprint-testing\SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -421,7 +350,7 @@ Skills indexed: 18
 
 **Read full SKILL.md when**: writing KATA component code, choosing fixtures for a hybrid flow, or applying the Phase 3 review checklist.
 
-> Source: `.claude/skills/test-automation/SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.claude\skills\test-automation\SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -443,7 +372,7 @@ Skills indexed: 18
 
 **Read full SKILL.md when**: resolving TMS modality, computing ROI, writing Gherkin, or wiring US-ATP-ATR-TC traceability links.
 
-> Source: `.claude/skills/test-documentation/SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.claude\skills\test-documentation\SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -471,4 +400,4 @@ Skills indexed: 18
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.claude/skills/xray-cli/SKILL.md` · phase: `unknown` · extraction strategy: B
+> Source: `.claude\skills\xray-cli\SKILL.md` · phase: `unknown` · extraction strategy: B
