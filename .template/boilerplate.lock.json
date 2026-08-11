@@ -4,15 +4,15 @@
   "templateCommit": "",
   "perComponentCommit": {
     "claude-config": "f539bc96114e98ea9691f5cd8a7c53401f766e9b",
-    "scripts": "88563b09328c12616ba0ccbd0ad2a4d996577a51",
-    "docs": "bd809059dfd37cf71c2c646c7868a426676e9322",
+    "scripts": "a31b6e1908ee69b224042d7e7a07c7f3efbebaa8",
+    "docs": "a31b6e1908ee69b224042d7e7a07c7f3efbebaa8",
     "cli": "bc869c81ae1a9a83c33ffc5840d1d5075213034e",
     "vscode": "57a2dfdfc1ecaf50b569114e328908e14e211aea",
-    "husky": "194c5be6bb2d9fbf04eb865688f60839a0dc849d",
+    "husky": "a31b6e1908ee69b224042d7e7a07c7f3efbebaa8",
     "agents-docs": "be97d8b96f03caba6f7ad74a034f97e6ac39d7dd",
     "tooling": "57a2dfdfc1ecaf50b569114e328908e14e211aea",
-    "commands": "bd809059dfd37cf71c2c646c7868a426676e9322",
-    "skills": "bd809059dfd37cf71c2c646c7868a426676e9322",
+    "commands": "a31b6e1908ee69b224042d7e7a07c7f3efbebaa8",
+    "skills": "a31b6e1908ee69b224042d7e7a07c7f3efbebaa8",
     "env-template": "bd809059dfd37cf71c2c646c7868a426676e9322"
   },
   "syncedComponents": [],
@@ -32,30 +32,39 @@
       ]
     },
     ".gitignore": {
-      "lastSyncedSha": "f52255194b1b13012d8dbafc6dcaf20d7ce49ccd",
+      "lastSyncedSha": "36a1a683d89bb8c2c9376a25ec204cbbdfd4c5a4",
       "appendedLines": [
         ".template/claude-md.upstream.sha",
-        "/.agents/prompts/"
+        "/.agents/prompts/",
+        ".template/upstream-sha/"
       ]
     }
   },
   "packageJsonSync": {
     "package.json": {
       "scripts": {
-        "lastSyncedSha": "a5f848544f56080ceff9a25cade06ccd4b05a35d",
+        "lastSyncedSha": "cd5a302ce987aa16037b9337bc3a5f266298c292",
         "appliedKeys": [
           "vars:env:check"
         ]
       },
       "devDependencies": {
-        "lastSyncedSha": "a5f848544f56080ceff9a25cade06ccd4b05a35d",
+        "lastSyncedSha": "cd5a302ce987aa16037b9337bc3a5f266298c292",
         "appliedKeys": [
           "allure-js-commons"
         ]
+      },
+      "dependencies": {
+        "lastSyncedSha": "cd5a302ce987aa16037b9337bc3a5f266298c292",
+        "appliedKeys": []
+      },
+      "lint-staged": {
+        "lastSyncedSha": "cd5a302ce987aa16037b9337bc3a5f266298c292",
+        "appliedKeys": []
       }
     }
   },
   "cliVersion": "7.0",
-  "lastSyncedAt": "2026-08-01T21:26:12.335Z",
+  "lastSyncedAt": "2026-08-11T23:12:43.131Z",
   "variableSystemVersion": 1
 }
