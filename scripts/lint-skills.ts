@@ -587,6 +587,9 @@ const STALE_PATH_ALLOWED = new Set<string>([
   'tests/data/mocks/auth/login/POST.200.json',
   'tests/data/mocks/users/POST.201.json',
   'tests/data/mocks/users/create/POST.400.json',
+  // Adapted-repo drift: upstream ships these example specs, this repo deleted
+  // them at adapt time, but the upstream skill bodies still cite them. Re-apply
+  // after every `bun run up` until upstream adds them to its own allowlist.
   'tests/e2e/dashboard/dashboard.test.ts',
   'tests/integration/auth/user-session.test.ts',
 ]);
