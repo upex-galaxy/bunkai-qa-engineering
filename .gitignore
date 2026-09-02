@@ -146,3 +146,9 @@ dbhub.local.toml
 
 # ----- 2026-08-11 (sync) -----
 .template/upstream-sha/
+
+# ===== Cross-harness generated artifacts =====
+# Generated alias onto .agents/skills. Never edit or commit it.
+.claude/skills
+# Local recovery copy written by the cross-harness migration.
+.template/pre-agents-migration/

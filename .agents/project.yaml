@@ -25,7 +25,7 @@ database:
 issue_tracker:
   issue_tracker: Jira # Issue tracking tool (e.g. Jira)
   issue_tracker_cli: acli # CLI command to query tickets (e.g. acli (Jira) / gh issue (GitHub))
-  atlassian_url: 'https://upexgalaxy71.atlassian.net/' # Atlassian site base URL (e.g. https://company.atlassian.net) — same value as .env's ATLASSIAN_URL
+  atlassian_url: "https://upexgalaxy71.atlassian.net/" # Atlassian site base URL (e.g. https://company.atlassian.net) — same value as .env's ATLASSIAN_URL
 
 testing:
   default_env: staging # Default testing environment — must match a key under `environments:` (e.g. staging)
@@ -54,13 +54,13 @@ qa:
 # For explicit cross-env references use {{environments.<env>.<var>}} (e.g. {{environments.local.web_url}}).
 environments:
   local:
-    web_url: 'http://localhost:3000' # Frontend URL for local env (e.g. http://localhost:3000)
-    api_url: 'http://localhost:3000/api' # API base URL for local env (e.g. http://localhost:3000/api)
+    web_url: "http://localhost:3000" # Frontend URL for local env (e.g. http://localhost:3000)
+    api_url: "http://localhost:3000/api" # API base URL for local env (e.g. http://localhost:3000/api)
     db_mcp: local-dbhub # MCP server name for local DB (e.g. myproject-local-db)
     api_mcp: local-openapi # MCP server name for local API (e.g. myproject-local-api)
   staging:
-    web_url: 'https://staging-upexbunkai.vercel.app' # Frontend URL for staging env (e.g. https://staging.myproject.com)
-    api_url: 'https://staging-upexbunkai.vercel.app/api' # API base URL for staging env (e.g. https://api-staging.myproject.com)
+    web_url: "https://staging-upexbunkai.vercel.app" # Frontend URL for staging env (e.g. https://staging.myproject.com)
+    api_url: "https://staging-upexbunkai.vercel.app/api" # API base URL for staging env (e.g. https://api-staging.myproject.com)
     db_mcp: staging-dbhub # MCP server name for staging DB (e.g. myproject-staging-db)
     api_mcp: staging-openapi # MCP server name for staging API (e.g. myproject-staging-api)
 
