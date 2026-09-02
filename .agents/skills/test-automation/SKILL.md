@@ -1,8 +1,8 @@
 ---
 name: test-automation
-description: "Plan, write, and review automated tests following KATA (Komponent Action Test Architecture) on Playwright + TypeScript. Use when writing E2E or API/integration tests, creating Page or Api components, designing ATCs, parameterizing test data, registering fixtures, or reviewing test code for KATA compliance. Triggers on: write test, automate test, create E2E test, create API test, integration test, KATA, page object, API component, implementation plan, ATC, automated test case, review test code, automate module, automate ticket, add regression test. Always load before writing any test code -- KATA fixture selection, inline-locator rule, ATC-identity rule, and import-alias requirements differ from standard Playwright conventions. Do NOT use for running suites (regression-testing), documenting TCs in Jira/Xray (test-documentation), onboarding a repo (project-discovery), or orchestrating sprint-wide testing (sprint-testing)."
+description: "Plan, write, and review automated tests following KATA (Komponent Action Test Architecture) on Playwright + TypeScript, or explain existing automated tests in a sealed read-only mode. Use when writing E2E or API/integration tests, creating Page or Api components, designing ATCs, parameterizing test data, registering fixtures, reviewing test code for KATA compliance, or requesting break-down-tests / a plain-English test breakdown. The explain mode reads source and reports assertions without entering Plan-Code-Review or editing tests. Do NOT use for running suites (regression-testing), documenting TCs in Jira/Xray (test-documentation), onboarding a repo (project-discovery), or orchestrating sprint-wide testing (sprint-testing)."
 license: MIT
-compatibility: [Codex, copilot, cursor, codex, opencode]
+compatibility: [claude-code, copilot, cursor, codex, opencode]
 complementary_categories: [testing-e2e, testing-api, testing-component, automation-cli, accessibility]
 ---
 
@@ -17,7 +17,7 @@ natively (no SDD required).
 
 This boundary is mechanical, not advisory: `scripts/lint-skills.ts` rejects
 any `/sdd-` mention outside this section. See:
-`.Codex/skills/agentic-qa-core/references/skill-composition-strategy.md` §4
+`.agents/skills/agentic-qa-core/references/skill-composition-strategy.md` §4
 (governs users who manually install SDD).
 
 # Test Automation — Plan, Code, Review
@@ -33,7 +33,7 @@ KATA (Komponent Action Test Architecture) rewires the usual Page Object pattern.
 Requires `agentic-qa-core`. Loads on demand:
 
 - `agentic-qa-core/references/test-design-doctrine.md` — **MANDATORY before planning which ATCs to write from acceptance criteria.** Governs the 1:N ATC derivation, the formal-technique triggers (incl. BVA, which KATA's EP-merge rule does NOT replace), and the floor-not-ceiling coverage model.
-- `agentic-qa-core/references/briefing-template.md`, `./dispatch-patterns.md`, `./orchestration-doctrine.md`, `./session-management.md`, `./preflight-gate.md`, `./adr-doctrine.md` — cited inline by the sections that use them.
+- `agentic-qa-core/references/briefing-template.md`, `agentic-qa-core/references/dispatch-patterns.md`, `agentic-qa-core/references/orchestration-doctrine.md`, `agentic-qa-core/references/session-management.md`, `agentic-qa-core/references/preflight-gate.md`, `agentic-qa-core/references/adr-doctrine.md` — cited inline by the sections that use them.
 
 ## Compact Rules
 
@@ -57,13 +57,24 @@ Requires `agentic-qa-core`. Loads on demand:
 
 ---
 
+## Mode routing
+
+Resolve mode before any readiness preflight or session workflow.
+
+- `explain`: selected by the legacy `break-down-tests` alias or an explicit request to explain existing automated tests. Forward `$ARGUMENTS` unchanged, load only `references/explain-tests.md`, produce its read-only report, then stop. Do not create session state, run Plan -> Code -> Review, edit tests, regenerate `kata-manifest.json`, or call Jira/TMS.
+- `automate` (default): all normal KATA planning, coding, and review triggers. Continue with the workflow below.
+
+If the invocation could mean either explanation or implementation, ask which outcome is wanted. Never infer implementation from a read-only explanation request.
+
+---
+
 ## Subagent Dispatch Strategy
 
-> **Orchestration & Session contracts**: this skill follows `./orchestration-doctrine.md` (mandatory subagent dispatch — main thread is command center) AND `./session-management.md` (Phase 0 resume check, plan-first persistence at `.session/<skill-slug>/<scope>/`, archive on completion). Phase 0 (resume check) and Phase 1 (plan write) are NOT optional. The orchestrator also applies the per-stage **Definition-of-Done gates** in `./stage-gates.md`: verify a stage's DoD (planning stages include the Test-Design Checklist) BEFORE recording its progress checkpoint and advancing.
+> **Orchestration & Session contracts**: this skill follows `agentic-qa-core/references/orchestration-doctrine.md` (mandatory subagent dispatch — main thread is command center) AND `agentic-qa-core/references/session-management.md` (Phase 0 resume check, plan-first persistence at `.session/<skill-slug>/<scope>/`, archive on completion). Phase 0 (resume check) and Phase 1 (plan write) are NOT optional. The orchestrator also applies the per-stage **Definition-of-Done gates** in `agentic-qa-core/references/stage-gates.md`: verify a stage's DoD (planning stages include the Test-Design Checklist) BEFORE recording its progress checkpoint and advancing.
 
 This skill is **per-scope**: `<scope>` = `<JIRA-KEY>` (ticket-driven / regression-driven) or `<module-slug>` (module-driven). Session state lives at `.session/test-automation/<scope>/{plan.md, progress.md}` per `agentic-qa-core/references/session-management.md` §3 + §9. The session `plan.md` is a thin INDEX that cites the canonical domain artifacts (`spec.md`, `automation-plan.md`, `atc/*.md`) under the Epic's `test-specs/` tree (`.context/PBI/epics/EPIC-<KEY>-<slug>/test-specs/<scope>/`) — domain content stays in the existing PBI tree, not duplicated.
 
-This skill is compliant with the doctrine in `AGENTS.md` §"Orchestration Mode (Subagent Strategy)" and the session contract in `.Codex/skills/agentic-qa-core/references/session-management.md`. Every dispatch follows the 6-component briefing format defined in `.Codex/skills/agentic-qa-core/references/briefing-template.md`, and the pattern selected per phase matches the decision guide in `.Codex/skills/agentic-qa-core/references/dispatch-patterns.md`. The Plan, Code, and Review phases each carry distinct context-isolation needs — Plan keeps KATA architectural reads out of the orchestrator, Code isolates multi-file edits, Review fans out three independent verifiers in parallel.
+This skill is compliant with the doctrine in `AGENTS.md` §"Orchestration Mode (Subagent Strategy)" and the session contract in `.agents/skills/agentic-qa-core/references/session-management.md`. Every dispatch follows the 7-component briefing format defined in `.agents/skills/agentic-qa-core/references/briefing-template.md`, and the pattern selected per phase matches the decision guide in `.agents/skills/agentic-qa-core/references/dispatch-patterns.md`. The Plan, Code, and Review phases each carry distinct context-isolation needs — Plan keeps KATA architectural reads out of the orchestrator, Code isolates multi-file edits, Review fans out three independent verifiers in parallel.
 
 | Stage                                          | Pattern              | Subagent role                                                                                                                  |
 |------------------------------------------------|----------------------|--------------------------------------------------------------------------------------------------------------------------------|
@@ -75,8 +86,8 @@ This skill is compliant with the doctrine in `AGENTS.md` §"Orchestration Mode (
 | Review aggregation + merge/reject decision    | Single               | inline — orchestrator reads the 3 Verifier reports and decides                                                                  |
 
 - **Code phase scope rule**: each Code subagent edits multiple files in isolation, returns a list of changed files + a one-line summary per file. The orchestrator never reads the diffs — only the summary. If the user wants to see actual diffs, the orchestrator runs `git diff` inline after the subagent returns.
-- **On any Verifier failure**: STOP, return the failing report verbatim to the user, do NOT auto-fix the test code, do NOT re-dispatch the Code phase without user approval. See `.Codex/skills/agentic-qa-core/references/orchestration-doctrine.md`.
-- **MANDATORY context doc for Plan + Code briefings**: include `kata-manifest.json` (root) in the "Context docs" component (item 2 of the 6-component briefing). Without it the subagent will scan `tests/components/**` directly, burn tokens, and risk proposing duplicates. See Critical Rule #12 in `AGENTS.md`.
+- **On any Verifier failure**: STOP, return the failing report verbatim to the user, do NOT auto-fix the test code, do NOT re-dispatch the Code phase without user approval. See `.agents/skills/agentic-qa-core/references/orchestration-doctrine.md`.
+- **MANDATORY context doc for Plan + Code briefings**: include `kata-manifest.json` (root) in the "Context docs" component (item 2 of the 7-component briefing). Without it the subagent will scan `tests/components/**` directly, burn tokens, and risk proposing duplicates. See Critical Rule #12 in `AGENTS.md`.
 
 ---
 
@@ -85,11 +96,11 @@ This skill is compliant with the doctrine in `AGENTS.md` §"Orchestration Mode (
 Canonical reading order for any AI starting cold on a test-automation workflow. Read in order; stop earlier when later inputs add no signal for the scope at hand.
 
 1. `kata-manifest.json` (root) — authoritative registry of every Component (`api[]`, `ui[]`) and every `@atc('TICKET-ID')` ID. Anti-duplication gate per Critical Rule #12 in `AGENTS.md`. MUST load before proposing any new `Page`, `Api`, `Steps` module, or `@atc` ID.
-2. `.Codex/skills/test-automation/references/kata-architecture.md` + `.Codex/skills/test-automation/references/typescript-patterns.md` — full doctrine for KATA layers (TestContext / Base / Domain / Fixture), ATC identity, fixture selection, import-alias rules, params contracts.
+2. `.agents/skills/test-automation/references/kata-architecture.md` + `.agents/skills/test-automation/references/typescript-patterns.md` — full doctrine for KATA layers (TestContext / Base / Domain / Fixture), ATC identity, fixture selection, import-alias rules, params contracts.
 3. `tests/components/` — existing Api / Page / Steps shape on disk. Establishes naming, helper-vs-ATC split, fixture registration patterns to follow.
 4. The Story's `implementation-plan.md` (dev plan) + the ATP under `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/` — Jira-synced, READ-ONLY caches. Jira is source of truth; NEVER hand-write these. Materialize via `bun run jira:sync-issues get <STORY-KEY> --include-comments`, then **read the ENTIRE synced Story folder** — every per-field `.md` (`story.md`, `acceptance-criteria.md`, scope, business rules, etc.) **plus `comments.md`** — not just one field. Omitting ACs, scope, business rules, or comment context produces incomplete ATCs. The **ATP read is modality-aware** (resolve via `.agents/project.yaml` `testing.tms_cli`, same gate as `/test-documentation` §Phase 0):
    - **Modality jira-native**: ATP = Story field `{{jira.acceptance_test_plan}}` → synced `acceptance-test-plan.md` in the Story folder (from the same `jira:sync-issues get <STORY-KEY> --include-comments`).
-   - **Modality jira-xray**: ATP = Test Plan issue `description` → `bun run jira:sync-issues get <ATP_KEY>` → `test-plans/TESTPLAN-<KEY>-<slug>.md`; per-TC run results come from `[TMS_TOOL]` (xray-cli), not the sync.
+   - **Modality jira-xray**: ATP = Test Plan issue `description` → `bun run jira:sync-issues get <ATP_KEY>` → `test-plans/ATP-<KEY>-<slug>.md`; per-TC run results come from `[TMS_TOOL]` (xray-cli), not the sync. Filename note: the acronym prefix comes from a conforming ladder title; a Plan or Execution whose title does not follow the grammar keeps the legacy `TESTPLAN-` / `TESTEXEC-` / `RETESTEXEC-` prefix.
 
    The dev `implementation-plan.md` carries the implementation approach + (when produced by `/test-documentation`) the per-TC candidate verdict and component mapping. Cite from the session `plan.md` rather than duplicating. NOTE: this is the Story-folder *dev* `implementation-plan.md` — do NOT confuse it with the hand-authored *automation* plan (`test-specs/<scope>/automation-plan.md`) you write in Phase 1.
 5. The Story's AC (acceptance criteria) — source of truth for scenarios that become ATCs. Read from the same synced `.md` files (`acceptance-criteria.md` / `story.md`) produced by `bun run jira:sync-issues get <STORY-KEY> --include-comments`. NEVER use `[ISSUE_TRACKER_TOOL]` `view` for these custom fields — `view` returns `null` for `customfield_*`. If a field is absent from the instance, the sync emits a pointer stub and the content lives in comments/description per `.agents/jira-required.yaml` `fallback:`. Resolve the issue key from the scope picker. **TC note**: a TC body = the `Test` issue `description` (synced both modalities via `bun run jira:sync-issues get <TEST-KEY>`); the Xray Gherkin / Test-Steps plugin field is NOT synced — it mirrors the description, so read the synced TC `.md` for Gherkin/steps.
@@ -181,7 +192,7 @@ Write the canonical domain plan file(s) for the chosen scope under the Epic's `t
 - Which scenarios from the ticket become tests, which become ATCs, which are shared preconditions (Steps)?
 - Which components already exist (`tests/components/api/*Api.ts`, `tests/components/ui/*Page.ts`) and which need to be created?
 - What test data is required? Classify by Discover / Modify / Generate (never assume data exists in staging).
-- Which fixture will the test use -- `{api}`, `{ui}`, `{test}`, or `{steps}`?
+- Which fixture will the test use -- `{api}`, `{ui}`, or `{test}`? Do any shared preconditions call for a Steps class (`tests/components/steps/*Steps.ts`), instantiated directly in the test?
 - Which ATC IDs (from the TMS) map to which component methods?
 
 **Also write the session index `plan.md`** at `.session/test-automation/<scope>/plan.md` per `agentic-qa-core/references/session-management.md` §6. This is a THIN INDEX — Goal, Inputs (cites the canonical artifacts above), Approach, Phase breakdown table, Risks, Verification checklist, Cross-references. It does NOT duplicate the domain content; it points to it.
@@ -200,7 +211,7 @@ Implement in this order:
 
 1. **Types** at top of component file (payloads, responses, domain DTOs).
 2. **Component class** extending `ApiBase` or `UiBase`. Helpers first (no decorator), ATCs second (`@atc('TICKET-ID')`).
-3. **Register** the component in `tests/components/ApiFixture.ts`, `UiFixture.ts`, or `StepsFixture.ts` as appropriate.
+3. **Register** the component in `tests/components/ApiFixture.ts` or `UiFixture.ts` as appropriate. Steps classes (`tests/components/steps/*Steps.ts`) are NOT registered in any fixture — tests and setup files instantiate them directly (see `ExampleSteps.ts`).
 4. **Test file** under `tests/e2e/{module}/` or `tests/integration/{module}/`, using the correct fixture.
 5. **Run + verify**, in this exact order -- do not skip steps:
 
@@ -211,6 +222,20 @@ bun run lint:check                         # ESLint, no errors
 ```
 
 If any step fails, fix before moving to Review.
+
+6. **Signal it in the TMS** — per TC, both signals, neither optional:
+   - **Link**: bind the automated test to the manual `Test` it automates via the `test_automation`
+     link type (`{{jira.link_types.test_automation}}`, outward `automation test for` — slug-resolved,
+     never a literal; catalog: `agentic-qa-core/references/traceability-linking.md` §3).
+   - **Labels**: ADD `automated` on the `Test` and REMOVE `automation-candidate` — the two are
+     mutually exclusive (`test-documentation/SKILL.md` §Labels). Flip them at the point the TC
+     actually reaches **AUTOMATED** (see §Git & TMS handoff: the `merged` transition after the
+     suite PR lands on `main` with CI green), not on a merge into the integration trunk.
+
+```
+[ISSUE_TRACKER_TOOL] Link work items: {AUTOMATED_TEST_KEY} -> {TC_KEY}  type: {{jira.link_types.test_automation}}
+[ISSUE_TRACKER_TOOL] Update work item: {TC_KEY}  labels: + automated  - automation-candidate
+```
 
 **Progress checkpoint**: after each Code subagent returns (per scope unit — one per TC for module-driven, one total for ticket-driven), the orchestrator appends a phase entry to `.session/test-automation/<scope>/progress.md` per `agentic-qa-core/references/session-management.md` §7. For module-driven scope, mid-batch resume reads the entries and skips already-coded ATCs.
 
@@ -243,18 +268,18 @@ Use the dispatch defined in §Subagent Dispatch Strategy: **Parallel** (3 simult
 
 Run the review checklist on the new/modified files. Treat every failed item as a blocker. A clean review is the merge gate. See `references/review-checklists.md` for the full lists (E2E and API have overlapping but distinct checklists).
 
-**Optional adversarial gate** — for high-risk changes (new fixtures, shared Page/Api base modifications, refactors touching multiple ATCs), invoke `/judgment-day` before commit. Runs two blind judges in parallel against the diff and only approves when both agree. See `.Codex/skills/judgment-day/SKILL.md`. Not invoked automatically — user opts in per ticket.
+**Optional adversarial gate** — for high-risk changes (new fixtures, shared Page/Api base modifications, refactors touching multiple ATCs), invoke `/judgment-day` before commit. Runs two blind judges in parallel against the diff and only approves when both agree. See `.agents/skills/judgment-day/SKILL.md`. Not invoked automatically — user opts in per ticket.
 
 **Progress checkpoint + Archive**: after Phase 3 returns ACCEPT (all 3 Verifiers exit 0), the orchestrator appends `## Phase 3 — Review — <ts>` with `status: completed`, `next: stop` to `.session/test-automation/<scope>/progress.md`, then runs Archive per `agentic-qa-core/references/session-management.md` §8: moves `.session/test-automation/<scope>/` to `.session/.archive/<YYYY-MM-DD>-test-automation-<scope>/` (two-file dir preserved) and calls `mem_session_summary` including the archive path. On REJECT, archive does NOT run — the working directory stays for debug.
 
 #### Git & TMS handoff (sdet integration-trunk suites)
 
-This skill stops at a clean local review. It does **not** create branches, push, or open PRs — that is `/git-flow-master`'s job. When the repo's git strategy is `sdet` (the standing mode for chained test-automation suites), each ticket flows through the per-ticket loop in `.Codex/skills/git-flow-master/references/sdet-integration-trunk.md`:
+This skill stops at a clean local review. It does **not** create branches, push, or open PRs — that is `/git-flow-master`'s job. When the repo's git strategy is `sdet` (the standing mode for chained test-automation suites), each ticket flows through the per-ticket loop in `.agents/skills/git-flow-master/references/sdet-integration-trunk.md`:
 
 - The Phase 3 ACCEPT gate (3 Verifiers green: `test` / `types:check` / `lint:check`) is the skill's **local validation gate**. Under `sdet` it must pass on **both** the `local` and `staging` environments before push — re-run the suite against each (`active_env` per `.agents/project.yaml`). The Verifiers are local-only; Sanity CI on the branch is owned by `/git-flow-master` + `/regression-testing`, never by this skill.
 - After ACCEPT, surface the explicit handoff — _"Local gate green. Ready for `/git-flow-master`: cut `test/{KEY}-{slug}` from the integration trunk, push, Sanity-CI, PR into the trunk, merge `--no-ff`."_ Do not auto-invoke git operations.
-- **Append the Git Ledger line** to the suite's `progress.md` after each branch action (orchestrator-written, append-only) so a resuming session knows how the trunk was left: trunk name + SHA, last ticket merged, pending tickets, sync-gate / final-PR state. Schema in `../agentic-qa-core/references/session-management.md` §7 "The Git Ledger"; what-to-write detail in `.Codex/skills/git-flow-master/references/sdet-integration-trunk.md` §Resume.
-- **TC lifecycle anchors to the ticket-branch PR, not the final `trunk → main` PR**: TCs → In Review when the ticket PR opens into the trunk; they flip to Automated only after the final suite PR merges to `main` and CI is green there. Execute transitions via `/test-documentation` + `[ISSUE_TRACKER_TOOL]`; cross-check status names against `.agents/jira-workflows.json`. Merging into the trunk is NOT "Automated".
+- **Append the Git Ledger line** to the suite's `progress.md` after each branch action (orchestrator-written, append-only) so a resuming session knows how the trunk was left: trunk name + SHA, last ticket merged, pending tickets, sync-gate / final-PR state. Schema in `../agentic-qa-core/references/session-management.md` §7 "The Git Ledger"; what-to-write detail in `.agents/skills/git-flow-master/references/sdet-integration-trunk.md` §Resume.
+- **TC lifecycle anchors to the ticket-branch PR, not the final `trunk → main` PR**: TCs → **Pull Request** when the ticket PR opens into the trunk (transition `create_pr`: In Automation → Pull Request); they flip to **AUTOMATED** only via the `merged` transition, after the final suite PR merges to `main` and CI is green there. Execute transitions via `/test-documentation` + `[ISSUE_TRACKER_TOOL]`; cross-check status names against `.agents/jira-workflows.json`. Merging into the trunk is NOT "AUTOMATED".
 
 ---
 
@@ -267,10 +292,10 @@ The fixture you pick determines whether a browser opens. Wrong fixture = slow AP
 | API only (integration) | `{ api }` | No (lazy) | Pure API testing. No UI needed. |
 | UI only | `{ ui }` | Yes | UI-focused testing. No backend setup via API. |
 | Hybrid (UI + API setup) | `{ test }` | Yes | Setup data via API, drive flow via UI, verify via API. |
-| Reusable precondition chains | `{ steps }` | Depends on steps used | 3+ ATCs repeated across 3+ files. |
 
 Rules:
 
+- Only three fixtures exist: `{ api }`, `{ ui }`, `{ test }` (see `tests/components/TestFixture.ts`). Reusable precondition chains (3+ ATCs repeated across 3+ files) go in a Steps class under `tests/components/steps/` — instantiated directly in the test, never exposed as a fixture.
 - Integration tests (`tests/integration/**`) almost always use `{ api }`.
 - E2E tests (`tests/e2e/**`) use `{ ui }` if no API setup needed, otherwise `{ test }`.
 - Never request `{ ui }` for a test that never interacts with the UI -- it opens a browser for nothing.
@@ -382,7 +407,7 @@ export class UiFixture extends TestContext {
 | Tests pass | `bun run test {path}` | All green, zero retries used |
 | Types | `bun run types:check` | No errors |
 | Lint | `bun run lint:check` | No errors |
-| Fixture registered | visual | Component is in `ApiFixture` / `UiFixture` / `StepsFixture` |
+| Fixture registered | visual | Component is in `ApiFixture` / `UiFixture` (Steps classes are instantiated directly, never registered) |
 | ATC IDs linked | visual | Every `@atc('X')` matches a real TMS test case ID |
 | Naming | visual | Files PascalCase for components, camelCase verb for test files |
 | Session footer | chat | Session footer + consolidated screenshot list printed in chat per session-footer-contract (never in a Jira comment) |
@@ -405,7 +430,7 @@ export class UiFixture extends TestContext {
 
 **T7.** NEVER hardcode `customfield_NNNNN` in spec files, test data, or test config. Resolve Jira fields via `{{jira.<slug>}}` against `.agents/jira-fields.json` + `.agents/jira-required.yaml` so test code survives workspace rotations.
 
-**T8.** NEVER mix test code and product code in the same PR. Test PRs follow the `test/*` branch convention with title format `{type}({ISSUE-KEY}): {description}` — see `.Codex/skills/git-flow-master/references/pr-test-automation.md`. Under the `sdet` strategy, adjacent non-test work never rides a `test/*` ticket branch either — it goes on a Plus Branch (`docs/*`/`chore/*`/`fix/*` → integration trunk). See `.Codex/skills/git-flow-master/references/sdet-integration-trunk.md`.
+**T8.** NEVER mix test code and product code in the same PR. Test PRs follow the `test/*` branch convention with title format `{type}({ISSUE-KEY}): {description}` — see `.agents/skills/git-flow-master/references/pr-test-automation.md`. Under the `sdet` strategy, adjacent non-test work never rides a `test/*` ticket branch either — it goes on a Plus Branch (`docs/*`/`chore/*`/`fix/*` → integration trunk). See `.agents/skills/git-flow-master/references/sdet-integration-trunk.md`.
 
 ---
 

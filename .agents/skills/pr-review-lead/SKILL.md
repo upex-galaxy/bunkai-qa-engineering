@@ -2,7 +2,7 @@
 name: pr-review-lead
 description: "Acts as a QA Lead / QA Architect reviewing a pull request's test-automation work against this repo's KATA doctrine (or the target repo's own doctrine, if it has one) and general QA best practices — grounding every finding in a concrete doctrine citation or code location, never a guess. Use whenever the user wants to review, audit, or give feedback on a colleague's or a teammate's PR, whether it lives in THIS repo or an external repo the user points at (owner/repo#PR via gh). Triggers on: revisa este PR, review this PR, revisá este pull request, dame feedback de este PR, actúa de QA lead, haz de QA lead reviewer, audita este pull request, pr-review-lead, revisión de PR externo, review external repo PR, dale feedback a este trabajo de automatización, evalúa este PR contra KATA, is this PR any good, cómo quedó este PR de automatización. Always runs a strictness preflight first (Flexible / Standard / Strict) before analyzing anything, and never posts a comment to GitHub without the user's explicit final OK. Do NOT use for reviewing your own uncommitted working-tree diff before opening a PR (that's the default code-review flow), for a blind dual-adversarial pass/fail review (that's `/judgment-day`), or for opening/merging the PR itself (that's `/git-flow-master`)."
 license: MIT
-compatibility: [Codex, opencode]
+compatibility: [claude-code, opencode]
 complementary_categories: [meta-skill]
 ---
 
@@ -16,8 +16,8 @@ This skill exists because that's what a real review session in this repo looked 
 
 Requires `agentic-qa-core`. Loads on demand:
 
-- `agentic-qa-core/references/briefing-template.md`, `./dispatch-patterns.md`, `./orchestration-doctrine.md` — when a PR is large enough to warrant subagent fan-out (see Step 2).
-- The default doctrine set for KATA/test-automation PRs, read fresh every invocation (never from memory of a prior session): `test-automation/references/kata-architecture.md`, `./typescript-patterns.md`, `./review-checklists.md`, `agentic-qa-core/references/test-design-doctrine.md`, `./defect-management-doctrine.md`.
+- `agentic-qa-core/references/briefing-template.md`, `agentic-qa-core/references/dispatch-patterns.md`, `agentic-qa-core/references/orchestration-doctrine.md` — when a PR is large enough to warrant subagent fan-out (see Step 2).
+- The default doctrine set for KATA/test-automation PRs, read fresh every invocation (never from memory of a prior session): `test-automation/references/kata-architecture.md`, `test-automation/references/typescript-patterns.md`, `test-automation/references/review-checklists.md`, `agentic-qa-core/references/test-design-doctrine.md`, `agentic-qa-core/references/defect-management-doctrine.md`.
 - `references/severity-and-scoring.md`, `references/evidence-and-doctrine-lookup.md`, `references/output-and-posting-flow.md` — this skill's own reference material, read at the step noted below.
 
 ## When to use this vs. a sibling skill
@@ -51,7 +51,7 @@ Also confirm scope in the same round if not already given: which PR (repo + numb
 Never review against remembered conventions or generic "best practices" you didn't just verify are documented here. Read first, opine second.
 
 - **This repo**: load `AGENTS.md` in full, plus the doctrine files listed under Dependencies above. This is the reference standard.
-- **External repo**: check whether the target repo ships its own `AGENTS.md` / `.Codex/skills/` / `.context/` doctrine before assuming anything — many sibling projects are forked from this same boilerplate and carry (a possibly-evolved version of) the same KATA doctrine, but you cannot assume that without checking. If it has its own doctrine, that repo's doctrine is authoritative for this review, not this repo's copy. If it has none, fall back to this repo's KATA doctrine as the reference standard, and say so explicitly in the output ("this repo has no doctrine of its own, findings are graded against `agentic-qa-boilerplate`'s KATA conventions").
+- **External repo**: check whether the target repo ships its own `AGENTS.md` / `.agents/skills/` / `.context/` doctrine before assuming anything — many sibling projects are forked from this same boilerplate and carry (a possibly-evolved version of) the same KATA doctrine, but you cannot assume that without checking. If it has its own doctrine, that repo's doctrine is authoritative for this review, not this repo's copy. If it has none, fall back to this repo's KATA doctrine as the reference standard, and say so explicitly in the output ("this repo has no doctrine of its own, findings are graded against `agentic-qa-boilerplate`'s KATA conventions").
 
 Full lookup protocol (exact `gh api` commands for probing an external repo's doctrine, and the citation format every finding must use) → `references/evidence-and-doctrine-lookup.md`. Read it now, before Step 2.
 
@@ -109,7 +109,7 @@ This skill is not on AGENTS.md §3's mandatory-briefing list, but reuses the sam
 
 | Stage | Pattern | Subagent role |
 |---|---|---|
-| Probe external repo for its own doctrine (Step 1) | Single | one agent checks for `AGENTS.md`/`.Codex/skills`/`.context`, reports what exists |
+| Probe external repo for its own doctrine (Step 1) | Single | one agent checks for `AGENTS.md`/`.agents/skills`/`.context`, reports what exists |
 | Fetch N independent file diffs (Step 2, large PR) | Parallel | one agent per file or small file-group, returns the patch + a one-line summary; cap at 10 per `dispatch-patterns.md` |
 | Analyze against doctrine (Step 3) | Single or inline | for small/medium PRs, do this inline — you already have the diffs and doctrine loaded; only dispatch if the PR is large enough that isolating the analysis pass protects your own context |
 

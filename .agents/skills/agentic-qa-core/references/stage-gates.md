@@ -49,12 +49,27 @@ answered YES or a justified N/A) — not vibes. "N/A" is a valid answer only whe
 ### sprint-testing — Stage 1 Planning
 
 ```
-[ ] ATP authored as a **Test Plan** item (`ATP: {STORY-KEY}: {title}`); Story custom field only as fallback
+[ ] ATP authored as a **Test Plan** item (`ATP: {STORY-KEY}: {title}`), find-or-created FROM the
+    Story's `{{jira.acceptance_test_plan}}` field content (shift-left is field-first — pre-sprint
+    the ATP lives ONLY in the field; the item is born here); Story custom field only as fallback
+[ ] xray — Set-first order honored: the Story's **ATS** (`ATS: {US_ID}: {story title}`, mandatory
+    even with 1 TC; parent QA Test Artifacts; components inherited from the Story) created/updated
+    holding ALL the Story's TCs, linked ATS→Story via the `test` slug (THE coverage link); the
+    ATP's and the ATR's test lists DERIVED from the ATS membership — never independent id lists
+[ ] **ATR carries the Test Environment** resolved from `active_env` in `.agents/project.yaml`
+    (or the session env switch) — NO ATR without environment: an environment-less Execution is a
+    DoD failure, re-dispatch (hard gate)
 [ ] Coverage = two axes: AC-conformance (floor) + risk-beyond-AC, both present
 [ ] Test-Design Checklist applied (techniques fired per AC shape; collapses justified)
-[ ] Bug: veto + risk-score decision tree applied before the ATP
+[ ] Bug: veto + risk-score decision tree applied before the ATP; xray plans ONE repro Test by
+    default, created at fix-verification time (1:N only if the scope genuinely covers distinct
+    conditions — justified per test-design-doctrine)
 [ ] TC timing honored: native → outlines only; xray → Tests created+ready to execute
     (NO persistent regression set assumed here)
+[ ] Sprint altitude: the sprint **STP** (`STP: Sprint#{N}: {objective}`, Test Plan item, parent
+    QA Master Test Plan) is found-or-created on the sprint's FIRST ticket and updated on every
+    later ticket — skip-with-a-stated-note ONLY when the `Test Plan` work type is absent from the
+    instance (there is NO field fallback at sprint altitude)
 ```
 
 ### sprint-testing — Stage 2 Execution
@@ -72,8 +87,22 @@ answered YES or a justified N/A) — not vibes. "N/A" is a valid answer only whe
 ```
 [ ] ATR authored as a **Test Execution** item (`ATR: {STORY-KEY}: Story Testing`); Story custom field only as fallback
 [ ] QA comment posted; ticket transitioned to the correct status
-[ ] Regression follow-up noted for any regression-worthy bug (Stage-4 hand-off)
-[ ] Traceability verified (Story ↔ ATP ↔ ATR)
+[ ] Regression follow-up noted for any regression-worthy bug (Stage-4 hand-off); bug retest (xray):
+    repro Test's run recorded PASSED/FAILED in the retest Execution
+[ ] Traceability verified — xray: Story↔ATS (`test` slug, coverage) + ATS membership complete +
+    Story↔ATP / Story↔ATR (administrative); native: field/comment containers populated
+```
+
+### sprint-testing — Sprint close (batch close, or `/regression-testing` if it arrives first)
+
+```
+[ ] The sprint **STR** (`STR: Sprint#{N}: Regression Testing`, Test Execution item, parent
+    QA Test Artifacts) exists — first-to-arrive creates it, the other completes it
+[ ] The STR carries its **Test Environment** (same hard gate as the ATR): no environment → DoD failure
+[ ] The STR links to the sprint STP via the `testPlan` edge (`STR → STP`); the STP is closed out
+    with its final scope/progress and transitioned to its terminal state
+[ ] Skip-with-a-stated-note ONLY when the `Test Plan` / `Test Execution` work types are absent
+    (no field fallback at sprint altitude) — never a silent skip
 ```
 
 ### test-documentation — Analyze / Prioritize / Document
@@ -89,8 +118,9 @@ Prioritize:
 Document:
 [ ] Persist ONLY regression-worthy (Candidate/Manual); Deferred = report only,
     no TMS TC (native) / unpromoted sprint Test (xray)
-[ ] US ↔ ATP ↔ ATR ↔ TC links created; promoted TCs added to Test Set + Test Plan
-    (xray) or feature/Epic label (native)
+[ ] US ↔ ATS ↔ ATP ↔ ATR ↔ TC links created — the **ATS→Story** `test` edge is the coverage one
+    (a direct TC→Story link is the last-resort substitute when no ATS can exist); promoted TCs
+    added to the Story's ATS + the Test Plan (xray) or feature/Epic label (native)
 ```
 
 ### test-automation — Plan / Code / Review

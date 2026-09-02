@@ -25,7 +25,7 @@ database:
 issue_tracker:
   issue_tracker: Jira # Issue tracking tool (e.g. Jira)
   issue_tracker_cli: acli # CLI command to query tickets (e.g. acli (Jira) / gh issue (GitHub))
-  atlassian_url: "https://upexgalaxy71.atlassian.net/" # Atlassian site base URL (e.g. https://company.atlassian.net) — same value as .env's ATLASSIAN_URL
+  atlassian_url: 'https://upexgalaxy71.atlassian.net/' # Atlassian site base URL (e.g. https://company.atlassian.net) — same value as .env's ATLASSIAN_URL
 
 testing:
   default_env: staging # Default testing environment — must match a key under `environments:` (e.g. staging)
@@ -38,7 +38,8 @@ qa:
   # Skills resolve the epic by NAME (the methodology convention shipped below) and find-or-create it,
   # caching the discovered `*.key` here. NEVER parent a quality issue to a product/dev epic.
   # Read directly by skills (not {{VAR}} tokens) → skipped by vars:check, like git_strategy leaves.
-  # Doctrine: .claude/skills/agentic-qa-core/references/defect-management-doctrine.md (Part 4).
+  # Doctrine: .agents/skills/agentic-qa-core/references/defect-management-doctrine.md (Part 4).
+  qa_artifact_label: QA-Artifact # Label stamped on every QA process epic; sync-jira-issues.ts reads it to index them under qa-artifacts/ instead of .context/PBI/epics/
   qa_epics:
     defect_epic:
       name: QA Defect Management # convention name; the `QA ` prefix marks a process epic, not product
@@ -46,6 +47,12 @@ qa:
     test_repository_epic:
       name: QA Test Repository # convention name; holds every Test (TC) issue
       key: null # discovered/created at runtime, then cached here (e.g. PROJ-456)
+    master_test_plan_epic:
+      name: QA Master Test Plan # convention name; holds every Test Plan (FTP/STP/ATP)
+      key: null # discovered/created at runtime, then cached here (e.g. PROJ-789)
+    test_artifacts_epic:
+      name: QA Test Artifacts # convention name; holds every Test Execution (STR/ATR), Precondition and Test Set
+      key: null # discovered/created at runtime, then cached here (e.g. PROJ-790)
 
 # Per-environment config. Add/remove environments freely (production, dev, qa, uat, etc.).
 # Each environment must define ALL four keys: web_url, api_url, db_mcp, api_mcp.
@@ -54,13 +61,13 @@ qa:
 # For explicit cross-env references use {{environments.<env>.<var>}} (e.g. {{environments.local.web_url}}).
 environments:
   local:
-    web_url: "http://localhost:3000" # Frontend URL for local env (e.g. http://localhost:3000)
-    api_url: "http://localhost:3000/api" # API base URL for local env (e.g. http://localhost:3000/api)
+    web_url: 'http://localhost:3000' # Frontend URL for local env (e.g. http://localhost:3000)
+    api_url: 'http://localhost:3000/api' # API base URL for local env (e.g. http://localhost:3000/api)
     db_mcp: local-dbhub # MCP server name for local DB (e.g. myproject-local-db)
     api_mcp: local-openapi # MCP server name for local API (e.g. myproject-local-api)
   staging:
-    web_url: "https://staging-upexbunkai.vercel.app" # Frontend URL for staging env (e.g. https://staging.myproject.com)
-    api_url: "https://staging-upexbunkai.vercel.app/api" # API base URL for staging env (e.g. https://api-staging.myproject.com)
+    web_url: 'https://staging-upexbunkai.vercel.app' # Frontend URL for staging env (e.g. https://staging.myproject.com)
+    api_url: 'https://staging-upexbunkai.vercel.app/api' # API base URL for staging env (e.g. https://api-staging.myproject.com)
     db_mcp: staging-dbhub # MCP server name for staging DB (e.g. myproject-staging-db)
     api_mcp: staging-openapi # MCP server name for staging API (e.g. myproject-staging-api)
 

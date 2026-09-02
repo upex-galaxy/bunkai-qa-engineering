@@ -44,8 +44,10 @@
  * ENVIRONMENT
  * ============================================================================
  *
+ * Instance host — NOT an env var. Resolved from `.agents/project.yaml` ->
+ * `issue_tracker.atlassian_url` (see `cli/lib/atlassian-instance.ts`).
+ *
  * Required environment variables (same as `scripts/sync-jira-fields.ts`):
- *   ATLASSIAN_URL=https://your-instance.atlassian.net
  *   ATLASSIAN_EMAIL=your-email@example.com
  *   ATLASSIAN_API_TOKEN=ATATT3x...
  *
@@ -61,6 +63,12 @@
  *   bun run jira:sync-workflows --dry-run         # do everything but do NOT write
  *   bun run jira:sync-workflows --verbose         # log each work_type / status / transition as processed
  *   bun run jira:sync-workflows --help            # show help
+ *
+ * Every endpoint below except `/project/{key}/statuses` requires ADMINISTER, so
+ * this script is unusable for most operators (see `probeAdminPermission`). To
+ * find out whether the catalog it produced has since gone stale WITHOUT admin,
+ * use `bun run jira:check --live` — it re-reads the one non-admin endpoint and
+ * diffs the cached issue-type / status ids against live Jira.
  *
  * ============================================================================
  * EXIT CODES
@@ -359,8 +367,11 @@ FLAGS:
                        Source: ${UPEX_UPSTREAM_URL}
   --help, -h           Show this help.
 
+INSTANCE HOST (not an env var):
+  .agents/project.yaml -> issue_tracker.atlassian_url
+  Print it with: bun run --silent jira:url
+
 ENVIRONMENT:
-  ATLASSIAN_URL          e.g. https://your-instance.atlassian.net
   ATLASSIAN_EMAIL        e.g. you@example.com
   ATLASSIAN_API_TOKEN    Atlassian API token (https://id.atlassian.com/manage-profile/security/api-tokens)
 
@@ -1010,6 +1021,16 @@ interface SyncStats {
  *
  * Existing real mappings in `previousEntry` are preserved unless `--force`.
  */
+/**
+ * Split a `jira_issue_type` declaration into ordered alternatives.
+ *
+ * `Sub-task | Task | Subtarea` -> ['Sub-task', 'Task', 'Subtarea']. A plain single
+ * name returns a one-element list, so every existing declaration is unchanged.
+ */
+export function issueTypeNameCandidates(declared: string): string[] {
+  return declared.split('|').map(name => name.trim()).filter(Boolean);
+}
+
 async function syncWorkType(
   config: Config,
   flags: CliFlags,
@@ -1023,14 +1044,28 @@ async function syncWorkType(
   const stats: SyncStats = { statusesMapped: 0, transitionsMapped: 0, missingRequired: 0 };
 
   // 1. Find the issue type entry in the per-project /statuses payload.
-  const issueType = issueTypeStatuses.find(
-    it => it.name.toLowerCase() === workType.jiraIssueType.toLowerCase(),
-  );
+  //
+  // `jira_issue_type` accepts `A | B | C`: the first alternative the project
+  // actually has wins. Jira instances name the same concept differently — the
+  // subtask level is "Sub-task" by default but "Task" in the BK instance, and a
+  // translated instance calls it "Subtarea". Matching one hardcoded string made
+  // every other spelling a silent skip, which is how work_type `subtask` stayed
+  // absent from the catalog while the manifest declared it.
+  const candidates = issueTypeNameCandidates(workType.jiraIssueType);
+  const issueType = candidates
+    .map(name => issueTypeStatuses.find(it => it.name.toLowerCase() === name.toLowerCase()))
+    .find(found => found !== undefined);
   if (!issueType) {
+    const tried = candidates.length > 1
+      ? `none of [${candidates.join(', ')}] found`
+      : `issue type '${candidates[0] ?? workType.jiraIssueType}' not found`;
     log.warn(
-      `issue type '${workType.jiraIssueType}' not found in project '${projectKey}' — skipping work_type '${workType.slug}'`,
+      `${tried} in project '${projectKey}' — skipping work_type '${workType.slug}'`,
     );
     return null;
+  }
+  if (flags.verbose && candidates.length > 1) {
+    log.dim(`  ${workType.slug}: resolved to "${issueType.name}" from [${candidates.join(', ')}]`);
   }
 
   if (flags.verbose) {
@@ -1529,6 +1564,13 @@ function logSkipNoAdmin(): void {
   log.dim('  Alternative — download UPEX-standard reference (no admin needed):');
   log.dim('    bun run jira:sync-fields --upex');
   log.dim('    bun run jira:sync-workflows --upex');
+  log.dim('');
+  // This is the exact moment a non-admin learns they cannot refresh the catalog.
+  // Without a pointer here they also have no way to learn it went stale later —
+  // `jira:check` passes clean against a cache that no longer matches Jira.
+  log.dim('  Meanwhile, to detect whether the cached catalog has gone stale');
+  log.dim('  (read-only, no admin needed):');
+  log.dim('    bun run jira:check --live');
   err(SKIP_NO_ADMIN_MARKER);
 }
 
@@ -1717,7 +1759,11 @@ async function main(): Promise<void> {
   // types. Purely informational — never throws, never affects the exit code.
   const declaredIssueTypeNames = new Set(
     workTypes
-      .map(w => w.jiraIssueType.trim().toLowerCase())
+      // Flatten the `A | B | C` alternatives too, otherwise a project whose
+      // subtask level is named "Task" gets advised to declare "Task" while it is
+      // already declared — as one of subtask's alternatives.
+      .flatMap(w => issueTypeNameCandidates(w.jiraIssueType))
+      .map(name => name.trim().toLowerCase())
       .filter(name => name !== ''),
   );
   for (const it of issueTypeStatuses) {
