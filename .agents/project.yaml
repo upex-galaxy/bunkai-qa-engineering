@@ -105,7 +105,21 @@ git_strategy:
   policy: # how strictly protected branches are guarded (set by Strategy Setup Q4)
     direct_push_to_protected: confirm # forbidden | confirm | allowed (sdet = confirm — trunk self-merged by maintainer; main takes only the final suite PR)
     admin_bypass: true # team POLICY: may a repo admin bypass PR/protection for urgent changes? actual capability still depends on the GitHub user's role — the skill re-confirms at runtime
-    require_pr_reviews: 0 # null | 0 | N — 0 on trunk PRs (self-merge), 1 on the final trunk → main PR (informational)
+    require_pr_reviews: 1 # null | 0 | N — VERIFIED 2026-09-04 against ruleset ProtectPublic (id 16809542): required_approving_review_count = 1 on the final trunk → main PR
+    # Host divergences that are ACCEPTED, not drift. Each `field` names a `git:policy verify`
+    # finding verbatim (`<branch>.<policy_field>`); verify moves matching findings from DRIFT
+    # to ACCEPTED (exit 0) and warns when an entry no longer matches anything (stale entry).
+    accepted_divergences:
+      - field: main.require_code_owner_review
+        enforced: true
+        accepted: 2026-09-04
+        reason: >
+          Enforced by the ProtectPublic ruleset with no CODEOWNERS file in this repo, so
+          nobody outside the bypass list could ever satisfy it. Not adding a CODEOWNERS file
+          and not applying the yaml to the host: the maintainer's admin credential merges
+          the final trunk -> main PR via the ruleset's bypass list (standing authorization —
+          see git_strategy.description). The host rule keeps protecting every non-bypass
+          contributor.
   branch_prefixes:
     precedence: [feat, fix, refactor, test, docs, chore]
     naming_with_key: '{prefix}/{ISSUE-KEY}-{kebab-slug}'
@@ -114,6 +128,8 @@ git_strategy:
     setup_version: 2
     created: 2026-06-29 # YYYY-MM-DD stamped by Strategy Setup
     strategy_source: chosen # inherited | chosen — CHOSEN 2026-06-29 via git-flow-master Strategy Setup (sdet, for chained test-automation suites); not the shipped default
+    policy_verified: 2026-09-04 # YYYY-MM-DD of the last `bun run git:policy verify`. null = never reconciled against the host
+    policy_source: accepted # verified | accepted | declared — every divergence is formally listed in policy.accepted_divergences
 
 # Files `bun run up` must keep as THIS project's own. Read by `cli/update-boilerplate.ts`
 # at the start of every run and merged into the protected watchlist (AGENTS.md,
