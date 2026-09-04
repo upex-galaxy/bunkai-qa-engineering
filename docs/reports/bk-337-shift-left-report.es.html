@@ -1,0 +1,1035 @@
+<title>El defecto que nadie puede abrir</title>
+
+<style>
+  /* ── Tokens ───────────────────────────────────────────────────────────
+     Paleta tinta-de-plano: neutros sesgados hacia el azul del acento.
+     Los colores semánticos (bloqueante / mayor / medio / menor) son un eje
+     aparte del acento y nunca lo sustituyen. */
+  :root {
+    --ground:      #eef1f4;
+    --surface:     #ffffff;
+    --surface-2:   #f6f8fa;
+    --hairline:    #d3dbe3;
+    --hairline-2:  #e5eaef;
+    --ink:         #121820;
+    --ink-2:       #3d4a57;
+    --ink-3:       #6a7885;
+    --accent:      #1f5f8b;
+    --accent-soft: #e2ecf4;
+    --blocker:     #b8302a;
+    --blocker-bg:  #fbeceb;
+    --major:       #96600a;
+    --major-bg:    #fbf1de;
+    --medium:      #266b68;
+    --medium-bg:   #e3f1f0;
+    --minor:       #5d6b7a;
+    --minor-bg:    #eceff2;
+
+    --serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, "Source Serif 4", Georgia, serif;
+    --sans:  -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono:  ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+    --measure: 68ch;
+    --pad: clamp(1.25rem, 4vw, 3.25rem);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0f141a;
+      --surface:     #161d25;
+      --surface-2:   #1b232c;
+      --hairline:    #2a3540;
+      --hairline-2:  #212a33;
+      --ink:         #e3e9ef;
+      --ink-2:       #b3bfcb;
+      --ink-3:       #8492a0;
+      --accent:      #6ea9d0;
+      --accent-soft: #1a2c3b;
+      --blocker:     #ef8079;
+      --blocker-bg:  #2e1a19;
+      --major:       #d9a445;
+      --major-bg:    #2c2314;
+      --medium:      #59b0aa;
+      --medium-bg:   #142826;
+      --minor:       #97a5b3;
+      --minor-bg:    #1e252d;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0f141a;
+    --surface:     #161d25;
+    --surface-2:   #1b232c;
+    --hairline:    #2a3540;
+    --hairline-2:  #212a33;
+    --ink:         #e3e9ef;
+    --ink-2:       #b3bfcb;
+    --ink-3:       #8492a0;
+    --accent:      #6ea9d0;
+    --accent-soft: #1a2c3b;
+    --blocker:     #ef8079;
+    --blocker-bg:  #2e1a19;
+    --major:       #d9a445;
+    --major-bg:    #2c2314;
+    --medium:      #59b0aa;
+    --medium-bg:   #142826;
+    --minor:       #97a5b3;
+    --minor-bg:    #1e252d;
+  }
+
+  /* ── Base ─────────────────────────────────────────────────────────── */
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+    padding: 0 var(--pad) 6rem;
+  }
+
+  .wrap { max-width: 58rem; margin: 0 auto; }
+
+  p, ul, ol, dl { max-width: var(--measure); }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  code, .mono { font-family: var(--mono); font-size: 0.86em; }
+  code {
+    background: var(--surface-2);
+    border: 1px solid var(--hairline-2);
+    border-radius: 3px;
+    padding: 0.08em 0.34em;
+    word-break: break-word;
+  }
+
+  /* ── Cabecera ─────────────────────────────────────────────────────── */
+  header.masthead {
+    padding: clamp(3rem, 9vw, 6rem) 0 2.5rem;
+    border-bottom: 2px solid var(--ink);
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 1.4rem;
+  }
+  .eyebrow b { color: var(--accent); font-weight: 600; }
+
+  h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(2.5rem, 7.5vw, 4.4rem);
+    line-height: 1.03;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+    margin: 0 0 1.5rem;
+    max-width: 16ch;
+  }
+
+  .standfirst {
+    font-family: var(--serif);
+    font-size: clamp(1.12rem, 2.4vw, 1.35rem);
+    line-height: 1.5;
+    color: var(--ink-2);
+    max-width: 54ch;
+    margin: 0;
+  }
+
+  .meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+    margin: 2.75rem 0 0;
+  }
+  .meta div { background: var(--surface); padding: 0.85rem 1rem; }
+  .meta dt {
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 0.3rem;
+  }
+  .meta dd {
+    margin: 0;
+    font-weight: 600;
+    font-size: 0.95rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Secciones ────────────────────────────────────────────────────── */
+  section { padding-top: 3.75rem; }
+
+  h2 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(1.55rem, 3.6vw, 2.1rem);
+    line-height: 1.15;
+    letter-spacing: -0.012em;
+    text-wrap: balance;
+    margin: 0 0 0.4rem;
+  }
+
+  h3 {
+    font-family: var(--sans);
+    font-weight: 650;
+    font-size: 1.02rem;
+    letter-spacing: -0.005em;
+    margin: 2.25rem 0 0.5rem;
+  }
+
+  .kicker {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 0.9rem;
+    padding-bottom: 0.55rem;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .lead { font-size: 1.05rem; color: var(--ink-2); }
+
+  /* ── Fases (sí son una secuencia real, por eso van numeradas) ─────── */
+  .phases { display: grid; gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); margin-top: 1.75rem; }
+  @media (min-width: 46rem) { .phases { grid-template-columns: repeat(3, 1fr); } }
+  .phase { background: var(--surface); padding: 1.4rem 1.35rem; }
+  .phase .n {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+  .phase h4 { font-size: 0.98rem; font-weight: 650; margin: 0 0 0.45rem; }
+  .phase p { font-size: 0.9rem; color: var(--ink-2); margin: 0; max-width: none; }
+
+  /* ── Tabla ────────────────────────────────────────────────────────── */
+  .scroller { overflow-x: auto; margin-top: 1.5rem; border: 1px solid var(--hairline); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.88rem; min-width: 34rem; }
+  th, td { text-align: left; padding: 0.68rem 0.9rem; border-bottom: 1px solid var(--hairline-2); vertical-align: top; }
+  thead th {
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 500;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--hairline);
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  td.yes { color: var(--medium); font-weight: 600; }
+  td.no  { color: var(--blocker); font-weight: 600; }
+
+  /* ── Hallazgos ────────────────────────────────────────────────────── */
+  .findings { display: grid; gap: 1rem; margin-top: 1.75rem; }
+
+  .finding {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-left: 4px solid var(--sev, var(--minor));
+    padding: 1.25rem 1.35rem;
+  }
+  .finding[data-sev="blocker"] { --sev: var(--blocker); }
+  .finding[data-sev="major"]   { --sev: var(--major); }
+  .finding[data-sev="medium"]  { --sev: var(--medium); }
+  .finding[data-sev="minor"]   { --sev: var(--minor); }
+
+  .finding-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.55rem;
+    margin-bottom: 0.6rem;
+  }
+  .gid {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--sev, var(--minor));
+  }
+  .finding h4 {
+    font-size: 1rem;
+    font-weight: 650;
+    margin: 0;
+    flex: 1 1 16rem;
+    letter-spacing: -0.005em;
+  }
+  .chip {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 600;
+    padding: 0.2rem 0.45rem;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .finding[data-sev="blocker"] .chip { color: var(--blocker); background: var(--blocker-bg); }
+  .finding[data-sev="major"]   .chip { color: var(--major);   background: var(--major-bg); }
+  .finding[data-sev="medium"]  .chip { color: var(--medium);  background: var(--medium-bg); }
+  .finding[data-sev="minor"]   .chip { color: var(--minor);   background: var(--minor-bg); }
+
+  .finding p { margin: 0 0 0.7rem; font-size: 0.94rem; color: var(--ink-2); max-width: 62ch; }
+  .finding p:last-child { margin-bottom: 0; }
+  .finding strong { color: var(--ink); font-weight: 620; }
+
+  .evidence {
+    background: var(--surface-2);
+    border: 1px solid var(--hairline-2);
+    border-radius: 3px;
+    padding: 0.6rem 0.75rem;
+    margin-top: 0.85rem;
+    overflow-x: auto;
+  }
+  .evidence .label {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    display: block;
+    margin-bottom: 0.35rem;
+  }
+  .evidence .src {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--ink-2);
+    line-height: 1.75;
+    white-space: pre-wrap;
+    display: block;
+  }
+
+  /* ── Gherkin ──────────────────────────────────────────────────────── */
+  .gherkin {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    padding: 1rem 1.15rem;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    line-height: 1.75;
+    white-space: pre;
+    margin: 0;
+  }
+  .gherkin b { color: var(--accent); font-weight: 600; }
+
+  .ac { margin-top: 1.5rem; }
+  .ac > .gloss {
+    font-size: 0.94rem;
+    color: var(--ink-2);
+    margin: 0.65rem 0 0;
+    padding-left: 0.9rem;
+    border-left: 2px solid var(--hairline);
+    max-width: 62ch;
+  }
+
+  /* ── Preguntas ────────────────────────────────────────────────────── */
+  .questions { counter-reset: q; display: grid; gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); margin-top: 1.75rem; }
+  .q { background: var(--surface); padding: 1.2rem 1.35rem; }
+  .q h4 {
+    font-size: 1rem;
+    font-weight: 650;
+    margin: 0 0 0.5rem;
+    counter-increment: q;
+    letter-spacing: -0.005em;
+  }
+  .q h4::before {
+    content: "P" counter(q);
+    font-family: var(--mono);
+    font-size: 0.74rem;
+    color: var(--accent);
+    margin-right: 0.6rem;
+    font-weight: 600;
+  }
+  .q p { font-size: 0.93rem; color: var(--ink-2); margin: 0 0 0.55rem; max-width: 62ch; }
+  .q p:last-child { margin-bottom: 0; }
+  .q .rec { color: var(--ink); }
+  .q .rec b { font-weight: 650; }
+
+  /* ── Callout ──────────────────────────────────────────────────────── */
+  .callout {
+    background: var(--accent-soft);
+    border: 1px solid var(--hairline);
+    border-left: 4px solid var(--accent);
+    padding: 1.15rem 1.35rem;
+    margin-top: 1.75rem;
+  }
+  .callout p { margin: 0; font-size: 0.95rem; max-width: 62ch; }
+  .callout p + p { margin-top: 0.6rem; }
+
+  ul.tight { padding-left: 1.15rem; margin: 0.9rem 0 0; }
+  ul.tight li { margin-bottom: 0.45rem; font-size: 0.95rem; color: var(--ink-2); }
+  ul.tight li strong { color: var(--ink); font-weight: 620; }
+
+  footer {
+    margin-top: 4.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--hairline);
+    font-size: 0.82rem;
+    color: var(--ink-3);
+  }
+  footer p { max-width: 62ch; }
+  footer .mono { color: var(--ink-2); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    a { transition: color 120ms ease; }
+  }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">Shift-Left QA · <b>BK-337</b> · Bunkai TMS · 11 ago 2026</p>
+  <h1>El defecto que nadie puede abrir</h1>
+  <p class="standfirst">
+    Bunkai guarda ocho campos por cada defecto que se reporta, y hoy ninguno se puede leer desde la
+    aplicación. BK-337 existe para arreglar eso. Este informe es lo que encontró QA al revisar la
+    historia <em>antes</em> de que alguien escribiera una línea de código.
+  </p>
+
+  <dl class="meta">
+    <div><dt>Historia</dt><dd>BK-337</dd></div>
+    <div><dt>Epic</dt><dd>BK-31</dd></div>
+    <div><dt>Estado</dt><dd>Shift-Left QA</dd></div>
+    <div><dt>Riesgo</dt><dd>Alto (11)</dd></div>
+    <div><dt>Hallazgos</dt><dd>11 · 2 bloqueantes</dd></div>
+    <div><dt>Cobertura</dt><dd>34 casos</dd></div>
+  </dl>
+</header>
+
+<section>
+  <p class="kicker">Para quien llega de fuera</p>
+  <h2>Qué es Shift-Left Testing</h2>
+  <p class="lead">
+    La forma habitual de trabajar es: alguien escribe una historia, un desarrollador la implementa, y
+    entonces QA la prueba. El defecto se encuentra al final, cuando ya cuesta caro arreglarlo.
+  </p>
+  <p>
+    Shift-Left mueve a QA hacia el principio de esa línea. QA lee la historia cuando todavía está en
+    el backlog, sin código escrito y sin nada que ejecutar, y busca los defectos que ya están ahí: en
+    los criterios de aceptación. Un criterio ambiguo produce una implementación ambigua. Un criterio
+    que pide un dato que la base de datos no guarda produce una estimación equivocada y una discusión
+    a mitad de sprint.
+  </p>
+  <p>
+    El producto de esta sesión no es código ni ejecuciones. Son preguntas dirigidas al Product Owner,
+    criterios reescritos para que alguien pueda verificarlos, y una lista de casos de prueba que le
+    dice al equipo cuánto trabajo de QA lleva realmente la historia.
+  </p>
+
+  <div class="phases">
+    <div class="phase">
+      <span class="n">FASE 1</span>
+      <h4>Selección</h4>
+      <p>Se filtra qué historias merecen la revisión. BK-337 puntuó 11 sobre la rúbrica de riesgo y además activó el veto de perímetro de autorización, porque abre una lectura nueva sobre datos de varios inquilinos.</p>
+    </div>
+    <div class="phase">
+      <span class="n">FASE 2</span>
+      <h4>Refinamiento</h4>
+      <p>El grueso del trabajo. Se leen los criterios, el diseño aprobado y el código real del producto, y se anota cada hueco, cada ambigüedad y cada caso límite que la historia no menciona.</p>
+    </div>
+    <div class="phase">
+      <span class="n">FASE 3</span>
+      <h4>Entrega</h4>
+      <p>Los criterios refinados vuelven a Jira, la historia se etiqueta como revisada y avanza a Estimación. El PO y el equipo estiman sobre información real, no sobre una intuición.</p>
+    </div>
+  </div>
+
+  <div class="callout">
+    <p>
+      Una regla que gobierna todo lo que sigue: <strong>verificar los criterios de aceptación es el
+      suelo, no el techo</strong>. Si QA solo confirma los cinco escenarios que la historia trae
+      escritos, no ha probado la funcionalidad, ha revisado un contrato. Lo que interesa es lo que la
+      historia no dice.
+    </p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">El caso</p>
+  <h2>Qué pide BK-337</h2>
+  <p>
+    Bunkai es una herramienta de gestión de pruebas. Cuando una prueba falla, quien la ejecuta reporta
+    un defecto desde el propio ejecutor, y ese defecto guarda su descripción, sus pasos para
+    reproducir, sus evidencias, quién lo reportó, cuándo, y de qué prueba y de qué paso salió.
+  </p>
+  <p>
+    Todo eso se escribe correctamente en la base de datos. Y después no hay ninguna pantalla que lo
+    muestre. La lista de defectos existe, el mapa de calor existe, asignar un defecto existe. Abrir uno
+    y leerlo, no. Un desarrollador al que le acaban de asignar un defecto no tiene forma de verlo.
+  </p>
+  <p>
+    BK-337 crea esa pantalla: una ficha de solo lectura en
+    <code>/projects/[projectSlug]/bugs/[bugId]</code>, con cabecera, descripción, pasos numerados con
+    el paso que falló resaltado, evidencias, un panel lateral de detalles, y enlaces de vuelta a la
+    prueba y a la ejecución de origen. Sin editar nada y sin cambiar estados: eso pertenece a otras
+    historias.
+  </p>
+
+  <h3>Los cinco criterios de aceptación, tal como están escritos</h3>
+
+  <div class="ac">
+    <pre class="gherkin"><b>Scenario:</b> Open a defect filed from a failing run step
+  <b>Given</b> Elena is viewing the defects list for project "Storefront"
+  <b>And</b> defect "BUG-101" was filed from a failing step in run "RUN-451"
+  <b>When</b> she opens "BUG-101"
+  <b>Then</b> she sees its id, severity, status, title, and full module path in the header
+  <b>And</b> she sees who filed it and when
+  <b>And</b> the description, steps to reproduce, and Expected vs Actual are all shown
+  <b>And</b> the steps to reproduce are numbered, with the step that failed visually highlighted
+  <b>And</b> the Origin panel links to the originating ATC and to run "RUN-451"</pre>
+    <p class="gloss">
+      El caso principal. Un defecto que nació de una ejecución fallida se abre con toda su ficha, y
+      desde ahí se puede volver a la prueba y a la ejecución que lo originaron.
+    </p>
+  </div>
+
+  <div class="ac">
+    <pre class="gherkin"><b>Scenario:</b> Open a standalone defect with no linked run
+  <b>Given</b> defect "BUG-112" was filed directly from the defects area, with no run involved
+  <b>When</b> Elena opens "BUG-112"
+  <b>Then</b> she sees its full record exactly as filed
+  <b>And</b> the Origin panel shows a quiet notice that it was filed manually
+  <b>And</b> no run or ATC link is offered</pre>
+    <p class="gloss">
+      El otro caso: un defecto reportado a mano, sin ejecución detrás. No hay enlaces de origen y el
+      aviso debe leerse como información, no como un error.
+    </p>
+  </div>
+
+  <div class="ac">
+    <pre class="gherkin"><b>Scenario:</b> Evidence list shows the count against the attachment cap
+  <b>Given</b> defect "BUG-101" has 6 evidence items attached
+  <b>When</b> Elena opens "BUG-101"
+  <b>Then</b> the evidence panel reads "6 / 10"
+  <b>And</b> each evidence row can be opened</pre>
+    <p class="gloss">
+      El tope de diez adjuntos ya se aplica al reportar. La ficha lo muestra siempre, para que se vea
+      cuánto margen queda.
+    </p>
+  </div>
+
+  <div class="ac">
+    <pre class="gherkin"><b>Scenario:</b> The defect record carries no edit or status controls
+  <b>When</b> Elena opens any defect's detail record
+  <b>Then</b> no field on the page can be edited
+  <b>And</b> no status-transition or assignment control is offered</pre>
+    <p class="gloss">
+      La ficha es de solo lectura. Editar pertenece a BK-40, cambiar estado y asignar pertenecen a
+      BK-264.
+    </p>
+  </div>
+
+  <div class="ac">
+    <pre class="gherkin"><b>Scenario:</b> The defects list links into the detail record
+  <b>Given</b> Elena is viewing the defects list for project "Storefront"
+  <b>And</b> it includes defect "BUG-101" linked to run "RUN-451"
+  <b>When</b> she clicks the "BUG-101" cell
+  <b>Then</b> she lands on the detail record for "BUG-101"
+  <b>When</b> she instead clicks the "RUN-451" cell on that same row
+  <b>Then</b> she also lands on the detail record for "BUG-101"</pre>
+    <p class="gloss">
+      Las dos celdas identificadoras de la fila llevan al mismo sitio: la ficha del defecto. Es una
+      decisión que ya se tomó y quedó registrada en un comentario de Jira, aunque el criterio no
+      explica por qué.
+    </p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">El hallazgo central</p>
+  <h2>El diseño promete campos que la base de datos no guarda</h2>
+  <p class="lead">
+    La historia viene con un mockup aprobado, <code>bug-detail.html</code>, y con una sección de
+    especificación. Ambos dibujan una ficha completa. La tabla <code>public.bugs</code> del producto
+    real guarda bastante menos.
+  </p>
+  <p>
+    Esta comparación no sale de leer la historia. Sale de abrir las migraciones y los componentes del
+    repositorio de Bunkai y comprobar campo por campo.
+  </p>
+
+  <div class="scroller">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Campo que el mockup dibuja</th>
+          <th scope="col">¿Existe?</th>
+          <th scope="col">Dónde vive en realidad</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Título, severidad, estado, descripción</td>
+          <td class="yes">Sí</td>
+          <td class="mono">bugs.title / severity / status / description</td>
+        </tr>
+        <tr>
+          <td>Ruta completa del módulo</td>
+          <td class="yes">Sí</td>
+          <td class="mono">modules.path (profundidad máx. 6)</td>
+        </tr>
+        <tr>
+          <td>Quién lo reportó y cuándo</td>
+          <td class="yes">Sí</td>
+          <td class="mono">bugs.created_by / created_at</td>
+        </tr>
+        <tr>
+          <td>Enlaces de origen (prueba, ejecución, paso)</td>
+          <td class="yes">Sí</td>
+          <td class="mono">bugs.atc_id / run_id / run_step_id</td>
+        </tr>
+        <tr>
+          <td><strong>Expected vs Actual</strong></td>
+          <td class="no">No</td>
+          <td>Ninguna columna, ningún campo en el formulario de reporte</td>
+        </tr>
+        <tr>
+          <td><strong>Layer</strong> (UI / API / Unit)</td>
+          <td class="no">No</td>
+          <td class="mono">atcs.layer — es de la prueba, no del defecto</td>
+        </tr>
+        <tr>
+          <td><strong>Environment</strong></td>
+          <td class="no">No</td>
+          <td class="mono">project_environments — se alcanza solo vía ejecución</td>
+        </tr>
+        <tr>
+          <td><strong>Pasos numerados + índice del que falló</strong></td>
+          <td class="no">No</td>
+          <td class="mono">steps_to_reproduce es un solo bloque de texto</td>
+        </tr>
+        <tr>
+          <td><strong>Nombre, tipo y peso de cada evidencia</strong></td>
+          <td class="no">No</td>
+          <td class="mono">evidence_urls es un array de URLs sueltas</td>
+        </tr>
+        <tr>
+          <td><strong>Identificadores tipo BUG-101 / RUN-451</strong></td>
+          <td class="no">No</td>
+          <td>Son UUID; la lista muestra los 8 primeros caracteres</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <p>
+      La historia se contradice a sí misma en su propio texto. Su párrafo de contexto enumera los ocho
+      campos que hoy se guardan y no se pueden leer, y <strong>Expected vs Actual no está entre
+      ellos</strong>. Su criterio AC1 exige mostrarlos. Una de las dos frases está mal, y decidir cuál
+      cambia el tamaño de la historia.
+    </p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">11 hallazgos, ordenados por gravedad</p>
+  <h2>Lo que hay que resolver antes de estimar</h2>
+
+  <div class="findings">
+
+    <article class="finding" data-sev="blocker">
+      <div class="finding-head">
+        <span class="gid">G1</span>
+        <h4>Expected vs Actual no tiene dónde guardarse</h4>
+        <span class="chip">Bloqueante</span>
+      </div>
+      <p>
+        AC1 exige mostrarlos y el alcance pide verlos lado a lado. La tabla de defectos no tiene esas
+        columnas, el formulario de reporte nunca las pide, y una búsqueda en todo el repositorio solo
+        las encuentra en documentos de diseño y en esta misma historia.
+      </p>
+      <p>
+        Lo más parecido que existe es <code>run_steps.expected</code>, una copia congelada de lo que la
+        prueba esperaba. Está disponible solo para defectos nacidos de una ejecución, y significa otra
+        cosa: es la expectativa de la prueba, no la de quien reportó. De <em>actual</em> no hay nada en
+        ninguna parte.
+      </p>
+      <div class="evidence">
+        <span class="label">Evidencia</span>
+        <span class="src">supabase/migrations/0046_bugs.sql:96-121   columnas de public.bugs
+components/bugs/BugFormDialog.tsx          no captura expected/actual
+supabase/migrations/0031_runs.sql:172      run_steps.expected (única fuente parcial)</span>
+      </div>
+    </article>
+
+    <article class="finding" data-sev="blocker">
+      <div class="finding-head">
+        <span class="gid">G2</span>
+        <h4>Layer y environment no son atributos de un defecto</h4>
+        <span class="chip">Bloqueante</span>
+      </div>
+      <p>
+        El panel lateral de detalles pide siete campos, y dos de ellos pertenecen a otras entidades.
+        <code>layer</code> es una columna de las pruebas: un defecto reportado a mano no tiene prueba
+        asociada y por lo tanto no tiene layer. <code>environment</code> se alcanza solo pasando por la
+        ejecución: un defecto reportado a mano tampoco tiene ejecución.
+      </p>
+      <p>
+        Además el valor que dibuja el mockup para environment es
+        <code>Chrome 126 · macOS 15.5 · build 8f3c2e1</code>, y la entidad real de entornos guarda un
+        entorno con nombre, no una cadena de navegador y sistema operativo. <strong>AC2 dice que un
+        defecto manual muestra "su ficha completa tal como se reportó", y el alcance le exige dos
+        campos que no puede tener.</strong> Las dos frases no pueden ser ciertas a la vez.
+      </p>
+      <div class="evidence">
+        <span class="label">Evidencia</span>
+        <span class="src">supabase/migrations/0004_atcs.sql:60        atcs.layer in ('UI','API','Unit')
+supabase/migrations/0032_project_environments_crud.sql   entorno con nombre, vía run</span>
+      </div>
+    </article>
+
+    <article class="finding" data-sev="major">
+      <div class="finding-head">
+        <span class="gid">G5</span>
+        <h4>Un enlace de evidencia puede ejecutar código en el navegador de quien lo abra</h4>
+        <span class="chip">Mayor · Seguridad</span>
+      </div>
+      <p>
+        Las evidencias son URLs que quien reporta escribe a mano, validadas solo con
+        <code>z.string().url()</code>. Esa validación <strong>acepta <code>javascript:</code> y
+        <code>data:</code></strong>, porque el constructor de URL los considera válidos.
+      </p>
+      <p>
+        Si la ficha las pinta como enlaces sin filtrar el esquema, cualquier miembro con permiso de
+        escritura puede dejar un enlace que ejecuta código, y lo verá todo el espacio de trabajo. La
+        historia no tiene ningún criterio de seguridad. Este es un riesgo <em>fuera</em> de los
+        criterios, que es exactamente la clase de cosa que esta revisión existe para encontrar.
+      </p>
+      <div class="evidence">
+        <span class="label">Evidencia</span>
+        <span class="src">lib/bugs/validation.ts:34-37    z.array(z.string().url()).max(BUG_EVIDENCE_MAX)
+components/bugs/BugFormDialog.tsx:82-101   entrada de texto libre</span>
+      </div>
+    </article>
+
+    <article class="finding" data-sev="major">
+      <div class="finding-head">
+        <span class="gid">G6</span>
+        <h4>Los cinco criterios son cinco caminos felices</h4>
+        <span class="chip">Mayor · Seguridad</span>
+      </div>
+      <p>
+        Ninguno define qué pasa con un identificador que no existe, con uno bien formado que pertenece
+        a <strong>otro espacio de trabajo</strong>, con uno real pero abierto bajo el proyecto
+        equivocado en la URL, con un visitante sin sesión, o con un miembro de rol lector.
+      </p>
+      <p>
+        La política de seguridad de la base de datos deniega la lectura, pero el criterio nunca dice
+        que la pantalla deba responder <code>404</code> en lugar de <code>403</code>. Un
+        <code>403</code> confirma que ese identificador existe, y eso permite averiguar qué defectos
+        hay en organizaciones ajenas. El propio repositorio ya ratificó la convención del
+        <code>404</code> en otra migración: hay dónde apoyarse.
+      </p>
+      <div class="evidence">
+        <span class="label">Evidencia</span>
+        <span class="src">supabase/migrations/0046_bugs.sql   policy bugs_select_workspace_member
+supabase/migrations/0063_environment_cross_workspace_404.sql   precedente ya ratificado</span>
+      </div>
+    </article>
+
+    <article class="finding" data-sev="major">
+      <div class="finding-head">
+        <span class="gid">G3</span>
+        <h4>Falta toda la mitad de servidor, y el alcance no la menciona</h4>
+        <span class="chip">Mayor</span>
+      </div>
+      <p>
+        El alcance nombra la ruta de la pantalla y nada más. No existe endpoint para leer un defecto
+        (<code>/api/v1/bugs/[id]</code> solo tiene <code>status</code> y <code>assign</code>, que son
+        escrituras) ni función de base de datos que devuelva uno solo: las que hay crean, listan por
+        proyecto y listan con filtros.
+      </p>
+      <p>
+        Tal como está escrita, la historia parece un ticket de interfaz y se estimará como tal. La
+        mitad invisible pesa aproximadamente lo mismo que la visible.
+      </p>
+      <div class="evidence">
+        <span class="label">Evidencia</span>
+        <span class="src">app/api/v1/bugs/route.ts:88   POST (crear)
+app/api/v1/bugs/route.ts:232  GET  (listar)
+app/api/v1/bugs/[id]/        solo status/ y assign/ — ambas escrituras</span>
+      </div>
+    </article>
+
+    <article class="finding" data-sev="major">
+      <div class="finding-head">
+        <span class="gid">G4</span>
+        <h4>Los pasos no están numerados en origen y no se sabe cuál falló</h4>
+        <span class="chip">Mayor</span>
+      </div>
+      <p>
+        <code>steps_to_reproduce</code> es un único bloque de texto. AC1 pide numerarlos y resaltar el
+        que falló, pero nada guarda en qué posición de ese bloque estaba el paso fallido.
+      </p>
+      <p>
+        Y hay una trampa de conteo: la posición de los pasos de ejecución empieza en cero, mientras el
+        mockup los muestra empezando en uno. Un error de uno en el resaltado es de los que llegan a
+        producción sin que nadie los note hasta que el resaltado señala el paso equivocado.
+      </p>
+      <div class="evidence">
+        <span class="label">Evidencia</span>
+        <span class="src">supabase/migrations/0046_bugs.sql:112     steps_to_reproduce text
+supabase/migrations/0031_runs.sql:167-169  run_steps.position es 0-based</span>
+      </div>
+    </article>
+
+    <article class="finding" data-sev="medium">
+      <div class="finding-head">
+        <span class="gid">G7</span>
+        <h4>Un defecto en un módulo archivado existe, pero nadie decidió si se puede abrir</h4>
+        <span class="chip">Medio</span>
+      </div>
+      <p>
+        Todas las pantallas que listan defectos ocultan los de módulos archivados. Reportar contra un
+        módulo archivado, en cambio, sigue permitido a propósito para las ejecuciones históricas. Y las
+        notificaciones ya generan un enlace directo a un defecto concreto.
+      </p>
+      <p>
+        Resultado: existen defectos invisibles en toda la navegación a los que una notificación sí
+        puede llevar. Si la historia no decide, la respuesta será la que dé el ORM por accidente.
+      </p>
+      <div class="evidence">
+        <span class="label">Evidencia</span>
+        <span class="src">0051 / 0046 / 0052   inner join modules ... archived_at is null
+0057_bug_notification_deep_link.sql   enlace directo ya existente</span>
+      </div>
+    </article>
+
+    <article class="finding" data-sev="medium">
+      <div class="finding-head">
+        <span class="gid">G8</span>
+        <h4>La ficha no muestra a quién está asignado el defecto</h4>
+        <span class="chip">Medio</span>
+      </div>
+      <p>
+        La historia se justifica en parte por "un desarrollador al que acaban de asignar un defecto".
+        El asignado se guarda desde la migración 0054 y la lista ya tiene su columna. El panel de
+        detalles de la ficha lo omite.
+      </p>
+      <p>
+        AC4 prohíbe el <em>control</em> de asignación, no el dato. Tal como está, la persona para la
+        que se escribió la historia abre la ficha y no puede confirmar que el defecto es suyo.
+      </p>
+      <div class="evidence">
+        <span class="label">Evidencia</span>
+        <span class="src">supabase/migrations/0054_bug_assignment_status.sql:78-79   assignee_user_id
+components/bugs/BugsListView.tsx:744   la lista ya tiene columna Assignee</span>
+      </div>
+    </article>
+
+    <article class="finding" data-sev="medium">
+      <div class="finding-head">
+        <span class="gid">G9</span>
+        <h4>La fecha de última actualización se nombra en el contexto y desaparece del alcance</h4>
+        <span class="chip">Medio</span>
+      </div>
+      <p>
+        El contexto de la historia menciona "cuándo se reportó o se actualizó por última vez" entre los
+        campos hoy inaccesibles. Ningún criterio ni línea de alcance la recoge. Siendo una ficha de
+        solo lectura, esa marca solo se mueve al cambiar estado o asignación, que es justo lo que
+        interesa a quien triagea.
+      </p>
+    </article>
+
+    <article class="finding" data-sev="minor">
+      <div class="finding-head">
+        <span class="gid">G10</span>
+        <h4>Los identificadores de los criterios no existen en el producto</h4>
+        <span class="chip">Menor</span>
+      </div>
+      <p>
+        Los criterios hablan de <code>BUG-101</code> y <code>RUN-451</code>, el mockup añade
+        <code>ATC-0142</code> y <code>MOD-013</code>. El producto usa UUID; la lista muestra los ocho
+        primeros caracteres y el valor completo al pasar el cursor. La tabla de módulos ni siquiera
+        tiene columna de código.
+      </p>
+      <p>
+        Mientras no se decida, cualquier aserción sobre el identificador de la cabecera queda sin
+        escribir. Un identificador legible de verdad sería un cambio de esquema con migración de datos:
+        su propia historia, no una cláusula de esta.
+      </p>
+    </article>
+
+    <article class="finding" data-sev="minor">
+      <div class="finding-head">
+        <span class="gid">G11</span>
+        <h4>La razón de AC5 vive solo en un comentario de Jira</h4>
+        <span class="chip">Menor</span>
+      </div>
+      <p>
+        Que la celda de ejecución abra la ficha del defecto en vez del informe de la ejecución fue una
+        decisión razonada y registrada. El criterio enuncia el comportamiento sin el porqué, así que un
+        desarrollador que lea solo el criterio va a asumir que es un fallo y lo va a "arreglar" hacia
+        la ejecución.
+      </p>
+    </article>
+
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Bloquean la estimación</p>
+  <h2>Cuatro preguntas para el Product Owner</h2>
+  <p>
+    No son dudas de redacción. Dos de ellas cambian el tamaño de la historia, y por eso la sesión se
+    detiene aquí en lugar de seguir hacia la planificación.
+  </p>
+
+  <div class="questions">
+    <div class="q">
+      <h4>Expected vs Actual: ¿se recorta, se captura o se deriva?</h4>
+      <p>
+        Recortarlo deja la historia como está. Capturarlo obliga a añadir dos columnas y a tocar el
+        formulario de reporte, que pertenece a otra historia ya cerrada, y abre la pregunta de qué pasa
+        con los defectos ya reportados.
+      </p>
+      <p class="rec">
+        <b>Recomendación:</b> recortarlo de esta historia y abrir una aparte para capturarlo al
+        reportar. Derivarlo de la prueba es el camino barato, pero cambia en silencio lo que el campo
+        significa y dejaría la mitad de los defectos con el panel vacío.
+      </p>
+    </div>
+
+    <div class="q">
+      <h4>Layer y environment: ¿qué muestran en un defecto reportado a mano?</h4>
+      <p>
+        Un defecto sin ejecución no tiene ninguno de los dos, por construcción. Hace falta una regla:
+        se omite la fila, se muestra un guion, o se oculta el panel entero.
+      </p>
+      <p class="rec">
+        <b>Recomendación:</b> quitar las dos filas del panel. Hoy no son atributos del defecto, e
+        inventarlos aquí amplía el esquema por la puerta de atrás.
+      </p>
+    </div>
+
+    <div class="q">
+      <h4>Defecto en módulo archivado: ¿se abre o responde 404?</h4>
+      <p>
+        Las dos opciones son defendibles. Abrirlo es coherente con que la evidencia es inmutable;
+        responder 404 es coherente con todas las listas.
+      </p>
+      <p class="rec">
+        <b>Recomendación:</b> abrirlo. Una notificación que lleva a una página muerta es peor que una
+        ficha a la que no se llega navegando. Sea cual sea la decisión, debe quedar escrita en las
+        reglas de negocio.
+      </p>
+    </div>
+
+    <div class="q">
+      <h4>¿Qué identificador muestra la ficha?</h4>
+      <p>
+        Los criterios usan un formato que no existe. Hay que elegir entre alinearlos con lo que la
+        lista ya hace o abrir una historia para un identificador legible de verdad.
+      </p>
+      <p class="rec">
+        <b>Recomendación:</b> mantener el tratamiento de la lista (ocho caracteres, valor completo al
+        pasar el cursor) y reescribir los criterios contra él.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Lo que costará probarla</p>
+  <h2>34 casos, y por qué son tantos para una pantalla de solo lectura</h2>
+  <p>
+    La interfaz es una sola página que no escribe nada. El número no sale de la superficie visual: sale
+    de la matriz de estados en la que ese defecto puede encontrarse.
+  </p>
+
+  <div class="scroller">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Tipo</th>
+          <th scope="col">Casos</th>
+          <th scope="col">Qué cubren</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Positivos</td><td class="num">9</td><td>Las dos formas de ficha (con ejecución y sin ella) por cabecera, cuerpo y origen, más las dos entradas desde la lista</td></tr>
+        <tr><td>Negativos</td><td class="num">9</td><td>Todo el eje de autorización y no-encontrado, las aserciones de solo lectura y el enlace de evidencia peligroso</td></tr>
+        <tr><td>Límite</td><td class="num">7</td><td>Cero y diez evidencias, cero pasos, el paso fallido en la primera posición, profundidad 1 y 6 de módulo, descripción nula</td></tr>
+        <tr><td>Integración</td><td class="num">6</td><td>Origen huérfano, módulo archivado, enlace de notificación, matriz de estados y severidades</td></tr>
+        <tr><td>API</td><td class="num">3</td><td>Lectura correcta, 404 entre organizaciones, 401 sin sesión</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p style="margin-top:1.4rem">
+    Un defecto puede venir de una ejecución, ser manual, o haber quedado huérfano porque la ejecución
+    de origen se borró después. Su módulo puede estar activo o archivado. Se llega a él desde la lista,
+    desde la celda de ejecución o desde una notificación. Y lo lee su autor, un miembro, un lector o
+    alguien de otra organización que no debería. Esos ejes se multiplican mucho más rápido que la
+    página.
+  </p>
+
+  <div class="callout">
+    <p>
+      Alrededor de un tercio de los casos cubre comportamiento que la historia <strong>no
+      especifica</strong>. Ese bloque entero es consecuencia directa de G6, y es la razón por la que el
+      número supera lo que intuitivamente cuesta "una pantalla de lectura".
+    </p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Veredicto</p>
+  <h2>Historia bien escrita sobre un modelo de datos que no la sostiene</h2>
+  <p class="lead">
+    Calidad de la historia: <strong>problemas significativos</strong>. Testabilidad:
+    <strong>parcial</strong>.
+  </p>
+  <p>
+    Se puede verificar hoy: que no haya controles de edición ni de cambio de estado, que las dos celdas
+    de la lista naveguen a la ficha, y la cabecera con severidad, estado, título y ruta de módulo.
+  </p>
+  <p>
+    No se puede verificar tal como está: Expected vs Actual (no hay dato), los pasos numerados y el
+    resaltado (no hay estructura ni índice), las filas de evidencia (no está definido qué muestran ni
+    cómo se abren), "la ficha completa tal como se reportó" para un defecto manual (choca con el panel
+    lateral), cualquier aserción sobre identificadores, y todo el eje negativo, que sencillamente no
+    existe.
+  </p>
+
+  <h3>Qué pasa ahora</h3>
+  <ul class="tight">
+    <li><strong>El PO responde las cuatro preguntas.</strong> Las dos primeras cambian la estimación, no solo la redacción.</li>
+    <li><strong>El equipo de desarrollo responde cinco preguntas técnicas</strong> sobre cómo se parten los pasos, qué función de lectura se extiende, y si la ruta vuelve a comprobar el proyecto de la URL.</li>
+    <li><strong>La historia vuelve a Jira</strong> con los criterios refinados, la etiqueta de revisada y el plan de pruebas en borrador, y avanza a Estimación.</li>
+    <li><strong>Cuando llegue a QA</strong>, la sesión de pruebas del sprint detecta la etiqueta, se salta el análisis ya hecho y arranca directamente por los 34 casos.</li>
+  </ul>
+</section>
+
+<footer>
+  <p>
+    Informe generado en la sesión de Shift-Left <span class="mono">2026-08-11-bk-337-defect-detail</span>
+    sobre la historia <span class="mono">BK-337</span> del epic <span class="mono">BK-31</span> de Bunkai TMS.
+  </p>
+  <p>
+    Ninguna afirmación de este documento procede solo del texto de la historia. Cada hueco está anclado
+    a un archivo y una línea del repositorio del producto en el momento de la revisión. No se ejecutó
+    nada: la funcionalidad todavía no existe, y eso es justamente el punto.
+  </p>
+</footer>
+
+</div>

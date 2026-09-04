@@ -1,13 +1,14 @@
 /**
  * Xray CLI - Test Commands
  *
- * Commands: create, get, list, add-step
+ * Commands: create, get, list, add-step, update-step, remove-step,
+ * update-gherkin, update-definition, update-type, enrich (see ./enrich.ts)
  */
 
 import type { Flags, PreconditionResult, TestResult, TestStepResponse } from '../types/index.js';
 import { loadConfig } from '../lib/config.js';
 import { graphql, MUTATIONS, QUERIES } from '../lib/graphql.js';
-import { log } from '../lib/logger.js';
+import { log, warnCountedButUnresolved, warnIfTruncated } from '../lib/logger.js';
 import { getFlag, getFlagArray, requireFlag } from '../lib/parser.js';
 
 // ============================================================================
@@ -97,16 +98,20 @@ export async function create(flags: Flags): Promise<void> {
 
 export async function get(flags: Flags, positional: string[]): Promise<void> {
   const key = positional[0] || getFlag(flags, 'key');
-  if (!key) {
-    throw new Error('Test key required. Usage: xray test get PROJ-123');
+  const issueId = getFlag(flags, 'id');
+
+  if (!key && !issueId) {
+    throw new Error('Test key or --id required. Usage: xray test get PROJ-123 | xray test get --id 11942');
   }
 
-  const result = await graphql<{ getTests: { results: TestResult[] } }>(QUERIES.getTest, {
-    jql: `key = ${key}`,
-  });
+  // Addressing by numeric issueId is the only way to reach a test whose key you
+  // do not know, and the handle that survives a JQL-unfriendly context.
+  const result = issueId
+    ? await graphql<{ getTests: { results: TestResult[] } }>(QUERIES.getTestById, { issueIds: [issueId] })
+    : await graphql<{ getTests: { results: TestResult[] } }>(QUERIES.getTest, { jql: `key = ${key}` });
 
   if (!result.getTests.results || result.getTests.results.length === 0) {
-    throw new Error(`Test not found: ${key}`);
+    throw new Error(`Test not found: ${key || `id ${issueId}`}`);
   }
 
   const test = result.getTests.results[0];
@@ -169,9 +174,15 @@ export async function list(flags: Flags): Promise<void> {
   log.title(`Tests (${result.getTests.total} total, showing ${result.getTests.results.length})`);
 
   if (result.getTests.results.length === 0) {
+    if (result.getTests.total > 0 && limit > 0) {
+      warnCountedButUnresolved('tests', result.getTests.total);
+      return;
+    }
     log.warn('No tests found');
     return;
   }
+
+  warnIfTruncated(result.getTests.total, result.getTests.results.length, limit);
 
   result.getTests.results.forEach((t: TestResult) => {
     const rawStatus = t.jira.status;
@@ -205,6 +216,55 @@ export async function addStep(flags: Flags): Promise<void> {
   }
   if (step.result) {
     console.log(`  Expected: ${step.result}`);
+  }
+}
+
+// ============================================================================
+// UPDATE STEP
+// ============================================================================
+
+export async function updateStep(flags: Flags, positional: string[]): Promise<void> {
+  // The test reference is accepted for symmetry with add-step/remove-step and
+  // for self-documenting invocations; Xray's updateTestStep addresses the step
+  // by its own id alone (step ids are globally unique).
+  const testRef = positional[0] || getFlag(flags, 'test');
+  const stepId = requireFlag(flags, 'step');
+  const action = getFlag(flags, 'action');
+  const data = getFlag(flags, 'data');
+  const result = getFlag(flags, 'result');
+
+  if (action === undefined && data === undefined && result === undefined) {
+    throw new Error('Nothing to update: pass at least one of --action / --data / --result');
+  }
+
+  // Only the provided fields go into UpdateStepInput — an omitted flag leaves
+  // that field of the step untouched.
+  const step: { action?: string, data?: string, result?: string } = {};
+  if (action !== undefined) {
+    step.action = action;
+  }
+  if (data !== undefined) {
+    step.data = data;
+  }
+  if (result !== undefined) {
+    step.result = result;
+  }
+
+  log.dim(`Updating step ${stepId}${testRef ? ` of test ${testRef}` : ''}...`);
+
+  const response = await graphql<{ updateTestStep: TestStepResponse }>(MUTATIONS.updateTestStep, {
+    stepId,
+    step,
+  });
+
+  const updated = response.updateTestStep;
+  log.success(`Step updated (ID: ${updated.id})`);
+  console.log(`  Action: ${updated.action}`);
+  if (updated.data) {
+    console.log(`  Data: ${updated.data}`);
+  }
+  if (updated.result) {
+    console.log(`  Expected: ${updated.result}`);
   }
 }
 
@@ -271,3 +331,12 @@ export async function updateType(flags: Flags): Promise<void> {
 
   log.success(`Test type updated to ${response.updateTestType.testType.name} (issueId: ${response.updateTestType.issueId})`);
 }
+
+// ============================================================================
+// ENRICH (re-export)
+// ============================================================================
+
+// `test enrich` routes through this module like every other test subcommand,
+// but its implementation is large enough (fs walking + batch fetching) to
+// live in its own file.
+export { enrich } from './enrich.js';

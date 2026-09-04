@@ -1,15 +1,18 @@
 /**
  * Xray CLI - Execution Commands
  *
- * Commands: create, get, list, add-tests, remove-tests
+ * Commands: create, get, list, add-tests, remove-tests, add-set,
+ * set-environment, sync
  */
 
-import type { Flags, TestExecutionResult, TestRunResult } from '../types/index.js';
+import type { Flags, TestExecutionResult, TestRunResult, TestSetResult } from '../types/index.js';
+import { diffMembership } from '../lib/cascade.js';
 import { loadConfig } from '../lib/config.js';
 import { graphql, MUTATIONS, QUERIES } from '../lib/graphql.js';
 import { getLinkedTests, resolveIssueId, resolveIssueIds } from '../lib/jira.js';
-import { log } from '../lib/logger.js';
+import { log, warnCountedButUnresolved, warnIfTruncated } from '../lib/logger.js';
 import { getBoolFlag, getFlag, getFlagArray, requireFlag } from '../lib/parser.js';
+import { readSuggestedEnvironment } from '../lib/project-config.js';
 
 /**
  * Collect Test Environments from `--environment` (repeatable) and/or a single
@@ -58,6 +61,19 @@ export async function create(flags: Flags): Promise<void> {
   console.log(`  Issue ID: ${exec.issueId}`);
   if (testEnvironments) {
     console.log(`  Environments: ${testEnvironments.join(', ')}`);
+  }
+  else {
+    // Advisory only — never blocks (decision D9). An execution without a Test
+    // Environment produces results that cannot be compared across runs or
+    // pinned to the env they ran against.
+    const suggested = readSuggestedEnvironment();
+    log.warn('══════════════════════════════════════════════════════════════════');
+    log.warn(`Execution ${exec.jira.key} was created WITHOUT a Test Environment.`);
+    log.warn('Results will not be pinned to an environment, so runs are not');
+    log.warn('comparable across environments. Strongly recommended: pass');
+    log.warn(`--environment on create${suggested ? ` (current project env: ${suggested})` : ''}, or fix this one now:`);
+    log.warn(`  bun xray exec set-environment --execution ${exec.jira.key} --environment ${suggested ?? '<env>'}`);
+    log.warn('══════════════════════════════════════════════════════════════════');
   }
 }
 
@@ -125,12 +141,18 @@ export async function list(flags: Flags): Promise<void> {
 
   const result = await graphql<{ getTestExecutions: { total: number, results: TestExecutionResult[] } }>(QUERIES.getTestExecutions, { jql, limit });
 
-  log.title(`Test Executions (${result.getTestExecutions.total} total)`);
+  log.title(`Test Executions (${result.getTestExecutions.total} total, showing ${result.getTestExecutions.results.length})`);
 
   if (result.getTestExecutions.results.length === 0) {
+    if (result.getTestExecutions.total > 0 && limit > 0) {
+      warnCountedButUnresolved('test executions', result.getTestExecutions.total);
+      return;
+    }
     log.warn('No test executions found');
     return;
   }
+
+  warnIfTruncated(result.getTestExecutions.total, result.getTestExecutions.results.length, limit);
 
   result.getTestExecutions.results.forEach((e: TestExecutionResult) => {
     const eStatus = typeof e.jira.status === 'object' && e.jira.status !== null ? e.jira.status.name : (e.jira.status || 'Unknown');
@@ -174,6 +196,53 @@ export async function removeTests(flags: Flags): Promise<void> {
   });
 
   log.success(`Removed ${result.removeTestsFromTestExecution.removedTests.length} tests`);
+}
+
+// ============================================================================
+// ADD SET (Set-first cascade: Set membership → Execution test list)
+// ============================================================================
+
+export async function addSet(flags: Flags, positional: string[]): Promise<void> {
+  const execId = await resolveIssueId(positional[0] || requireFlag(flags, 'execution'));
+  const setId = await resolveIssueId(requireFlag(flags, 'set'));
+
+  const setResult = await graphql<{ getTestSet: TestSetResult }>(QUERIES.getTestSet, { issueId: setId });
+  const setEntity = setResult.getTestSet;
+  const members = setEntity.tests?.results ?? [];
+
+  if (members.length === 0) {
+    log.warn(`Test Set ${setEntity.jira?.key ?? setId} has no member tests — nothing to add.`);
+    return;
+  }
+
+  const execResult = await graphql<{ getTestExecution: TestExecutionResult }>(QUERIES.getTestExecution, { issueId: execId });
+  const execEntity = execResult.getTestExecution;
+  const existing = (execEntity.tests?.results ?? []).map(t => t.issueId);
+
+  const keyById = new Map(members.map(m => [m.issueId, m.jira?.key ?? m.issueId]));
+  const { missing, present } = diffMembership(members.map(m => m.issueId), existing);
+
+  log.title(`Cascade: ${setEntity.jira?.key ?? setId} → ${execEntity.jira?.key ?? execId}`);
+  console.log(`  Set members:          ${members.length}`);
+  console.log(`  Already in execution: ${present.length}${present.length > 0 ? ` (${present.map(id => keyById.get(id)).join(', ')})` : ''}`);
+
+  if (missing.length === 0) {
+    log.success('  Execution already holds every Set member — nothing to add.');
+    return;
+  }
+
+  log.dim(`  Adding ${missing.length} test(s) to execution...`);
+  const result = await graphql<{ addTestsToTestExecution: { addedTests: string[], warning?: string } }>(MUTATIONS.addTestsToTestExecution, {
+    issueId: execId,
+    testIssueIds: missing,
+  });
+
+  const added = result.addTestsToTestExecution.addedTests ?? [];
+  log.success(`  Added ${added.length} test(s): ${missing.map(id => keyById.get(id)).join(', ')}`);
+  console.log(`  Skipped (already present): ${present.length}`);
+  if (result.addTestsToTestExecution.warning) {
+    log.warn(`  ${result.addTestsToTestExecution.warning}`);
+  }
 }
 
 // ============================================================================

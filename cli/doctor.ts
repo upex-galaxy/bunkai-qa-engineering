@@ -26,15 +26,33 @@
  * Side effects: none. This script never edits files or installs anything.
  */
 
+import type { CompatibilityCheck, CompatibilityErrorGroup } from './lib/agent-compatibility.ts';
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+import {
+  declaredMcpIds,
+  validateHookCompatibility,
+  validateMcpParity,
+} from './lib/agent-compatibility-contracts.ts';
+import {
+  checkAgentCompatibility,
+  commandWrapperCounts,
+  describeAliasStatus,
+  groupCompatibilityErrors,
+  validateCanonicalSources,
+} from './lib/agent-compatibility.ts';
+import {
+  formatInstanceMismatchWarning,
+  resolveAtlassianInstance,
+} from './lib/atlassian-instance.ts';
 // Canonical variable manifest (source of truth — D1). Imports only `node:fs`,
 // so it is safe to load statically here without breaking the dependency-free
 // `--preflight` contract (no third-party deps pulled in).
+import { playwrightBrowsersInstalled } from './lib/playwright-cache.ts';
 import { requiredNow, varsFor } from './lib/variables-manifest.ts';
 
 // `tui` pulls third-party deps (boxen/cli-table3/figures/picocolors). It is
@@ -51,7 +69,6 @@ const ENV_PATH = join(REPO_ROOT, '.env');
 const MCP_PATH = join(REPO_ROOT, '.mcp.json');
 const OPENCODE_PATH = join(REPO_ROOT, 'opencode.jsonc');
 const NODE_MODULES_DOTENV = join(REPO_ROOT, 'node_modules', 'dotenv-cli');
-const PW_CACHE = join(homedir(), '.cache', 'ms-playwright');
 // --preflight mode resolves install.ts's only third-party import.
 const INQUIRER_MARKER = join(REPO_ROOT, 'node_modules', '@inquirer', 'prompts', 'package.json');
 
@@ -98,10 +115,6 @@ const VAR_HINTS: Record<string, { hint: string, where: string }> = {
   RESEND_API_KEY: {
     hint: 'Resend API key (email-flow tests + resend CLI auth)',
     where: 'https://resend.com/api-keys  (docs: https://resend.com/docs/api-reference/introduction)',
-  },
-  ATLASSIAN_URL: {
-    hint: 'Atlassian / Jira workspace URL',
-    where: 'e.g. https://yourorg.atlassian.net',
   },
   ATLASSIAN_EMAIL: {
     hint: 'Email used to log in to Atlassian',
@@ -150,6 +163,35 @@ interface DirenvState {
   rc_file?: string
 }
 
+export interface AgentCompatibilityDiagnostic {
+  /** Every file-verifiable part of the contract holds (alias, wrappers, hooks, MCP parity, shim). */
+  file_correct: boolean
+  errors: string[]
+  /** Errors bucketed per surface, so "alias pending" and "MCP drift" never read as one flat failure. */
+  errors_by_surface: Array<{ group: CompatibilityErrorGroup, label: string, errors: string[] }>
+  /** The alias on its own, whatever the verdict: `deferred` is expected right after the migration. */
+  alias: CompatibilityCheck['alias']
+  instructions: {
+    agents_md: boolean
+    claude_shim: boolean
+    canonical_skills: boolean
+    claude_alias: boolean
+  }
+  /** `expected` is the merged manifest count (upstream aliases plus the project overlay). */
+  command_wrappers: { expected: number, claude: number, opencode: number, ok: boolean }
+  hooks: { claude: boolean, opencode: boolean, codex: boolean, ok: boolean }
+  /** `expected_servers` is whatever `.mcp.json` declares, never a literal count. */
+  mcp: { expected_servers: number, claude: boolean, opencode: boolean, codex: boolean, parity: boolean }
+  codex: {
+    config_exists: boolean
+    cli_detected: boolean
+    repository_configured: boolean
+    desktop_uses_repository_config: true
+    trust_required: true
+    trust_status: 'required-not-verifiable'
+  }
+}
+
 interface DoctorReport {
   status: 'ok' | 'needs-action'
   repo_root: string
@@ -158,8 +200,15 @@ interface DoctorReport {
   is_tty: boolean
   env_file_exists: boolean
   env_vars: Record<string, 'set' | 'missing'>
+  /**
+   * The Atlassian site host, resolved from `.agents/project.yaml`. Reported
+   * apart from `env_vars` because it is NOT an env var — listing it there would
+   * report `missing` forever on a correctly configured repo.
+   */
+  atlassian_host: { status: 'set' | 'missing', value?: string, source?: 'project.yaml' | 'env' }
   mcp_json_exists: boolean
   opencode_jsonc_exists: boolean
+  agent_compatibility: AgentCompatibilityDiagnostic
   deps_installed: boolean
   playwright_browsers: boolean
   direnv: DirenvState
@@ -213,11 +262,22 @@ async function detectDirenv(): Promise<DirenvState> {
   const allowMatch = status.stdout.match(/Found RC allowed (\d+|true)/);
   const envrcAllowed = allowMatch !== null && (allowMatch[1] === '0' || allowMatch[1] === 'true');
 
-  const candidates = ['.bashrc', '.zshrc', '.bash_profile', '.profile'];
+  // Every file `shellHookLine()` may have told the user to edit. The PowerShell
+  // profiles matter on native Windows, where none of the POSIX rc files exist —
+  // without them a user who followed the pwsh instruction to the letter would
+  // still be reported as "hook missing" on every re-run.
+  const candidates = [
+    join(homedir(), '.bashrc'),
+    join(homedir(), '.zshrc'),
+    join(homedir(), '.bash_profile'),
+    join(homedir(), '.profile'),
+    join(homedir(), '.config', 'fish', 'config.fish'),
+    join(homedir(), 'Documents', 'PowerShell', 'Microsoft.PowerShell_profile.ps1'),
+    join(homedir(), 'Documents', 'WindowsPowerShell', 'Microsoft.PowerShell_profile.ps1'),
+  ];
   let hookInRc = false;
   let rcFile: string | undefined;
-  for (const file of candidates) {
-    const path = join(homedir(), file);
+  for (const path of candidates) {
     if (!existsSync(path)) { continue; }
     try {
       const content = await readFile(path, 'utf8');
@@ -283,6 +343,71 @@ function compareVersion(a: readonly number[], b: readonly number[]): number {
   return 0;
 }
 
+export function diagnoseAgentCompatibility(
+  root: string,
+  options: { platform?: NodeJS.Platform, codexCliDetected?: boolean } = {},
+): AgentCompatibilityDiagnostic {
+  const platform = options.platform ?? process.platform;
+  const compatibility = checkAgentCompatibility(root, platform);
+  const canonicalErrors = validateCanonicalSources(root);
+  const hookErrors = validateHookCompatibility(root);
+  const mcpErrors = validateMcpParity(root);
+  let wrappers = { expected: 0, claude: 0, opencode: 0 };
+  try { wrappers = commandWrapperCounts(root); }
+  catch { /* compatibility.errors already carries manifest diagnostics */ }
+  let expectedServers = 0;
+  try { expectedServers = declaredMcpIds(root).length; }
+  catch { /* mcpErrors already carries the .mcp.json diagnostics */ }
+
+  const hasHookError = (needle: string): boolean => hookErrors.some(error => error.includes(needle));
+  const hasMcpError = (needle: string): boolean => mcpErrors.some(error => error.includes(needle));
+  const codexConfigExists = existsSync(join(root, '.codex', 'config.toml'));
+  const codexHooksExist = existsSync(join(root, '.codex', 'hooks.json'));
+  const claudeShimError = canonicalErrors.some(error => error.includes('CLAUDE.md'));
+  const agentsError = canonicalErrors.some(error => error.includes('Canonical instructions'));
+  const skillsError = canonicalErrors.some(error => error.includes('Canonical skills'));
+
+  return {
+    file_correct: compatibility.ok,
+    errors: [...new Set(compatibility.errors)],
+    errors_by_surface: groupCompatibilityErrors([...new Set(compatibility.errors)]),
+    alias: compatibility.alias,
+    instructions: {
+      agents_md: !agentsError,
+      claude_shim: !claudeShimError,
+      canonical_skills: !skillsError,
+      claude_alias: compatibility.alias.status === 'valid',
+    },
+    command_wrappers: {
+      ...wrappers,
+      ok: wrappers.expected > 0
+        && wrappers.claude === wrappers.expected
+        && wrappers.opencode === wrappers.expected,
+    },
+    hooks: {
+      claude: !hasHookError('.claude/settings.json'),
+      opencode: !hasHookError('opencode.jsonc') && !hasHookError('.opencode/plugins'),
+      codex: codexHooksExist && !hasHookError('.codex/hooks.json') && !hasHookError('.codex/config.toml'),
+      ok: hookErrors.length === 0,
+    },
+    mcp: {
+      expected_servers: expectedServers,
+      claude: !hasMcpError('.mcp.json'),
+      opencode: !hasMcpError('opencode.jsonc'),
+      codex: codexConfigExists && !hasMcpError('.codex/config.toml'),
+      parity: mcpErrors.length === 0,
+    },
+    codex: {
+      config_exists: codexConfigExists,
+      cli_detected: options.codexCliDetected ?? tryRun('codex', ['--version']).ok,
+      repository_configured: codexConfigExists && codexHooksExist,
+      desktop_uses_repository_config: true,
+      trust_required: true,
+      trust_status: 'required-not-verifiable',
+    },
+  };
+}
+
 // ----------------------------------------------------------------------------
 // Preflight (blocker-only gate for `bun run setup`)
 // ----------------------------------------------------------------------------
@@ -326,7 +451,8 @@ function runPreflight(): never {
 // Main check
 // ----------------------------------------------------------------------------
 
-async function runDoctor(): Promise<DoctorReport> {
+export async function runDoctor(): Promise<DoctorReport> {
+  const agentCompatibility = diagnoseAgentCompatibility(REPO_ROOT);
   const report: DoctorReport = {
     status: 'ok',
     repo_root: REPO_ROOT,
@@ -335,10 +461,12 @@ async function runDoctor(): Promise<DoctorReport> {
     is_tty: Boolean(process.stdin.isTTY),
     env_file_exists: existsSync(ENV_PATH),
     env_vars: {},
+    atlassian_host: { status: 'missing' },
     mcp_json_exists: existsSync(MCP_PATH),
     opencode_jsonc_exists: existsSync(OPENCODE_PATH),
+    agent_compatibility: agentCompatibility,
     deps_installed: existsSync(NODE_MODULES_DOTENV),
-    playwright_browsers: existsSync(PW_CACHE),
+    playwright_browsers: playwrightBrowsersInstalled(),
     direnv: { installed: false },
     pending_actions: [],
   };
@@ -374,6 +502,43 @@ async function runDoctor(): Promise<DoctorReport> {
     }
   }
 
+  // Atlassian host — a yaml field, NOT an env var. Checking `process.env` here
+  // would be worse than useless: the variable's absence is the desired state,
+  // and its PRESENCE is the bug (a stale copy inherited from the parent shell is
+  // exactly what pointed the sync scripts and the TMS provider at a dead site).
+  try {
+    const instance = resolveAtlassianInstance();
+    report.atlassian_host = { status: 'set', value: instance.baseUrl, source: instance.source };
+    const warning = formatInstanceMismatchWarning(instance);
+    if (warning !== null) {
+      report.pending_actions.push({
+        type: 'shell_command',
+        target: 'unset ATLASSIAN_URL',
+        hint: warning,
+      });
+    }
+    else if (instance.source === 'env') {
+      report.pending_actions.push({
+        type: 'shell_command',
+        target: 'bun run agents:setup',
+        hint: 'Atlassian host is coming from an ATLASSIAN_URL env var, not from '
+          + '.agents/project.yaml. That fallback exists for a repo that has not been set up '
+          + 'yet; write the host to the yaml so it is versioned and cannot go stale.',
+      });
+    }
+  }
+  catch {
+    report.atlassian_host = { status: 'missing' };
+    report.pending_actions.push({
+      type: 'shell_command',
+      target: 'bun run agents:setup',
+      hint: 'Atlassian host not set. Fill `issue_tracker.atlassian_url` in '
+        + '.agents/project.yaml — it is the source of truth for every jira:sync-* script, for '
+        + '`acli --site`, and for the Jira-Direct TMS provider that writes results back to '
+        + 'issues. Read it back with `bun run --silent jira:url`.',
+    });
+  }
+
   // Warn about legacy JIRA_* credential keys that no longer have any effect.
   // The repo collapsed all Atlassian credentials onto the ATLASSIAN_* family;
   // these names are no longer read by any consumer. acli and
@@ -386,7 +551,8 @@ async function runDoctor(): Promise<DoctorReport> {
   if (legacyPresent.length > 0) {
     tui.log.warn(
       `Found legacy credential keys in .env that are no longer used: ${legacyPresent.join(', ')}.\n`
-      + '       All Atlassian credentials now come from ATLASSIAN_URL / ATLASSIAN_EMAIL / ATLASSIAN_API_TOKEN.\n'
+      + '       Atlassian credentials now come from ATLASSIAN_EMAIL / ATLASSIAN_API_TOKEN; the site\n'
+      + '       host lives in .agents/project.yaml -> issue_tracker.atlassian_url.\n'
       + '       Move any unique value into the ATLASSIAN_* counterpart and delete the legacy line.',
     );
   }
@@ -396,7 +562,7 @@ async function runDoctor(): Promise<DoctorReport> {
     report.pending_actions.push({
       type: 'shell_command',
       target: 'bun install',
-      hint: 'Install project dependencies including dotenv-cli (needed for `bun run claude`).',
+      hint: 'Install project dependencies including dotenv-cli (needed for the Claude/OpenCode/Codex launch wrappers).',
     });
   }
 
@@ -415,7 +581,7 @@ async function runDoctor(): Promise<DoctorReport> {
     report.pending_actions.push({
       type: 'system_install',
       target: 'direnv',
-      hint: 'Optional. Without direnv, launch with `bun run claude` / `bun run opencode` (wrapper). Install if you want `claude` to work directly via shell autoload.',
+      hint: 'Optional. Without direnv, launch with `bun run claude` / `bun run opencode` / `bun run codex` (wrapper). Install if you want executables to work directly via shell autoload.',
       where: installCommandForPlatform(),
     });
   }
@@ -454,6 +620,14 @@ async function runDoctor(): Promise<DoctorReport> {
     });
   }
 
+  if (!agentCompatibility.file_correct) {
+    report.pending_actions.push({
+      type: 'shell_command',
+      target: 'bun run agents:compat',
+      hint: `Repair generated compatibility artifacts, then restore any canonical/config files still reported by doctor: ${agentCompatibility.errors.join('; ')}`,
+    });
+  }
+
   if (report.pending_actions.length > 0) {
     report.status = 'needs-action';
   }
@@ -478,10 +652,21 @@ function printHuman(report: DoctorReport): void {
   process.stdout.write('\n');
 
   // File + dep checks as a table
+  const compat = report.agent_compatibility;
+  const hostList = (hosts: { claude: boolean, opencode: boolean, codex: boolean }): string =>
+    (['claude', 'opencode', 'codex'] as const).map(host => `${host}:${hosts[host] ? 'ok' : 'FAIL'}`).join(' ');
   const checks: string[][] = [
     ['.env file', report.env_file_exists ? tui.statusIcon('ok') : tui.statusIcon('fail')],
     ['.mcp.json', report.mcp_json_exists ? tui.statusIcon('ok') : tui.statusIcon('fail')],
     ['opencode.jsonc', report.opencode_jsonc_exists ? tui.statusIcon('ok') : tui.statusIcon('fail')],
+    ['AGENTS.md + CLAUDE.md shim', compat.instructions.agents_md && compat.instructions.claude_shim ? tui.statusIcon('ok') : tui.statusIcon('fail')],
+    ['Canonical .agents/skills + Claude alias', compat.instructions.canonical_skills && compat.instructions.claude_alias ? tui.statusIcon('ok') : tui.statusIcon('fail')],
+    [`Command wrappers (${compat.command_wrappers.expected} Claude + ${compat.command_wrappers.expected} OpenCode)`, compat.command_wrappers.ok ? tui.statusIcon('ok') : `${tui.statusIcon('fail')} ${compat.command_wrappers.claude}/${compat.command_wrappers.opencode} of ${compat.command_wrappers.expected}`],
+    ['Hook adapters (Claude/OpenCode/Codex)', compat.hooks.ok ? tui.statusIcon('ok') : `${tui.statusIcon('fail')} ${hostList(compat.hooks)}`],
+    [`MCP parity (${compat.mcp.expected_servers} servers x 3 harnesses)`, compat.mcp.parity ? tui.statusIcon('ok') : `${tui.statusIcon('fail')} ${hostList(compat.mcp)}`],
+    ['Codex repository config', compat.codex.repository_configured ? tui.statusIcon('ok') : tui.statusIcon('fail')],
+    ['Codex CLI executable', compat.codex.cli_detected ? tui.statusIcon('ok') : `${tui.statusIcon('warn')} not found; Desktop remains configured`],
+    ['Codex repository trust', `${tui.statusIcon('warn')} required; runtime state is not file-verifiable`],
     ['node_modules', report.deps_installed ? tui.statusIcon('ok') : tui.statusIcon('fail')],
     ['Playwright browsers', report.playwright_browsers ? tui.statusIcon('ok') : tui.statusIcon('warn')],
     [`direnv binary${report.direnv.version ? ` (${report.direnv.version})` : ''}`, report.direnv.installed ? tui.statusIcon('ok') : tui.statusIcon('warn')],
@@ -490,6 +675,18 @@ function printHuman(report: DoctorReport): void {
     checks.push(['  .envrc allowed', report.direnv.envrc_allowed ? tui.statusIcon('ok') : tui.statusIcon('fail')]);
     checks.push([`  shell hook${report.direnv.rc_file ? ` (in ${report.direnv.rc_file})` : ''}`, report.direnv.hook_in_rc ? tui.statusIcon('ok') : tui.statusIcon('warn')]);
   }
+  // The host is shown by VALUE, not as a set/missing tick. Reading which site
+  // the repo is about to write to is the entire point — a green check that says
+  // "configured" is exactly what let a dead instance go unnoticed.
+  const hostRow = ((): string => {
+    const host = report.atlassian_host;
+    if (host.status !== 'set') { return tui.statusIcon('fail'); }
+    const fromYaml = host.source === 'project.yaml';
+    const icon = tui.statusIcon(fromYaml ? 'ok' : 'warn');
+    const note = fromYaml ? '' : ' (from ATLASSIAN_URL env — not versioned)';
+    return `${icon} ${host.value}${note}`;
+  })();
+  checks.push(['Atlassian host (.agents/project.yaml)', hostRow]);
   process.stdout.write(`${tui.table(['Check', 'Status'], checks)}\n`);
 
   // Env vars as a table
@@ -500,6 +697,20 @@ function printHuman(report: DoctorReport): void {
     v === 'set' ? 'set' : 'missing',
   ]);
   process.stdout.write(`${tui.table(['Variable', 'Status', 'Value'], envRows)}\n`);
+
+  if (compat.errors.length > 0) {
+    tui.section('Cross-harness compatibility errors');
+    // The alias line stands on its own: right after the migration it is
+    // deferred on purpose, and that must not read as one more broken contract.
+    process.stdout.write(`  ${tui.statusIcon(compat.alias.status === 'valid' ? 'ok' : compat.alias.status === 'deferred' ? 'warn' : 'fail')} ${describeAliasStatus(compat.alias)}\n`);
+    for (const bucket of compat.errors_by_surface) {
+      process.stdout.write(`  [${bucket.group}] ${bucket.label}\n`);
+      for (const error of bucket.errors) {
+        process.stdout.write(`    ${tui.statusIcon('fail')} ${error}\n`);
+      }
+    }
+    process.stdout.write('  Generated artifacts: bun run agents:compat. Canonical/config files: fix by hand, then re-run doctor.\n\n');
+  }
 
   if (report.pending_actions.length > 0) {
     tui.section('Pending actions');
@@ -514,7 +725,7 @@ function printHuman(report: DoctorReport): void {
   }
   else {
     process.stdout.write('\n');
-    process.stdout.write(`${tui.successBox(['All green. Launch agent: bun run claude  /  bun run opencode'])}\n`);
+    process.stdout.write(`${tui.successBox(['All file checks green. Launch: bun run claude  /  bun run opencode  /  bun run codex', 'Codex Desktop uses the same repository configuration; approve repository trust before hooks run.'])}\n`);
   }
 }
 
@@ -558,4 +769,4 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+if (import.meta.main) { void main(); }
