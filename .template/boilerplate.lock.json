@@ -4,12 +4,12 @@
   "templateCommit": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
   "perComponentCommit": {
     "claude-config": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
-    "scripts": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
-    "docs": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
+    "scripts": "5bcb7ea729e59662a017a088e8cd69ceb9590000",
+    "docs": "5bcb7ea729e59662a017a088e8cd69ceb9590000",
     "cli": "bc869c81ae1a9a83c33ffc5840d1d5075213034e",
     "vscode": "57a2dfdfc1ecaf50b569114e328908e14e211aea",
     "husky": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
-    "agents-docs": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
+    "agents-docs": "5bcb7ea729e59662a017a088e8cd69ceb9590000",
     "tooling": "57a2dfdfc1ecaf50b569114e328908e14e211aea",
     "commands": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
     "skills": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
@@ -38,7 +38,7 @@
       ]
     },
     ".gitignore": {
-      "lastSyncedSha": "a293ad9759098669d09ad4106f2e96acb2c11187",
+      "lastSyncedSha": "82195b81ce755d511e8da13bbd672adae0959232",
       "appendedLines": [
         ".template/claude-md.upstream.sha",
         "/.agents/prompts/",
@@ -62,7 +62,8 @@
         ".agents/skills/playwright-best-practices/",
         ".agents/skills/resend-cli/",
         "!skills-lock.json",
-        "!**/skills-lock.json"
+        "!**/skills-lock.json",
+        ".template/last-apply.json"
       ]
     }
   },
@@ -98,7 +99,7 @@
       }
     }
   },
-  "cliVersion": "7.0",
-  "lastSyncedAt": "2026-09-02T00:33:35.412Z",
+  "cliVersion": "8.2",
+  "lastSyncedAt": "2026-09-04T13:53:06.969Z",
   "variableSystemVersion": 1
 }
