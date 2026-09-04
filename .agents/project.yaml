@@ -70,6 +70,11 @@ environments:
     api_url: 'https://staging-upexbunkai.vercel.app/api' # API base URL for staging env (e.g. https://api-staging.myproject.com)
     db_mcp: staging-dbhub # MCP server name for staging DB (e.g. myproject-staging-db)
     api_mcp: staging-openapi # MCP server name for staging API (e.g. myproject-staging-api)
+  qa:
+    web_url: null # TODO: Frontend URL for qa env (e.g. https://qa.myproject.com) — not provisioned yet, see AGENTS.md §13
+    api_url: null # TODO: API base URL for qa env (e.g. https://api-qa.myproject.com)
+    db_mcp: null # TODO: MCP server name for qa DB (e.g. myproject-qa-db)
+    api_mcp: null # TODO: MCP server name for qa API (e.g. myproject-qa-api)
 
 # Git workflow for THIS project — the SOURCE OF TRUTH read by the git-flow-master skill
 # before any git/gh operation. Ships `null` (template): on the first git intent git-flow-master
@@ -108,3 +113,18 @@ git_strategy:
   meta:
     setup_version: 2
     created: 2026-06-29 # YYYY-MM-DD stamped by Strategy Setup
+    strategy_source: chosen # inherited | chosen — CHOSEN 2026-06-29 via git-flow-master Strategy Setup (sdet, for chained test-automation suites); not the shipped default
+
+# Files `bun run up` must keep as THIS project's own. Read by `cli/update-boilerplate.ts`
+# at the start of every run and merged into the protected watchlist (AGENTS.md,
+# .agents/project.yaml, .mcp.json, opencode.jsonc, .codex/config.toml,
+# .claude/settings.json, .husky/pre-commit, .husky/pre-push, allurerc.mjs,
+# playwright.config.ts, the KATA bases under tests/components/, ...): a listed path is
+# never overwritten, is delivered once from upstream when missing, and shows a drift row
+# with hunk evidence when upstream's copy changes. List a SYNCED file you merged by hand
+# (the parity row "project edit overwritten" names the path to add); repo-relative FILE
+# paths only, no directories, nothing under .git. An invalid entry is reported and
+# ignored. Empty by default. Read directly by the updater (not a {{VAR}} source): the
+# nested list is skipped by vars:check like git_strategy and qa.qa_epics.
+updater:
+  protected_paths: [scripts/lint-skills.ts] # kept: adds committed-community-skill handling on top of upstream's tier logic — see the STALE_PATH_ALLOWED note in the file
