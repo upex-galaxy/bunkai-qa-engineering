@@ -6,7 +6,7 @@
     "claude-config": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
     "scripts": "5bcb7ea729e59662a017a088e8cd69ceb9590000",
     "docs": "02cb14a85a15bdc679c107064e06695ef93956d5",
-    "cli": "bc869c81ae1a9a83c33ffc5840d1d5075213034e",
+    "cli": "c9b7577f38677b4b339e545aa73c0525ceef7b4c",
     "vscode": "57a2dfdfc1ecaf50b569114e328908e14e211aea",
     "husky": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
     "agents-docs": "5bcb7ea729e59662a017a088e8cd69ceb9590000",
@@ -99,7 +99,7 @@
       }
     }
   },
-  "cliVersion": "8.3",
-  "lastSyncedAt": "2026-09-04T16:58:59.629Z",
+  "cliVersion": "8.4",
+  "lastSyncedAt": "2026-09-05T04:00:58.232Z",
   "variableSystemVersion": 1
 }
