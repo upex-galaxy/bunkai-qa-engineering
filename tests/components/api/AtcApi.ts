@@ -6,6 +6,7 @@
  * ATC API surface (NOTE: there is NO GET-list and NO GET-by-id endpoint):
  *   - POST  /atcs          → create (transactional)   201 { atc }
  *   - PATCH /atcs/{id}      → full-replace edit        200 { atc, version, affected_test_count }
+ *                             (optimistic lock via the custom X-If-Match header)
  *   - GET   /atcs/search    → project-scoped search    200 { items }
  *
  * ATCs follow flow-based design: each ATC is an ACTION + VERIFICATION.
@@ -16,6 +17,7 @@
 
 import type { APIResponse } from '@playwright/test';
 import type {
+  Atc,
   AtcCreateRequest,
   AtcCreateResponse,
   AtcSearchParams,
@@ -56,11 +58,13 @@ export class AtcApi extends ApiBase {
    * ATC: Create an ATC with valid payload - expects success (201)
    *
    * Transactional create across atcs + steps + assertions + AC links.
+   * Verifies the new ATC starts at version 1, carries every sent step (in
+   * position order) and assertion, and gets a `<module-slug>/atc-<8 hex>` slug.
    *
    * @param body - Full create payload (atc + steps + assertions + AC links)
    * @returns Tuple with response, parsed body, and sent payload
    */
-  @atc('BK-201')
+  @atc('BK-149')
   async createAtc(
     body: AtcCreateRequest,
   ): Promise<[APIResponse, AtcCreateResponse, AtcCreateRequest]> {
@@ -68,37 +72,58 @@ export class AtcApi extends ApiBase {
       '/atcs',
       body,
     );
+    const sentAssertions = body.assertions ?? [];
 
-    // Fixed assertions - validates the ATC was created
+    // Fixed assertions - validates the ATC was created with its children
     expect(response.status()).toBe(201);
-    expect(parsed.atc).toBeDefined();
-    expect(parsed.atc.id).toBeDefined();
+    expect(parsed.atc.id).toBeTruthy();
+    expect(parsed.atc.version).toBe(1);
+    expect(parsed.atc.slug).toMatch(/^[a-z0-9-]+\/atc-[a-z0-9]{8}$/);
+    expect(parsed.atc.steps.map(step => [step.position, step.content])).toEqual(
+      body.steps.map(step => [step.position, step.content]),
+    );
+    expect(parsed.atc.assertions.map(assertion => assertion.content)).toEqual(
+      sentAssertions.map(assertion => assertion.content),
+    );
 
     return [response, parsed, sentPayload];
   }
 
   /**
-   * ATC: Update an existing ATC - expects success (200)
+   * ATC: Full-replace edit of an ATC under X-If-Match - expects success (200)
    *
-   * Full-replace edit of the ATC's steps/assertions.
+   * Sends the optimistic-lock token in the custom `X-If-Match` header (never
+   * the legacy `If-Match`, which the Vercel edge rewrites to 412: BK-96), then
+   * verifies the version is bumped by one and the steps/assertions were
+   * cascade-replaced by exactly the ones sent (omitted assertions are cleared).
    *
-   * @param id - Target ATC id
+   * @param current - The ATC as last read (id + version used as the lock token)
    * @param body - Update payload (full replace)
    * @returns Tuple with response, parsed body, and sent payload
    */
-  @atc('BK-202')
+  @atc('BK-156')
   async updateAtc(
-    id: string,
+    current: Pick<Atc, 'id' | 'version'>,
     body: AtcUpdateRequest,
   ): Promise<[APIResponse, AtcUpdateResponse, AtcUpdateRequest]> {
     const [response, parsed, sentPayload] = await this.apiPATCH<AtcUpdateResponse, AtcUpdateRequest>(
-      `/atcs/${id}`,
+      `/atcs/${current.id}`,
       body,
+      { headers: { 'X-If-Match': String(current.version) } },
     );
+    const sentAssertions = body.assertions ?? [];
 
-    // Fixed assertions - validates the ATC was updated
+    // Fixed assertions - validates the edit was applied as a full replace
     expect(response.status()).toBe(200);
-    expect(parsed.atc).toBeDefined();
+    expect(response.headers()['x-request-id']).toBeTruthy();
+    expect(parsed.version).toBe(current.version + 1);
+    expect(parsed.atc.version).toBe(current.version + 1);
+    expect(parsed.atc.steps.map(step => [step.position, step.content])).toEqual(
+      body.steps.map(step => [step.position, step.content]),
+    );
+    expect(parsed.atc.assertions.map(assertion => assertion.content)).toEqual(
+      sentAssertions.map(assertion => assertion.content),
+    );
 
     return [response, parsed, sentPayload];
   }
@@ -112,7 +137,7 @@ export class AtcApi extends ApiBase {
    * @param params - Search query params (query + project_id required)
    * @returns Tuple with response and parsed body ({ items })
    */
-  @atc('BK-203')
+  @atc('BK-1090')
   async searchAtcs(params: AtcSearchParams): Promise<[APIResponse, AtcSearchResponse]> {
     // apiGET params expects Record<string, string> — serialize known fields
     const queryParams: Record<string, string> = {
