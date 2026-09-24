@@ -74,7 +74,7 @@ function validateTmsConfig(): void {
   }
   else if (config.tms.provider === 'jira') {
     if (!config.tms.jira.url) {
-      missing.push('ATLASSIAN_URL');
+      missing.push('issue_tracker.atlassian_url (.agents/project.yaml)');
     }
     if (!config.tms.jira.user) {
       missing.push('ATLASSIAN_EMAIL');
