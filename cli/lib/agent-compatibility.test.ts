@@ -21,8 +21,10 @@ import {
   EXPECTED_MCP,
   HOOK_IDENTITY_MARKER,
   HOOK_ORCA_MARKER,
+  hookScriptPath,
   KNOWN_MCP_IDS,
   stripJsonComments,
+  validateEslintBlockWiring,
   validateHookCompatibility,
   validateMcpParity,
 } from './agent-compatibility-contracts.ts';
@@ -39,6 +41,7 @@ import {
   groupCompatibilityErrors,
   isInside,
   mergedCommandAliases,
+  normalizeNewlines,
   POSIX_CLAUDE_SKILLS_TARGET,
   repairAgentSurfaces,
   repairClaudeSkillsAlias,
@@ -630,6 +633,73 @@ describe('Codex hook portability', () => {
   });
 });
 
+describe('eslint block wiring', () => {
+  const BASE = `export const BASE_ESLINT_OPTIONS = { rules: {} };
+export const CLI_IMPORT_CLOSURE = { files: ['cli/**/*.ts'], rules: {} };
+export const KATA_IMPORT_ALIASES = { files: ['tests/**/*.ts'], rules: {} };
+`;
+
+  test('the real repository wires every block it exports', () => {
+    expect(validateEslintBlockWiring(REPO_ROOT)).toEqual([]);
+  });
+
+  // The failure this exists for: `eslint.config.base.js` is SYNCED and
+  // `eslint.config.js` is never overwritten, so upstream can ship a rule that
+  // lands on disk, exports cleanly and enforces nothing.
+  test('an unwired block is an error naming it and the fix', () => {
+    const root = contractFixture();
+    write(root, 'eslint.config.base.js', BASE);
+    write(root, 'eslint.config.js', 'import { BASE_ESLINT_OPTIONS, CLI_IMPORT_CLOSURE } from \'./eslint.config.base.js\';\nexport default antfu({ ...BASE_ESLINT_OPTIONS }, CLI_IMPORT_CLOSURE);\n');
+    const errors = validateEslintBlockWiring(root);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('KATA_IMPORT_ALIASES');
+    expect(errors[0]).toContain('enforces nothing');
+  });
+
+  // The hole this check had on the day it was written. `eslint.config.js`'s own
+  // JSDoc names `CLI_IMPORT_CLOSURE` in prose, so a raw substring search found
+  // it there and passed a consumer that had stopped wiring the block.
+  test('a name mentioned only in a comment does NOT count as wiring', () => {
+    const root = contractFixture();
+    write(root, 'eslint.config.base.js', BASE);
+    write(root, 'eslint.config.js', '/** Extra blocks go after `CLI_IMPORT_CLOSURE`. */\n// KATA_IMPORT_ALIASES lives in the base.\nexport default antfu({});\n');
+    const errors = validateEslintBlockWiring(root);
+    expect(errors).toHaveLength(2);
+    expect(errors.join(' ')).toContain('CLI_IMPORT_CLOSURE');
+    expect(errors.join(' ')).toContain('KATA_IMPORT_ALIASES');
+  });
+
+  // Without a word boundary, wiring the longer name satisfies the shorter one.
+  test('a longer block name does not satisfy the shorter one it contains', () => {
+    const root = contractFixture();
+    write(root, 'eslint.config.base.js', 'export const CLI_IMPORT_CLOSURE = {};\nexport const CLI_IMPORT_CLOSURE_EXTRA = {};\n');
+    write(root, 'eslint.config.js', 'import { CLI_IMPORT_CLOSURE_EXTRA } from \'./eslint.config.base.js\';\nexport default antfu({}, CLI_IMPORT_CLOSURE_EXTRA);\n');
+    const errors = validateEslintBlockWiring(root);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('wire CLI_IMPORT_CLOSURE from');
+  });
+
+  test('a fully wired consumer is clean', () => {
+    const root = contractFixture();
+    write(root, 'eslint.config.base.js', BASE);
+    write(root, 'eslint.config.js', 'import { BASE_ESLINT_OPTIONS, CLI_IMPORT_CLOSURE, KATA_IMPORT_ALIASES } from \'./eslint.config.base.js\';\nexport default antfu({ ...BASE_ESLINT_OPTIONS }, CLI_IMPORT_CLOSURE, KATA_IMPORT_ALIASES);\n');
+    expect(validateEslintBlockWiring(root)).toEqual([]);
+  });
+
+  // The options object is spread into antfu's first argument, not passed as a
+  // scoped block, so requiring it by name would fire on every correct config.
+  test('BASE_ESLINT_OPTIONS is never demanded as a block', () => {
+    const root = contractFixture();
+    write(root, 'eslint.config.base.js', 'export const BASE_ESLINT_OPTIONS = { rules: {} };\n');
+    write(root, 'eslint.config.js', 'export default antfu({});\n');
+    expect(validateEslintBlockWiring(root)).toEqual([]);
+  });
+
+  test('a repo without the split config is not a finding', () => {
+    expect(validateEslintBlockWiring(contractFixture())).toEqual([]);
+  });
+});
+
 describe('hook adapters', () => {
   test('accepts the three adapters wired to the shared emitter', () => {
     expect(validateHookCompatibility(contractFixture())).toEqual([]);
@@ -669,6 +739,35 @@ describe('hook adapters', () => {
     ].join('\n'));
 
     expect(validateHookCompatibility(root)).toContain('OpenCode personality adapter must mutate output.system in place.');
+  });
+
+  test('reads the emitter path out of every adapter form', () => {
+    expect(hookScriptPath(CLAUDE_HOOK_COMMAND)).toBe('.agents/hooks/personality-reinject.mjs');
+    expect(hookScriptPath(CODEX_HOOK_COMMAND)).toBe('.agents/hooks/personality-reinject.mjs');
+    expect(hookScriptPath(CODEX_HOOK_COMMAND_WINDOWS)).toBe('.agents/hooks/personality-reinject.mjs');
+    expect(hookScriptPath('node run-something')).toBeNull();
+  });
+
+  test('rejects a hook command pointing at a file that does not exist', () => {
+    // The shape a rename leaves behind: `.claude/settings.json` is bootstrap-only,
+    // so it keeps naming the emitter's old path while the emitter has moved.
+    const root = contractFixture();
+    write(root, '.claude/settings.json', hookSettings(
+      'node "$CLAUDE_PROJECT_DIR/.agents/hooks/personality-reinject-renamed.mjs"',
+    ));
+
+    expect(validateHookCompatibility(root)).toContain(
+      'claude hook command points at a file that does not exist: .agents/hooks/personality-reinject-renamed.mjs',
+    );
+  });
+
+  test('rejects a hook command that names no repository-relative script', () => {
+    const root = contractFixture();
+    write(root, '.claude/settings.json', hookSettings('node --version'));
+
+    expect(validateHookCompatibility(root)).toContain(
+      'claude hook command does not name a repository-relative hook script.',
+    );
   });
 });
 
@@ -740,6 +839,47 @@ describe('MCP semantic parity', () => {
     expect(errors).toContain('MCP context8 missing from codex: declared in .mcp.json, absent from .codex/config.toml');
     expect(errors).toContain('MCP context7 present in opencode only: declare it in .mcp.json or remove it from opencode.jsonc');
     expect(errors).toContain('MCP context7 present in codex only: declare it in .mcp.json or remove it from .codex/config.toml');
+  });
+
+  test('reads OpenCode {file:dir/VAR} as the same dependency as {env:VAR}', () => {
+    // `scripts/harness-env.ts` rewrites every credential in `opencode.jsonc` to a
+    // `{file:.auth/opencode/<VAR>}` pointer, because `{env:}` resolves only from a
+    // process environment a desktop launch does not have. That is the SAME .env
+    // dependency by a different route, so parity must still hold.
+    const root = contractFixture();
+    const configPath = join(root, 'opencode.jsonc');
+    writeFileSync(configPath, readFileSync(configPath, 'utf8')
+      .replace('{env:POSTMAN_API_KEY}', '{file:.auth/opencode/POSTMAN_API_KEY}')
+      .replace('{env:TAVILY_API_KEY}', '{file:.auth/opencode/TAVILY_API_KEY}'));
+
+    expect(validateMcpParity(root)).toEqual([]);
+  });
+
+  test('a renamed {file:dir/VAR} still fails parity, so the form is checked and not merely tolerated', () => {
+    const root = contractFixture();
+    const configPath = join(root, 'opencode.jsonc');
+    writeFileSync(configPath, readFileSync(configPath, 'utf8')
+      .replace('{env:POSTMAN_API_KEY}', '{file:.auth/opencode/POSTMAN_TOKEN}'));
+
+    expect(validateMcpParity(root).some(error =>
+      error.includes('opencode MCP postman mismatch') && error.includes('POSTMAN_TOKEN'))).toBe(true);
+  });
+
+  test('a {file:} path whose final segment is NOT all-caps stays a literal', () => {
+    // The guardrail on the pattern. `{file:certs/ca.pem}` is a file, not a
+    // credential named after a variable, and must never be read as a dependency
+    // on some variable. Anyone tempted to widen the regex has to break this.
+    const root = contractFixture();
+    const configPath = join(root, 'opencode.jsonc');
+    writeFileSync(configPath, readFileSync(configPath, 'utf8')
+      .replace('{env:API_BASE_URL}', '{file:certs/ca.pem}'));
+
+    const errors = validateMcpParity(root);
+    // Still an error, because the openapi server genuinely lost its API_BASE_URL
+    // dependency — but it is reported as a LITERAL, not as a dependency on `pem`.
+    expect(errors.some(error => error.includes('opencode MCP openapi mismatch'))).toBe(true);
+    expect(errors.some(error => error.includes('certs/ca.pem'))).toBe(true);
+    expect(errors.some(error => error.toLowerCase().includes('"pem"'))).toBe(false);
   });
 
   test('reports an environment-variable mismatch', () => {
@@ -862,6 +1002,68 @@ describe('canonical sources', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// A CRLF checkout — what a downstream project gets under `core.autocrlf=true`
+// once `.gitattributes` is deleted. Every generated surface is written with
+// pure `\n`, so byte equality against the file git hands back is what breaks:
+// the shim comparison threw (killing `agents:compat:check`, `repo:check` and
+// the pre-push hook together) and all 20 wrappers read as stale, so the repair
+// rewrote them on every run. `crlf()` is what git's conversion does.
+// ---------------------------------------------------------------------------
+
+function crlf(text: string): string {
+  return text.replace(/\n/g, '\r\n');
+}
+
+function toCrlfOnDisk(root: string, relativePath: string): void {
+  const path = join(root, relativePath);
+  writeFileSync(path, crlf(readFileSync(path, 'utf8')));
+}
+
+describe('CRLF checkout', () => {
+  test('normalizeNewlines maps CRLF to LF and leaves LF alone', () => {
+    expect(normalizeNewlines('@AGENTS.md\r\n')).toBe(CLAUDE_INSTRUCTIONS_SHIM);
+    expect(normalizeNewlines(CLAUDE_INSTRUCTIONS_SHIM)).toBe(CLAUDE_INSTRUCTIONS_SHIM);
+  });
+
+  test('accepts a CRLF shim and still rejects a shim that grew prose', () => {
+    const root = temporaryRoot();
+    write(root, 'AGENTS.md', '# memory\n');
+    mkdirSync(join(root, '.agents/skills'), { recursive: true });
+
+    write(root, 'CLAUDE.md', crlf(CLAUDE_INSTRUCTIONS_SHIM));
+    expect(validateCanonicalSources(root)).toEqual([]);
+
+    write(root, 'CLAUDE.md', crlf('@AGENTS.md\n\nSome operational prose.\n'));
+    expect(validateCanonicalSources(root)).toEqual(['CLAUDE.md must contain exactly `@AGENTS.md` followed by one newline.']);
+  });
+
+  test('leaves CRLF wrappers alone instead of rewriting them on every run', () => {
+    const root = repositoryFixture();
+    for (const host of ['.claude/commands', '.opencode/commands']) {
+      for (const alias of ALIASES) {
+        toCrlfOnDisk(root, `${host}/${alias.alias}.md`);
+      }
+    }
+
+    expect(validateCommandAliases(root)).toEqual([]);
+    expect(repairCommandWrappers(root)).toBe(0);
+    // Untouched: rewriting them with LF only dirties a tree git converts back.
+    expect(readFileSync(join(root, '.claude/commands/master-test-plan.md'), 'utf8')).toContain('\r\n');
+  });
+
+  test('still reports a CRLF wrapper whose content actually drifted', () => {
+    const root = repositoryFixture();
+    write(root, '.claude/commands/master-test-plan.md', crlf('---\ndescription: hand-edited\n---\n'));
+
+    expect(validateCommandAliases(root)).toEqual([
+      'claude command wrapper is stale: .claude/commands/master-test-plan.md',
+    ]);
+    expect(repairCommandWrappers(root)).toBe(1);
+    expect(validateCommandAliases(root)).toEqual([]);
+  });
+});
+
 describe('Claude skills alias', () => {
   test('constructs portable POSIX and Windows alias plans', () => {
     const root = temporaryRoot();
@@ -888,6 +1090,20 @@ describe('Claude skills alias', () => {
     expect(readlinkSync(join(root, '.claude/skills'))).toBe(POSIX_CLAUDE_SKILLS_TARGET);
     expect(readFileSync(join(root, '.claude/skills/project-context/SKILL.md'), 'utf8')).toContain('name: project-context');
     expect(repairClaudeSkillsAlias(root, 'linux').status).toBe('valid');
+  });
+
+  test('accepts a junction target that differs only in case', () => {
+    // A Windows filesystem is case-insensitive, and `readlinkSync` can return a
+    // drive-letter (or any segment) cased differently from `process.cwd()`. A
+    // case-sensitive comparison called that an unexpected target and made the
+    // repair unlink and recreate a junction that was already correct.
+    const root = repositoryFixture();
+    const canonical = join(root, '.agents', 'skills');
+    mkdirSync(join(root, '.claude'), { recursive: true });
+    symlinkSync(canonical.replace('.agents', '.AGENTS'), join(root, '.claude/skills'), 'dir');
+
+    expect(checkAgentCompatibility(root, 'win32').alias.status).toBe('valid');
+    expect(repairClaudeSkillsAlias(root, 'win32').status).toBe('valid');
   });
 
   test('re-points a symlink aimed somewhere else', () => {
@@ -1186,8 +1402,9 @@ describe('compatibility report grouping', () => {
       'codex hook command must be exactly: node x',
       'CLAUDE.md must contain exactly `@AGENTS.md` followed by one newline.',
       'MCP tavily present in opencode only: declare it in .mcp.json or remove it from opencode.jsonc',
+      'eslint.config.js does not wire KATA_IMPORT_ALIASES from eslint.config.base.js: the rule ships but enforces nothing. Add it to the import and to the antfu(...) call.',
     ]);
-    expect(groups.map(g => [g.group, g.errors.length])).toEqual([['instructions', 1], ['alias', 1], ['wrappers', 1], ['hooks', 1], ['mcp', 2]]);
+    expect(groups.map(g => [g.group, g.errors.length])).toEqual([['instructions', 1], ['alias', 1], ['wrappers', 1], ['hooks', 1], ['mcp', 2], ['lint', 1]]);
     expect(groups.map(g => g.label)).toEqual(COMPATIBILITY_GROUP_ORDER.map(g => COMPATIBILITY_GROUP_LABEL[g]));
     expect(groupCompatibilityErrors([])).toEqual([]);
   });

@@ -4,7 +4,7 @@
 >
 > **Home**: `.agents/skills/agentic-qa-core/references/skill-composition-strategy.md` — meta-doctrine consumed by all T1 skills, sibling to `briefing-template.md`, `dispatch-patterns.md`, `orchestration-doctrine.md`.
 >
-> **Status**: v1.1 — `bun run setup` now uses `gentle-ai install --preset minimal` (engram only). SDD-* skills are no longer auto-installed; the anti-leak contract still applies when users manually opt in. `judgment-day` is now vendored into the repo as a T2 skill.
+> **Status**: v1.2 — `bun run setup` now uses `gentle-ai install --preset minimal` (engram only). SDD-* skills are no longer auto-installed; the anti-leak contract still applies when users manually opt in. `judgment-day` is now vendored into the repo as a T2 skill. The purpose axis `metadata.kind` (§2b) is declared per skill and gated by `skills:check`.
 >
 > **Companion files**:
 > - `AGENTS.md` (project memory — top-level rules and skill mentions)
@@ -24,7 +24,7 @@ The repo ships with **11 project-owned workflow skills** + **1 vendored skill** 
 - **Engram only** (user-level via gentle-ai minimal preset): persistent memory binary + MCP adapter. No SDD-* skills, no foundation skills. Users who want the full SDD suite for `/framework-development` work install it manually: `gentle-ai install --components engram,sdd --agent <a>`.
 - **Vendored T2 skill**: `judgment-day` (Apache-2.0, attribution preserved in frontmatter) lives committed under `.agents/skills/judgment-day/`. No upstream dependency.
 - **3 community skills (project-level)**: `playwright-cli` (Microsoft), `playwright-best-practices` (currents-dev), `resend-cli` (resend).
-- **6 community skills (user-level / global)**: `skill-creator`, `find-skills`, `github-actions-docs`, `brainstorming`, `html-ppt`, `bun`.
+- **5 community skills (user-level / global)**: `skill-creator`, `find-skills`, `github-actions-docs`, `html-ppt`, `bun`.
 
 Current state (AGENTS.md): T1 skills named explicitly in §5; T2/T3/T4 mentioned by category. Auto-discovery: zero mechanism. Cross-skill composition: only project-owned sister calls (`sprint-testing` → `test-documentation`, `git-flow-master`).
 
@@ -43,11 +43,11 @@ Four tiers. Different discovery and load rules per tier.
 
 | Tier | Location | Examples | Discovery | Load behavior |
 |--|--|--|--|--|
-| **T1 — Project-owned** | `.agents/skills/` (committed) | `agentic-qa-core`, `agentic-qa-onboard`, `acli`, `xray-cli`, `git-flow-master`, `project-discovery`, `shift-left-testing`, `sprint-testing`, `test-documentation`, `test-automation`, `regression-testing`, `framework-development`, `orca-orchestration` | Named in AGENTS.md "Skills" registry | Silent (load on trigger, no ask) |
+| **T1 — Project-owned** | `.agents/skills/` (committed) | `agentic-qa-core`, `agentic-qa-onboard`, `acli`, `xray-cli`, `git-flow-master`, `project-discovery`, `shift-left-testing`, `sprint-testing`, `test-documentation`, `test-automation`, `regression-testing`, `framework-development`, `orca-orchestration`, `session-handoff` | Named in AGENTS.md "Skills" registry | Silent (load on trigger, no ask) |
 | **T2 — Vendored** | `.agents/skills/` (committed, upstream attribution in frontmatter) | `judgment-day` (gentle-ai, Apache-2.0) | Named in AGENTS.md | Silent on explicit user trigger (`/judgment-day`, `juzgar`) or when cited by host orchestrator (`test-automation` Phase 3, `git-flow-master` pre-PR) |
 | **T2-opt — Optional gentle-ai SDD bundle (user-installed)** | `~/.claude/skills/sdd-*` (only if user runs `gentle-ai install --components engram,sdd`) | `sdd-init`, `sdd-explore`, `sdd-propose`, `sdd-spec`, `sdd-design`, `sdd-tasks`, `sdd-apply`, `sdd-verify`, `sdd-archive`, `sdd-onboard` | NOT installed by `bun run setup` (minimal preset = engram only). Discovered at runtime from system-reminder skill list when present | Silent **inside** `framework-development` only — see §4 anti-leak contract. NEVER silent inside `shift-left-testing`, `sprint-testing`, `test-documentation`, `test-automation`, `regression-testing` |
 | **T3 — Community project-level** | `.agents/skills/` (installed by `install.ts` PROJECT_LEVEL_SKILLS, not committed) | `playwright-cli`, `playwright-best-practices`, `resend-cli` | Named **by category** in AGENTS.md (not by skill name). Discovered at runtime from system-reminder skill list | Silent if matched by category (e.g. user writes a Playwright test → load `playwright-best-practices`) |
-| **T4 — Community user-level** | `~/.claude/skills/` (installed by `install.ts` USER_LEVEL_SKILLS) | `skill-creator`, `find-skills`, `github-actions-docs`, `brainstorming`, `html-ppt`, `bun` | **NOT named in AGENTS.md**. Discovered at runtime from system-reminder skill list. Auto-match by task domain | **ASK user before load** (may not be installed, or user may not want it for this task) |
+| **T4 — Community user-level** | `~/.claude/skills/` (installed by `install.ts` USER_LEVEL_SKILLS) | `skill-creator`, `find-skills`, `github-actions-docs`, `html-ppt`, `bun` | **NOT named in AGENTS.md**. Discovered at runtime from system-reminder skill list. Auto-match by task domain | **ASK user before load** (may not be installed, or user may not want it for this task) |
 
 ### Tier decision rule
 
@@ -68,9 +68,38 @@ T3 list (`PROJECT_LEVEL_SKILLS` in `cli/install.ts`):
 `playwright-cli` (microsoft), `playwright-best-practices` (currents-dev), `resend-cli` (resend).
 
 T4 list (`USER_LEVEL_SKILLS` in `cli/install.ts`):
-`skill-creator`, `find-skills`, `github-actions-docs`, `brainstorming`, `html-ppt`, `bun`.
+`skill-creator`, `find-skills`, `github-actions-docs`, `html-ppt`, `bun`.
 
-**Orchestration vendor stubs are T4 but NOT in `USER_LEVEL_SKILLS`**: `orca-cli` and `orchestration` are guides bundled with the orchestration binary, which installs them user-level itself. They are optional and NEVER required — T1 `orca-orchestration` requests command grammar from the binary on demand, so the availability gate is the binary + a reachable runtime and never an installed stub. Do not add them to `install.ts`; per-machine setup lives in `orca-orchestration/references/orca-machine-setup.md`.
+**Orchestration vendor stubs are T4 but NOT in `USER_LEVEL_SKILLS`**: `orca-cli` and `orchestration` are guides bundled with the orchestration binary, which installs them user-level itself. They are optional and NEVER required — T1 `orca-orchestration` LOADS the stubs named in `orchestration.orchestrator_skills` (`.agents/project.yaml`) alongside itself — about 2k tokens for the pair — and requests only DEEP topics from the binary on demand, so the availability gate is the binary + a reachable runtime and never an installed stub. Do not add them to `install.ts`; per-machine setup lives in `orca-orchestration/references/orca-machine-setup.md`.
+
+---
+
+## 2b. Purpose Axis (`metadata.kind`)
+
+A skill carries three independent labels. Each answers one question, is declared in one place, and has one gate. Collapsing any two of them is the wrong turn: `acli` is T1 **and** utility, `judgment-day` is T2 **and** workflow, `playwright-cli` is T3 **and** utility.
+
+| Axis | Question it answers | Where declared | Gate |
+|---|---|---|---|
+| **Ownership** (T1 / T2 / T3 / T4, §2) | Who owns it, where it is installed, whether to ask before loading | `.agents/skills/` dir walk + `PROJECT_LEVEL_SKILLS` / `USER_LEVEL_SKILLS` in `cli/install.ts` + `metadata.vendored_from` | `scripts/lint-skills.ts` checks 2, 3, 7, 9 |
+| **Purpose** (`metadata.kind`) | What the skill IS: knowledge, a procedure, a tool index, or a doctrine parent | `SKILL.md` frontmatter, nested under `metadata:` | `scripts/lint-skills.ts` checks 15-17 (§9 rules 11-13) |
+| **Domain** (`complementary_categories`, §5) | Which community skills a T1 skill may borrow, by category not name | `SKILL.md` frontmatter, top level | `scripts/lint-skills.ts` check 4 (`KNOWN_CATEGORIES`) |
+
+### The four kinds
+
+| Kind | Classifying test | Slug suffix |
+|---|---|---|
+| **context** | Loading it changes what the agent KNOWS, not what it DOES next. No stages, drives no tool. Cites `.context/` facts, never restates them | `-context` (mandatory) |
+| **workflow** | A procedure with stages the agent runs end-to-end: an IQL stage (shift-left, sprint, documentation, automation, regression) OR an operating flow around one (git, fleet, handoff, onboarding, review) | none |
+| **utility** | Owns ONE tool's grammar (a binary in `allowed-tools`, or an AGENTS.md §6.5 CLI row) and has no stages of its own | `-cli` / `-tool` / `-app` (mandatory for new skills) |
+| **core** | Parent of other skills: they cite its `references/`; it has no write path of its own | none |
+
+### Rules
+
+- **`kind` lives under `metadata`, never top-level.** The Agent Skills frontmatter spec allows exactly `allowed-tools, compatibility, description, license, metadata, name` at the top level and `metadata` is its extension point. Declare `metadata:` + `  kind: <value>` (one kind per skill; `judgment-day` adds it inside its existing `metadata` block).
+- **The suffix rule binds both ways.** A slug ending `-context` must declare `context` and a `context` skill must end `-context`; a slug ending `-cli` / `-tool` / `-app` must declare `utility` and a `utility` skill must carry one of them. `workflow` and `core` have no suffix rule.
+- **Grandfathering is by name, visibly.** `KIND_SUFFIX_EXEMPT` in `scripts/lint-skills.ts` lists the slugs that predate the rule: `acli` (utility without a suffix), `project-context` and `sync-ai-context` (workflows whose slug ends `-context`). A new skill picks a slug that matches its kind instead of joining that set.
+- **Which skill is which: read `.agents/skills/REGISTRY.md`** (generated by `bun run skills:registry`; the Source line prints `kind:`). This document never carries a per-skill list, so there is nothing here to fall behind.
+- **T3 / T4 bodies are not linted for kind.** A community skill committed in the store keeps its `cli/install.ts` tier and the project does not author its frontmatter (check 7's own rule).
 
 ---
 
@@ -215,13 +244,13 @@ Project-owned and project-dependency skills are named explicitly. Community skil
 | `testing-component` | `playwright-best-practices` (component testing section) | `test-automation` (rare — when the project has component tests) |
 | `accessibility` | `playwright-best-practices` (axe-core section) | `test-automation` (a11y suites), `sprint-testing` (manual a11y checks) |
 | `vcs` | (no T3/T4 — `git-flow-master` is T1 and covers `gh` CLI usage natively) | `git-flow-master`, `regression-testing` (CI run inspection) |
-| `runtime` | `bun` | `framework-development`, `test-automation` (script / bundler tweaks) |
+| `automation-cli` | `bun` | `framework-development`, `test-automation` (script / bundler tweaks) |
 | `issue-tracker` | (acli is T1) | `sprint-testing`, `test-documentation` |
 | `tms` | (xray-cli is T1; acli covers Modality jira-native) | `test-documentation`, `sprint-testing` |
-| `meta-skill` | `skill-creator`, `find-skills` | only on user request (find-skills auto-invoked per §8.2 as last-resort); also `framework-development` (skill evolution) |
+| `meta-skill` | `skill-creator`, `find-skills` | only on user request (find-skills auto-invoked per §8.2 as last-resort); also `framework-development` (skill evolution) and `session-handoff` (session continuity) |
 | `ci-cd` | `github-actions-docs` | `regression-testing`, `framework-development` (CI workflow evolution) |
 | `framework-evolution` | (no T3/T4 — concept-only category) | `framework-development` (self-tag) |
-| `orchestration` | (the binary's own `orca-cli` / `orchestration` guides — optional T4, served by the binary, never required) | `orca-orchestration` (self-tag); cited as the transport by `sprint-testing`, `test-automation`, `shift-left-testing`, `framework-development`, `regression-testing` |
+| `orchestration` | (the binary's own guides, named in `orchestration.orchestrator_skills` — optional to HAVE, loaded alongside `/orca-orchestration` when present, and never a gate) | `orca-orchestration` (self-tag); `session-handoff` (successor launch rides the same terminal layer, but a handoff is ownership transfer, NOT a Run/Task/Dispatch); cited as the transport by `sprint-testing`, `test-automation`, `shift-left-testing`, `framework-development`, `regression-testing` |
 
 Categories deliberately omitted from the QA scope (present in the dev sister doc, not relevant here): `frontend-ui`, `frontend-framework`, `forms-validation`, `backend-db`, `language`, `seo`, `deploy`, `creativity`, `doc-generation`, `prose-polishing`, `presentation`. QA does not author UI, deploy, or write production code; if a category appears legitimately needed in the future, add it via §5.1 (additive change).
 
@@ -328,6 +357,9 @@ The validation script `scripts/lint-skills.ts` (implemented at `scripts/lint-ski
 8. **STALE-PATH audit** (ERROR): path-like literals in inline backtick spans of T1 SKILL.md bodies (outside fenced code blocks) must resolve to existing files relative to repo root. Prefix-anchored: only paths starting with `.agents/skills/`, `scripts/`, `cli/`, `.agents/`, `tests/`, or `api/` are checked.
 9. **EMPTY-CATS discrimination** (INFO sub-case of rule 1): `complementary_categories: []` (key present but empty list) emits INFO instead of ERROR; field entirely absent still emits ERROR. Suggests declaring at least one category from the §5.1 vocabulary.
 10. **DUPLICATE-TIER audit** (ERROR): a skill slug appearing in more than one of `PROJECT_LEVEL_SKILLS`, `USER_LEVEL_SKILLS` in `cli/install.ts` is an install conflict. Violation message names the slug and all conflicting tier arrays.
+11. **KIND-MISSING** (ERROR): a T1 or vendored T2 `SKILL.md` without `metadata.kind` (§2b). Committed community skills are exempt.
+12. **KIND-VOCAB** (ERROR): `metadata.kind` outside `context` / `workflow` / `utility` / `core` (`KNOWN_KINDS`).
+13. **KIND-SUFFIX** (ERROR): slug suffix and declared kind disagree in either direction (`-context` ⇔ `context`; `-cli` / `-tool` / `-app` ⇔ `utility`); slugs in `KIND_SUFFIX_EXEMPT` are skipped by name.
 
 Output format: human-readable summary (counts of ERROR / WARN / INFO). Exit code: non-zero on ERROR, zero on WARN/INFO only.
 

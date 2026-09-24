@@ -72,7 +72,8 @@
       "Skill(bug-screenshot-annotation)",
       "Skill(framework-development)",
       "Skill(judgment-day)",
-      "Skill(pr-review-lead)"
+      "Skill(pr-review-lead)",
+      "Skill(session-handoff)"
     ],
     "deny": [
       "Bash(rm -rf *)",

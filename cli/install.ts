@@ -155,6 +155,22 @@ interface InstallState {
    */
   steps: Record<string, string>
   skills: Record<string, InstallStatus>
+  /**
+   * The upstream ref each PROJECT-level community skill was installed from,
+   * keyed by slug. The skills CLI records a CONTENT hash in
+   * `skills-lock.json`, which pins what is on disk but cannot be compared
+   * against a remote without cloning it — so `bun run setup:doctor` would have
+   * no way to tell a scaffold-day skill from a current one. These three skills
+   * are gitignored and sit outside the updater's surface, so nothing else
+   * would ever notice.
+   *
+   * Recorded on a successful install, and only reported afterwards: doctor
+   * never offers to reinstall, because an overwrite of a gitignored skill has
+   * no backup to restore from and would destroy a local patch unrecoverably.
+   * Absent for a repo installed before this existed — that reads as "not
+   * tracked", never as "current".
+   */
+  communitySkillRefs?: Record<string, CommunitySkillRef>
   mcps: Record<string, McpStatus>
   externalClis: Record<string, CliStatus>
   pendingEnvVars: string[]
@@ -265,6 +281,27 @@ const EXTERNAL_CLIS: ReadonlyArray<{ name: string, install?: string, docs: strin
     purpose: 'email development + transactional sending',
   },
   {
+    // The STANDALONE binary. The repo also pins `varlock` as a devDependency,
+    // which is what `bun run vars:schema:check`, the pre-push warning and
+    // `setup:doctor` run through `bunx`; that copy is NOT on the PATH a
+    // harness gives an MCP server (measured: `bunx varlock` resolves from the
+    // project, a bare `varlock` does not). The binary is optional until the
+    // MCP wrapping phase makes it the server command on every host.
+    //
+    // Install paths, per varlock.dev and the 1.20.0 release assets:
+    //   macOS        brew install dmno-dev/tap/varlock
+    //   Linux/macOS  curl -sSfL https://varlock.dev/install.sh | sh -s
+    //   Windows      no PowerShell installer is published; Git Bash runs the
+    //                same install.sh (msys/mingw are recognised, installs
+    //                varlock.exe), and `npm i -g varlock` / `bun add -g varlock`
+    //                put a shim on PATH for PowerShell and cmd.
+    //                (documented, not measured on Windows)
+    name: 'varlock',
+    install: 'brew install dmno-dev/tap/varlock   # macOS. Linux: curl -sSfL https://varlock.dev/install.sh | sh -s · Windows: npm i -g varlock',
+    docs: 'https://varlock.dev/getting-started/installation',
+    purpose: 'env schema validation + secret injection (optional standalone; the devDependency covers the gates)',
+  },
+  {
     // Desktop app (Orca ADE) that also ships a scriptable `orca` CLI. Fully
     // optional: enables `/orca-orchestration` multi-session coordination.
     // The boilerplate works identically without it — one-shot subagents
@@ -276,9 +313,32 @@ const EXTERNAL_CLIS: ReadonlyArray<{ name: string, install?: string, docs: strin
   },
 ];
 
-interface CommunitySkill {
+export interface CommunitySkill {
   package: string // git URL or shorthand 'owner/repo'
   skill?: string // omit or '*' to install all skills from the package
+}
+
+export interface CommunitySkillRef {
+  /** The package the skill came from, as declared in PROJECT_LEVEL_SKILLS. */
+  package: string
+  /** Remote HEAD commit at install time, or null when the remote was unreachable. */
+  ref: string | null
+  recordedAt: string
+}
+
+/**
+ * The remote's current HEAD commit, via a single `git ls-remote` — no clone.
+ * Null on any failure (offline, private repo, not a git remote): an unknown
+ * baseline must read as unknown, never as up to date.
+ */
+export function remoteHeadRef(
+  packageUrl: string,
+  run: (binary: string, args: string[]) => { ok: boolean, stdout: string } = tryRun,
+): string | null {
+  const result = run('git', ['ls-remote', packageUrl, 'HEAD']);
+  if (!result.ok) { return null; }
+  const sha = result.stdout.trim().split(/\s+/)[0];
+  return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
 }
 
 export function buildCommunitySkillArgs(
@@ -308,7 +368,7 @@ export const PROJECT_SKILL_DESTINATION = '.agents/skills';
  * agentic-qa-onboard, acli, xray-cli, git-flow-master) live committed under
  * .agents/skills/ and are NOT listed here.
  */
-const PROJECT_LEVEL_SKILLS: ReadonlyArray<CommunitySkill> = [
+export const PROJECT_LEVEL_SKILLS: ReadonlyArray<CommunitySkill> = [
   // playwright-cli (Microsoft): browser automation CLI used by /sprint-testing
   // and /test-automation as the primary [AUTOMATION_TOOL].
   { package: 'https://github.com/microsoft/playwright-cli', skill: 'playwright-cli' },
@@ -333,7 +393,6 @@ const USER_LEVEL_SKILLS: ReadonlyArray<CommunitySkill> = [
   { package: 'https://github.com/anthropics/skills', skill: 'skill-creator' },
   { package: 'https://github.com/vercel-labs/skills', skill: 'find-skills' },
   { package: 'https://github.com/xixu-me/skills', skill: 'github-actions-docs' },
-  { package: 'https://github.com/obra/superpowers', skill: 'brainstorming' },
   { package: 'https://github.com/lewislulu/html-ppt-skill', skill: 'html-ppt' },
   { package: 'https://bun.sh/docs', skill: 'bun' },
   // Cross-project decision-deck CLI (`mkd`, Make Decision): the AI writes a spec
@@ -343,9 +402,9 @@ const USER_LEVEL_SKILLS: ReadonlyArray<CommunitySkill> = [
 ];
 
 // Matches Claude Code ${VAR} and ${VAR:-default} placeholders in .mcp.json.
-const MCP_VAR_PATTERN = /\$\{([A-Z][A-Z0-9_]*)(?::-[^}]*)?\}/g;
+export const MCP_VAR_PATTERN = /\$\{([A-Z][A-Z0-9_]*)(?::-[^}]*)?\}/g;
 // Matches OpenCode {env:VAR} placeholders in opencode.jsonc.
-const OPENCODE_VAR_PATTERN = /\{env:([A-Z][A-Z0-9_]*)\}/g;
+export const OPENCODE_VAR_PATTERN = /\{env:([A-Z][A-Z0-9_]*)\}/g;
 const SECRET_NAME_HINTS = ['TOKEN', 'KEY', 'SECRET', 'PASSWORD'];
 
 // Map MCP server → env vars its secrets depend on. Servers with empty arrays
@@ -354,11 +413,16 @@ const SECRET_NAME_HINTS = ['TOKEN', 'KEY', 'SECRET', 'PASSWORD'];
 // `dbhub` is intentionally NOT managed by the installer or doctor — the user
 // must edit `dbhub.toml` manually based on the target project's database
 // (sqlserver/postgres/mysql/sqlite/mariadb). Marked as `placeholder` always.
-const MCP_SERVER_SECRETS: Record<string, readonly string[]> = {
+export const MCP_SERVER_SECRETS: Record<string, readonly string[]> = {
   context7: [],
   tavily: ['TAVILY_API_KEY'],
   playwright: [],
-  dbhub: ['DBHUB_HOST', 'DBHUB_DATABASE', 'DBHUB_USER', 'DBHUB_PASSWORD'],
+  // All six that `dbhub.toml` interpolates. PORT and TYPE were missing until
+  // 2026-09-20: the configs referenced them, this hand-written map did not, so
+  // the installer never prompted for them and a fresh project hit a dbhub that
+  // would not connect. Found by the generator's scan-vs-declared cross-check,
+  // which is the whole reason that cross-check exists.
+  dbhub: ['DBHUB_TYPE', 'DBHUB_HOST', 'DBHUB_PORT', 'DBHUB_DATABASE', 'DBHUB_USER', 'DBHUB_PASSWORD'],
   openapi: ['API_BASE_URL', 'OPENAPI_SPEC_PATH'],
   postman: ['POSTMAN_API_KEY'],
 };
@@ -951,6 +1015,15 @@ async function installCommunitySkills(
     if (result.ok) {
       s.stop(`Installed: ${slug}`);
       state.skills[stateKey] = 'installed';
+      // Only PROJECT level: these three are gitignored, re-fetched on every
+      // install and invisible to the updater, so they are the ones that can
+      // silently run their scaffold-day version forever.
+      if (level === 'project') {
+        state.communitySkillRefs = {
+          ...state.communitySkillRefs,
+          [slug]: { package: item.package, ref: remoteHeadRef(item.package), recordedAt: new Date().toISOString() },
+        };
+      }
     }
     else {
       s.stop(`Failed: ${slug} — ${(result.stderr || result.stdout).trim().slice(0, 120) || 'unknown error'}`);
@@ -1029,12 +1102,35 @@ export function parseEnvFile(content: string): Record<string, string> {
     const eq = line.indexOf('=');
     if (eq <= 0) { continue; }
     const key = line.slice(0, eq).trim();
-    let value = line.slice(eq + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"'))
-      || (value.startsWith('\'') && value.endsWith('\''))
-    ) {
+    // The comment scan runs on the RAW slice, BEFORE trimming. `.env.example`
+    // ships `DBHUB_TYPE=          # sqlserver | postgres`, and trimming first
+    // would delete the very whitespace that marks the `#` as a comment, leaving
+    // the comment itself as the value.
+    const rawValue = line.slice(eq + 1);
+    let value = rawValue.trim();
+    const quoted
+      = (value.startsWith('"') && value.endsWith('"') && value.length > 1)
+        || (value.startsWith('\'') && value.endsWith('\'') && value.length > 1);
+    if (quoted) {
       value = value.slice(1, -1);
+    }
+    else {
+      // Strip an inline comment from an UNQUOTED value. `.env.example` ships
+      // lines like `DBHUB_TYPE=          # sqlserver | postgres | mysql`, and
+      // without this the installer read the whole trailing string as the
+      // credential: a value that is wrong rather than missing, which fails at
+      // connect time looking like a broken database instead of a bad .env.
+      //
+      // Two things stay part of the value, and both are real:
+      //   - a `#` inside QUOTES, which is why this is the else branch
+      //   - a `#` with NO whitespace before it, because `PASS=pass#word` is a
+      //     password containing a hash, not a comment
+      // So the marker is whitespace-then-hash. Same rule as `stripInlineComments`
+      // in cli/lib/harness-env.ts, which is tested; kept as four characters of
+      // regex here rather than an import, because that module imports FROM this
+      // one and the dependency would be circular.
+      const comment = rawValue.search(/\s#/);
+      if (comment >= 0) { value = rawValue.slice(0, comment).trim(); }
     }
     out[key] = value;
   }
@@ -3042,9 +3138,55 @@ async function main(): Promise<void> {
   await runInitialConfigurationPhase(state);
   await writeInstallState(state);
 
+  // Per-harness credential surfaces. LAST, because it reads the `.env` every
+  // step above may have written to.
+  //
+  // Why the installer has to do this at all: a harness reads its config and
+  // spawns its MCP servers BEFORE any hook runs, so the only thing that reaches
+  // a server on a launch with no command line (a desktop harness, a natively
+  // launched supervised worker) is a file the harness reads at startup. And
+  // `opencode.jsonc` now points at `.auth/opencode/<VAR>` value files: measured
+  // on OpenCode 1.18.30, a MISSING `{file:}` target invalidates the WHOLE config
+  // and not just that one server, so those files have to exist before anyone
+  // runs `opencode`. This call is what guarantees they do on a fresh clone.
+  //
+  // DYNAMIC import on purpose: `cli/lib/harness-env.ts` imports the placeholder
+  // patterns from THIS file, and a static import here would close that cycle.
+  // Same pattern `cli/doctor.ts` already uses to reach this module.
+  await generateHarnessEnv();
+
   // Closing summary
   tui.section('Installation summary');
   printClosingSummary(state);
+}
+
+/**
+ * Generate the per-harness credential surfaces. Never fatal: a failure here
+ * leaves the repo exactly as it was and the installer still finishes, because
+ * `bun run setup:doctor` reports the same drift and `bun run harness:env` fixes
+ * it. Prints variable NAMES only, never a value.
+ */
+async function generateHarnessEnv(): Promise<void> {
+  tui.section('Step 15: Harness credential surfaces');
+  try {
+    const { generate } = await import('./lib/harness-env.ts');
+    const result = generate();
+    log.success(
+      `${result.changed ? 'Wrote' : 'Already in sync:'} ${result.emitted.length} of `
+      + `${result.declared.length} declared variables `
+      + `(${result.excluded.length} not referenced by any MCP config, so not copied).`,
+    );
+    if (result.emitted.length > 0) {
+      process.stdout.write(`  emitted: ${result.emitted.join(', ')}\n`);
+    }
+    if (result.claude.skipped.length > 0) {
+      process.stdout.write(`  empty in .env, left out of the Claude env block: ${result.claude.skipped.join(', ')}\n`);
+    }
+  }
+  catch (err) {
+    log.warn(`Could not generate the harness credential surfaces: ${(err as Error).message}`);
+    process.stdout.write('  Run `bun run harness:env` once .env is in place; `bun run setup:doctor` reports the same gap.\n');
+  }
 }
 
 if (import.meta.main) {
