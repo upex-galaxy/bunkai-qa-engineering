@@ -101,7 +101,8 @@ export class LoginPage extends UiBase {
    *
    * IMPORTANT: Call goto() before this ATC. Use an EXISTING email with a
    * WRONG password so the email-first flow reveals the password step.
-   * Submits and verifies the user stays on /login (no redirect).
+   * Submits and verifies the inline error alert is shown and the user stays
+   * on /login (no redirect).
    *
    * @param email - Existing account email
    * @param password - Wrong password
@@ -111,7 +112,11 @@ export class LoginPage extends UiBase {
     await this.fillEmailFirstForm(email, password);
     await this.page.getByTestId('login-signin').click();
 
-    // Fixed assertion - failed sign-in keeps the user on the login page
+    // Fixed assertions - inline error alert (data-testid="login-error") is shown
+    // and the failed sign-in keeps the user on the login page
+    await expect(
+      this.page.getByRole('alert').filter({ hasText: 'That email or password is incorrect.' }),
+    ).toBeVisible();
     await expect(this.page).toHaveURL(/\/login/);
   }
 }

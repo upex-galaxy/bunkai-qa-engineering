@@ -29,3 +29,11 @@ test.describe('BK auth gateway', { tag: ['@critical'] }, () => {
     await expect(page).not.toHaveURL(/\/login/);
   });
 });
+
+test.describe('BK login rejection', () => {
+  test('BK-314: should show an error and stay on /login when the password is wrong', async ({ ui }) => {
+    await ui.login.goto();
+
+    await ui.login.loginWithInvalidCredentials(config.testUser.email, 'wrong-Password-123');
+  });
+});

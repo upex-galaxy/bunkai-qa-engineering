@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-09-23T23:02:21.442Z",
+  "generatedAt": "2026-09-24T07:50:26.043Z",
   "components": {
     "api": [
       {
@@ -33,12 +33,12 @@
           {
             "id": "BK-311",
             "method": "signIn",
-            "line": 78
+            "line": 103
           },
           {
             "id": "BK-312",
             "method": "signInWithInvalidCredentials",
-            "line": 114
+            "line": 145
           }
         ]
       }
@@ -57,7 +57,7 @@
           {
             "id": "BK-314",
             "method": "loginWithInvalidCredentials",
-            "line": 109
+            "line": 110
           }
         ]
       }
