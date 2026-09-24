@@ -86,7 +86,7 @@ export class LoginPage extends UiBase {
    * @param email - Account email
    * @param password - Account password
    */
-  @atc('BK-101')
+  @atc('BK-313')
   async loginAs(email: string, password: string): Promise<void> {
     await this.fillEmailFirstForm(email, password);
     await this.page.getByTestId('login-signin').click();
@@ -106,7 +106,7 @@ export class LoginPage extends UiBase {
    * @param email - Existing account email
    * @param password - Wrong password
    */
-  @atc('BK-102')
+  @atc('BK-314')
   async loginWithInvalidCredentials(email: string, password: string): Promise<void> {
     await this.fillEmailFirstForm(email, password);
     await this.page.getByTestId('login-signin').click();

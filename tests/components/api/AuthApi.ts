@@ -75,7 +75,7 @@ export class AuthApi extends ApiBase {
    * @param password - Account password
    * @returns Tuple with response, parsed body, and sent payload
    */
-  @atc('BK-101')
+  @atc('BK-311')
   async signIn(
     email: string,
     password: string,
@@ -111,7 +111,7 @@ export class AuthApi extends ApiBase {
    * @param password - Wrong password
    * @returns Tuple with error response, parsed body, and sent payload
    */
-  @atc('BK-102')
+  @atc('BK-312')
   async signInWithInvalidCredentials(
     email: string,
     password: string,
