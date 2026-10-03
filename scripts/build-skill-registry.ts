@@ -59,6 +59,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { join, relative } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 
+import { relativePosix } from './lib/posix-path';
+
 // -----------------------------------------------------------------------------
 // Config
 // -----------------------------------------------------------------------------
@@ -81,6 +83,8 @@ interface SkillFrontmatter {
   name?: string
   description?: string
   phase?: string
+  /** `metadata.kind` is the purpose axis (context / workflow / utility / core); gated by `skills:check`. */
+  metadata?: { kind?: string }
   compact_rules?: unknown
 }
 
@@ -367,7 +371,9 @@ function processSkill(slug: string): SkillEntry {
 
   return {
     slug,
-    path: relative(REPO_ROOT, skillPath),
+    // `/`-separated: this lands in the tracked REGISTRY.md, which
+    // `skills:registry:check` compares as full text.
+    path: relativePosix(REPO_ROOT, skillPath),
     frontmatter,
     purpose,
     rules,
@@ -418,7 +424,7 @@ function renderEntry(entry: SkillEntry): string {
   const strategyLabel = entry.strategy === 'frontmatter'
     ? 'source: frontmatter `compact_rules` (verbatim)'
     : `extraction strategy: ${entry.strategy}`;
-  lines.push(`> Source: \`${entry.path}\` · phase: \`${entry.frontmatter.phase ?? 'unknown'}\` · ${strategyLabel}`);
+  lines.push(`> Source: \`${entry.path}\` · phase: \`${entry.frontmatter.phase ?? 'unknown'}\` · kind: \`${entry.frontmatter.metadata?.kind ?? 'unknown'}\` · ${strategyLabel}`);
   return lines.join('\n');
 }
 

@@ -1,9 +1,9 @@
 # Coordinator Playbook — The Conductor's Full Cycle
 
 > Loaded by: `orca-orchestration` in CONDUCTOR mode.
-> Grammar source: ask the binary (`orca skills get orchestration`, and `orca skills get orca-cli`
-> when you create terminals or worktrees). This file carries the ORDER, the repo-specific
-> decisions and the traps — not the vendor reference.
+> Grammar source: LOAD the stubs in `orchestration.orchestrator_skills` (`.agents/project.yaml`)
+> alongside this skill, then ask the binary only for a DEEP topic a stub points at. This file
+> carries the ORDER, the repo-specific decisions and the traps — not the vendor reference.
 > Every command below was checked against the live schema (`orca agent-context --json`,
 > app version 1.4.190, 2026-09-17). Re-check with `orca agent-context --json` before trusting a
 > flag on a newer version.
@@ -38,11 +38,20 @@ exactly one supervised launch, and it is the native one.
 orca orchestration run-create --objective "<what is being coordinated>" --json </dev/null
 #     save run_id + the coordinator handle into .session/orchestration/<slug>/run.md
 
-# 2 · one Task per worker, BEFORE launching anything
-orca orchestration task-create --spec "<KEY> <short> — one line of scope>" --json </dev/null
+# 2 · write the BRIEFS first, then one Task per worker, BEFORE launching anything.
+#     The spec is not a label. On the native path the runtime injects it as the worker's FIRST
+#     PROMPT, so the worker is already executing it before step 6's prompt exists (G58). It must
+#     therefore be self-sufficient: the scope, the brief's ABSOLUTE path, the continuation
+#     sentence, and anything that has to be right from the first action — the session-title
+#     token and the no-stopping clause included. Which is why the briefs are written first:
+#     the spec cites them by path.
+orca orchestration task-create --spec '/<workflow-skill> <KEY> fleet worker. Read <ABS>/.session/orchestration/<slug>/COMMON.md then <ABS>/.session/orchestration/<slug>/W-<label>.md and execute your brief. Run every stage without returning to the prompt until worker_done is sent; stage boundaries are not checkpoints. Channel: orca orchestration. No heartbeats.' --json </dev/null
 #     --task-title is accepted and DISCARDED (every task comes back with title null, G49):
 #     put the human-readable label in --spec and in roster.md
 #     --deps <json_array> exists but the element shape is undocumented: do not use it yet (G8)
+#     Measured cost of a thin spec: a worker ran seven of its nine steps on a one-line framing
+#     before the brief reached it, and three of its commits carried the harness-derived session
+#     label instead of the fleet one — unfixable once pushed (Critical Rule #6).
 
 # 3 · placement
 #   same checkout  → nothing to create
@@ -70,7 +79,12 @@ orca terminal read --terminal <handle> --screen --json </dev/null
 #     (a direnv export line, or the worker's own first probe). No credentials → fix the machine,
 #     do not dispatch work to it.
 
-# 6 · send the prompt — the ONE verb that reaches a running session (G46)
+# 6 · send the prompt — the ONE verb that reaches a running session (G46).
+#     On the NATIVE path the spec already delivered this text, so step 6 is a reinforcement
+#     and a no-op when the spec carried everything. On the fallback path it is the whole
+#     payload. Keep the two byte-identical: the path nobody exercises is the one that breaks.
+#     Anything longer than a couple of sentences goes in a FILE with a one-line pointer here:
+#     a long --text is truncated and still reports accepted:true with a byte count (G60).
 orca terminal send --terminal <handle> --enter \
   --text '/sprint-testing <KEY> fleet worker. Read <ABS>/.session/orchestration/<slug>/COMMON.md then <ABS>/.session/orchestration/<slug>/W-<label>.md and execute your brief. Run every stage without returning to the prompt until worker_done is sent; stage boundaries are not checkpoints. Channel: orca orchestration. No heartbeats.' \
   --json </dev/null
@@ -263,13 +277,20 @@ Answering a blocking question uses the message id from the pending batch
 (`orca orchestration reply --id <msg_id> --body "<text>" --json </dev/null`). A reply body has been
 observed arriving empty on the worker side; when a reply carries substance, duplicate it with
 `orca terminal send --terminal <handle> --text '<same text>' --enter --json </dev/null` and say in
-the body that you did.
+the body that you did — **only while the text still fits in a sentence or two.** Past that, the
+duplicate is prose through the lossy verb (hard rule 4): write the answer to a file in the Run scope
+and send the one-line pointer instead, then have the worker state the decision back in its own words
+before it acts on it.
 
-**Mail is not a nudge.** `orchestration send --to <terminal handle>` queues mail that a working agent
-never reads, because nothing tells it to run `check` — and it returns `ok: true` exactly like the
-call that works (gotcha G46). The only verb that reaches a RUNNING session is `terminal send`. Use
-mailbox addresses (`run:<id>`, `dispatch:<id>`) for what a worker will check between turns, and
-`terminal send` for anything it has to see NOW.
+**Mail is not a nudge — and a nudge is not the message.** `orchestration send --to <terminal handle>`
+queues mail that a working agent never reads, because nothing tells it to run `check`, and it returns
+`ok: true` exactly like the call that works (gotcha G46). The only verb that reaches a RUNNING session
+is `terminal send`. That does NOT make it the channel: the message itself goes to a mailbox address
+(`run:<id>`, `dispatch:<id>`), or into a file with a one-line pointer when it runs long, and
+`terminal send` carries at most one sentence telling the busy worker to go read it
+("check your mailbox: `<subject>`"). It truncates silently and keeps only the tail (hard rule 4,
+G60, G64), so a nudge that grows into the instruction is how the instruction gets lost. Full
+assignment: `references/channel-discipline.md`.
 
 ---
 

@@ -1,14 +1,28 @@
 /**
  * KATA Architecture - Test Environment Variables Validator
  *
+ * PROJECT-OWNED, and deliberately so. Validation splits unevenly: the
+ * credential half names `LOCAL_USER_EMAIL` / `STAGING_USER_PASSWORD` and the
+ * environment names themselves, which are this project's vocabulary, while the
+ * TMS half names providers and Atlassian keys, which are framework facts. Only
+ * the second half moved into the synced core (`validateTmsEnvironment`);
+ * pushing the first half up there would have put a project's own configuration
+ * into a file that gets overwritten.
+ *
  * Validates required runtime variables for the active test environment:
- * - Credentials: Only for current TEST_ENV (local or staging)
- * - TMS: Only if AUTO_SYNC=true (validates Xray or Jira based on TMS_PROVIDER)
+ * - Credentials: Only for current TEST_ENV (local or staging) — here
+ * - TMS: Only if AUTO_SYNC=true (Xray or Jira per TMS_PROVIDER) — synced core
  *
  * Usage:
  *   - Importable: call validateTestEnvironment(vars) with pre-extracted env vars
  *   - Standalone: bun run config/validateTestEnv.ts
  */
+
+// The Atlassian host is resolved, not read from the environment: it lives in
+// `.agents/project.yaml` -> `issue_tracker.atlassian_url`. Imported from the
+// synced core rather than through `@variables` so this module keeps working
+// standalone without pulling in the whole config graph.
+import { resolvedAtlassianUrlForValidation, validateTmsEnvironment } from './variables.core';
 
 /** Variables needed for validation (subset of all env vars) */
 export interface EnvVarsToValidate {
@@ -21,6 +35,11 @@ export interface EnvVarsToValidate {
   STAGING_USER_PASSWORD?: string
   XRAY_CLIENT_ID?: string
   XRAY_CLIENT_SECRET?: string
+  /**
+   * The Atlassian site HOST. Despite the name, callers must NOT source this
+   * from `process.env` — it is resolved from `.agents/project.yaml`. The field
+   * keeps the historical name so the shape stays stable for existing callers.
+   */
   ATLASSIAN_URL?: string
   ATLASSIAN_EMAIL?: string
   ATLASSIAN_API_TOKEN?: string
@@ -56,33 +75,8 @@ export function validateTestEnvironment(vars: EnvVarsToValidate): void {
     errors.push(`Unknown TEST_ENV: ${vars.TEST_ENV}. Valid values: local, staging`);
   }
 
-  // Validate TMS config only if AUTO_SYNC=true
-  if (vars.AUTO_SYNC === 'true') {
-    const provider = vars.TMS_PROVIDER || 'xray';
-
-    if (provider === 'xray') {
-      if (!vars.XRAY_CLIENT_ID) {
-        errors.push('XRAY_CLIENT_ID is required when AUTO_SYNC=true and TMS_PROVIDER=xray');
-      }
-      if (!vars.XRAY_CLIENT_SECRET) {
-        errors.push('XRAY_CLIENT_SECRET is required when AUTO_SYNC=true and TMS_PROVIDER=xray');
-      }
-    }
-    else if (provider === 'jira') {
-      if (!vars.ATLASSIAN_URL) {
-        errors.push('ATLASSIAN_URL is required when AUTO_SYNC=true and TMS_PROVIDER=jira');
-      }
-      if (!vars.ATLASSIAN_EMAIL) {
-        errors.push('ATLASSIAN_EMAIL is required when AUTO_SYNC=true and TMS_PROVIDER=jira');
-      }
-      if (!vars.ATLASSIAN_API_TOKEN) {
-        errors.push('ATLASSIAN_API_TOKEN is required when AUTO_SYNC=true and TMS_PROVIDER=jira');
-      }
-    }
-    else {
-      errors.push(`Unknown TMS_PROVIDER: ${provider}. Valid values: xray, jira`);
-    }
-  }
+  // TMS config (only when AUTO_SYNC=true) — synced half.
+  errors.push(...validateTmsEnvironment(vars));
 
   if (errors.length > 0) {
     throw new Error(`Test environment validation failed:\n${errors.map(e => `  - ${e}`).join('\n')}`);
@@ -102,7 +96,9 @@ if (import.meta.main) {
     STAGING_USER_PASSWORD: process.env.STAGING_USER_PASSWORD,
     XRAY_CLIENT_ID: process.env.XRAY_CLIENT_ID,
     XRAY_CLIENT_SECRET: process.env.XRAY_CLIENT_SECRET,
-    ATLASSIAN_URL: process.env.ATLASSIAN_URL,
+    // Resolved, not read: the host lives in .agents/project.yaml and only falls
+    // back to the env var for a repo that has not been set up yet.
+    ATLASSIAN_URL: resolvedAtlassianUrlForValidation(),
     ATLASSIAN_EMAIL: process.env.ATLASSIAN_EMAIL,
     ATLASSIAN_API_TOKEN: process.env.ATLASSIAN_API_TOKEN,
   };

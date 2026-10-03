@@ -27,8 +27,8 @@
  */
 
 import type { CompatibilityCheck, CompatibilityErrorGroup } from './lib/agent-compatibility.ts';
-import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -38,6 +38,7 @@ import {
   validateHookCompatibility,
   validateMcpParity,
 } from './lib/agent-compatibility-contracts.ts';
+
 import {
   checkAgentCompatibility,
   commandWrapperCounts,
@@ -45,13 +46,20 @@ import {
   groupCompatibilityErrors,
   validateCanonicalSources,
 } from './lib/agent-compatibility.ts';
+import { projectDelta, SCHEMA_FILE, SCHEMA_SOURCE } from './lib/agents-schema.ts';
 import {
   formatInstanceMismatchWarning,
   resolveAtlassianInstance,
 } from './lib/atlassian-instance.ts';
+import { CORE_SCHEMA_FILE, PROJECT_SCHEMA_FILE } from './lib/env-schema.ts';
 // Canonical variable manifest (source of truth — D1). Imports only `node:fs`,
 // so it is safe to load statically here without breaking the dependency-free
 // `--preflight` contract (no third-party deps pulled in).
+import {
+  check as checkHarnessEnv,
+  CLAUDE_LOCAL_SETTINGS,
+  OPENCODE_SECRET_DIR,
+} from './lib/harness-env.ts';
 import { playwrightBrowsersInstalled } from './lib/playwright-cache.ts';
 import { requiredNow, varsFor } from './lib/variables-manifest.ts';
 
@@ -192,6 +200,27 @@ export interface AgentCompatibilityDiagnostic {
   }
 }
 
+/**
+ * One T3 community skill: declared in `cli/install.ts` PROJECT_LEVEL_SKILLS,
+ * installed once at scaffold time, gitignored, and outside the updater's
+ * surface — so nothing else in the repo would ever notice it aging.
+ *
+ * `current` / `outdated` compare the remote HEAD recorded when the installer
+ * last installed it against the remote HEAD now. The other three states are
+ * honest ignorance, never a green tick:
+ *   `not-installed` — declared, absent on disk
+ *   `untracked`     — installed before the installer recorded a baseline
+ *   `unknown`       — the remote could not be reached (offline, private repo)
+ */
+export interface CommunitySkillRow {
+  slug: string
+  package: string
+  installed: boolean
+  recorded_ref: string | null
+  available_ref: string | null
+  status: 'current' | 'outdated' | 'not-installed' | 'untracked' | 'unknown'
+}
+
 interface DoctorReport {
   status: 'ok' | 'needs-action'
   repo_root: string
@@ -212,7 +241,73 @@ interface DoctorReport {
   deps_installed: boolean
   playwright_browsers: boolean
   direnv: DirenvState
+  /**
+   * REPORTING ONLY. An outdated row never becomes a pending action and never
+   * turns the overall status to `needs-action`: these skills are gitignored,
+   * so an overwrite has no backup to restore from and a locally patched skill
+   * would be destroyed unrecoverably. Showing the drift is worth doing;
+   * offering to fix it from here is not.
+   */
+  community_skills: CommunitySkillRow[]
+  /**
+   * Whether `.env` and the generated per-harness credential surfaces agree.
+   *
+   * This is the gate that stops a GENERATED file from rotting. The surfaces are
+   * the only thing that reaches an MCP server on a launch with no command line
+   * (a desktop harness, a natively-launched supervised worker), and they are
+   * derived from `.env`, so the day someone adds a variable they desynchronize
+   * in silence: the server still starts, still looks healthy, and dies at its
+   * first authenticated call.
+   *
+   * `findings` carries variable NAMES and a verdict only — never a value.
+   */
+  harness_env: HarnessEnvDiagnostic
+  /**
+   * Which key paths upstream's `.agents/project.schema.yaml` declares that this
+   * project's `.agents/project.yaml` does not have.
+   *
+   * NEVER a failure. Being behind upstream is not a broken repo, and the moment
+   * an upstream key addition turns a project's own checks red, the project
+   * learns to skip them. `bun run up` is where it becomes actionable; here it
+   * is the answer to "why is my project behaving oddly".
+   */
+  project_schema: ProjectSchemaDiagnostic
+  /**
+   * The developer's `.env` against the committed varlock schema
+   * (`.env.schema` + `.env.core.schema`), plus which varlock is reachable.
+   * The verdict comes from `varlock load --agent`, whose output is redacted:
+   * `errors` carries varlock's own diagnostic lines, item NAMES only.
+   */
+  env_schema: EnvSchemaDiagnostic
   pending_actions: PendingAction[]
+}
+
+export interface EnvSchemaDiagnostic {
+  /** Both schema files present at the repo root. */
+  schema_present: boolean
+  /**
+   * `standalone`: a `varlock` binary on PATH (what an MCP server can call).
+   * `devDependency`: only `node_modules/varlock` (what the gates run via bunx).
+   * `missing`: neither.
+   */
+  binary: 'standalone' | 'devDependency' | 'missing'
+  binary_version: string | null
+  /** `skipped` when the schema or the devDependency is absent. */
+  validation: 'ok' | 'invalid' | 'skipped'
+  /** Resolved item count on `ok`; names only ever reach this report. */
+  items: number
+  /** varlock's redacted diagnostic lines on `invalid`. */
+  errors: string[]
+}
+
+export interface HarnessEnvDiagnostic {
+  /** false when at least one blocking finding stands. */
+  ok: boolean
+  /** `emitted N of M declared variables; K not referenced by any MCP config` */
+  summary: string
+  /** Variable names the generator emits, for the record. Never their values. */
+  allowlist: string[]
+  findings: Array<{ surface: string, kind: string, names: string[], detail: string, blocking: boolean }>
 }
 
 // ----------------------------------------------------------------------------
@@ -412,6 +507,145 @@ export function diagnoseAgentCompatibility(
 // Preflight (blocker-only gate for `bun run setup`)
 // ----------------------------------------------------------------------------
 
+/**
+ * Run the generator's `--check` and shape it for the report.
+ *
+ * Wrapped in a try so a broken config can never take the whole doctor down: the
+ * doctor's job is to TELL you what is wrong, and a doctor that crashes on the
+ * thing it was meant to diagnose is useless. A throw becomes one blocking
+ * finding naming the module, not a stack trace.
+ */
+export interface ProjectSchemaDiagnostic {
+  /** Key paths the schema declares and this project lacks, grouped by block. */
+  gaps: Array<{ block: string, paths: string[], wholeBlock: boolean }>
+  /** Blocks silenced through `updater.schema_exempt`. */
+  exempt: string[]
+  /** Set when nothing could be compared: a parse failure, or no schema on disk. */
+  note: string | null
+}
+
+/**
+ * Same try-wrapping as the harness-env diagnostic, for the same reason: a
+ * doctor that crashes on the thing it was meant to diagnose is useless.
+ */
+function projectSchemaDiagnostic(): ProjectSchemaDiagnostic {
+  const sourcePath = join(REPO_ROOT, SCHEMA_SOURCE);
+  const schemaPath = join(REPO_ROOT, SCHEMA_FILE);
+  if (!existsSync(sourcePath)) { return { gaps: [], exempt: [], note: `${SCHEMA_SOURCE} not found` }; }
+  if (!existsSync(schemaPath)) { return { gaps: [], exempt: [], note: `${SCHEMA_FILE} not found — run \`bun run up\` to receive it` }; }
+  try {
+    const delta = projectDelta(readFileSync(sourcePath, 'utf8'), readFileSync(schemaPath, 'utf8'));
+    return { gaps: delta.gaps, exempt: delta.exempt, note: delta.error };
+  }
+  catch (err) {
+    return { gaps: [], exempt: [], note: `the schema comparison threw: ${(err as Error).message}` };
+  }
+}
+
+function harnessEnvDiagnostic(): HarnessEnvDiagnostic {
+  try {
+    const result = checkHarnessEnv(REPO_ROOT);
+    return {
+      ok: result.ok,
+      summary: result.summary,
+      allowlist: result.allowlist.all,
+      findings: result.findings,
+    };
+  }
+  catch (err) {
+    return {
+      ok: false,
+      summary: 'the harness-env check could not run',
+      allowlist: [],
+      findings: [{
+        surface: 'claude',
+        kind: 'check-failed',
+        names: [],
+        detail: `harness-env check threw: ${(err as Error).message}`,
+        blocking: true,
+      }],
+    };
+  }
+}
+
+/**
+ * Runs `bunx varlock load --agent` at the repo root. `--agent` is the mode
+ * built for exactly this consumer: JSON, sensitive values redacted. Stdout is
+ * parsed for the item COUNT and discarded; the redacted stderr lines are kept
+ * as the diagnosis when the load fails. Skipped when the schema or the pinned
+ * devDependency is absent, so a repo synced to this doctor but not to this
+ * package.json is not told its env is broken.
+ */
+// The SGR escape (`ESC [ ... m`) built from its code point: a literal control
+// character in a regex trips `no-control-regex`, and that rule is right that a
+// reader cannot see it.
+const ANSI_SGR = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
+
+function envSchemaDiagnostic(): EnvSchemaDiagnostic {
+  const schemaPresent = existsSync(join(REPO_ROOT, PROJECT_SCHEMA_FILE)) && existsSync(join(REPO_ROOT, CORE_SCHEMA_FILE));
+  const devDep = existsSync(join(REPO_ROOT, 'node_modules', 'varlock', 'package.json'));
+
+  let binary: EnvSchemaDiagnostic['binary'] = 'missing';
+  let binaryVersion: string | null = null;
+  // `bun run setup:doctor` prepends node_modules/.bin to PATH, so a bare probe
+  // would find the devDependency's shim and call it "standalone". The question
+  // is what a harness-spawned MCP server finds, and that PATH has no
+  // node_modules/.bin in it, so strip every such segment before probing.
+  const pathSep = process.platform === 'win32' ? ';' : ':';
+  const binMarker = join('node_modules', '.bin');
+  const harnessPath = (process.env.PATH ?? '').split(pathSep).filter(seg => !seg.includes(binMarker)).join(pathSep);
+  // A global npm/bun install on Windows is a `varlock.cmd` shim, which a
+  // shell-less spawn does not resolve without the extension. Documented path,
+  // not measured on Windows.
+  const candidates = process.platform === 'win32' ? ['varlock', 'varlock.cmd'] : ['varlock'];
+  for (const name of candidates) {
+    const probe = spawnSync(name, ['--version'], { encoding: 'utf8', env: { ...process.env, PATH: harnessPath }, stdio: ['ignore', 'pipe', 'pipe'] });
+    if (!probe.error && probe.status === 0) {
+      binary = 'standalone';
+      binaryVersion = (probe.stdout ?? '').trim() || null;
+      break;
+    }
+  }
+  if (binary === 'missing' && devDep) {
+    binary = 'devDependency';
+    try {
+      const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'node_modules', 'varlock', 'package.json'), 'utf8')) as { version?: string };
+      binaryVersion = pkg.version ?? null;
+    }
+    catch {
+      binaryVersion = null;
+    }
+  }
+
+  const base: EnvSchemaDiagnostic = { schema_present: schemaPresent, binary, binary_version: binaryVersion, validation: 'skipped', items: 0, errors: [] };
+  if (!schemaPresent || !devDep) { return base; }
+
+  const run = spawnSync('bunx', ['varlock', 'load', '--agent'], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (run.error) {
+    return { ...base, validation: 'invalid', errors: [`could not run bunx varlock: ${run.error.message}`] };
+  }
+  if (run.status !== 0) {
+    const lines = `${run.stdout ?? ''}\n${run.stderr ?? ''}`
+      .split(/\r?\n/)
+      // Strip ANSI so the JSON report stays readable; varlock has already redacted values.
+      .map(l => l.replace(ANSI_SGR, '').trim())
+      .filter(l => l !== '' && !l.startsWith('💥') && !l.startsWith('🚨'));
+    return { ...base, validation: 'invalid', errors: lines.slice(0, 20) };
+  }
+  let items = 0;
+  try {
+    items = Object.keys(JSON.parse(run.stdout) as Record<string, unknown>).length;
+  }
+  catch {
+    // A non-JSON success is still a success; the count is informational.
+  }
+  return { ...base, validation: 'ok', items };
+}
+
 function preflightFail(msg: string, fix: string): never {
   // Dependency-free output — preflight may run before `bun install`, so no TUI.
   process.stderr.write(`Preflight failed: ${msg}\n`);
@@ -451,6 +685,75 @@ function runPreflight(): never {
 // Main check
 // ----------------------------------------------------------------------------
 
+/**
+ * `git ls-remote` is one round trip and no clone, but it still talks to the
+ * network inside a command people run to diagnose a broken setup. Cap it, and
+ * treat every failure as `unknown`.
+ */
+function tryRunWithTimeout(binary: string, args: string[], timeoutMs: number): { ok: boolean, stdout: string } {
+  try {
+    const stdout = execFileSync(binary, args, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: timeoutMs,
+    });
+    return { ok: true, stdout };
+  }
+  catch {
+    return { ok: false, stdout: '' };
+  }
+}
+
+/**
+ * The verdict for one T3 skill. Ignorance never reads as `current`: a skill
+ * that is absent, was installed before the baseline existed, or whose remote
+ * could not be reached each get their own state.
+ */
+export function communitySkillStatus(
+  installed: boolean,
+  recordedRef: string | null,
+  availableRef: string | null,
+): CommunitySkillRow['status'] {
+  if (!installed) { return 'not-installed'; }
+  if (recordedRef === null) { return 'untracked'; }
+  if (availableRef === null) { return 'unknown'; }
+  return availableRef === recordedRef ? 'current' : 'outdated';
+}
+
+/**
+ * Loaded lazily: `cli/install.ts` pulls third-party prompt dependencies, and
+ * `--preflight` must keep loading node built-ins only (it runs before
+ * `bun install`). `runDoctor` is never reached in preflight mode.
+ */
+async function collectCommunitySkills(): Promise<CommunitySkillRow[]> {
+  const { PROJECT_LEVEL_SKILLS, remoteHeadRef } = await import('./install.ts');
+
+  let recorded: Record<string, { ref?: string | null } | undefined> = {};
+  try {
+    const raw = await readFile(join(REPO_ROOT, '.template', 'installer.state.json'), 'utf8');
+    recorded = (JSON.parse(raw) as { communitySkillRefs?: typeof recorded }).communitySkillRefs ?? {};
+  }
+  catch {
+    // No installer state (fresh clone, or an install predating the baseline):
+    // every row reads `untracked`, which is the truthful answer.
+  }
+
+  const rows: CommunitySkillRow[] = [];
+  for (const item of PROJECT_LEVEL_SKILLS) {
+    const slug = item.skill && item.skill !== '*' ? item.skill : item.package.split('/').slice(-1)[0];
+    const installed = existsSync(join(REPO_ROOT, '.agents', 'skills', slug, 'SKILL.md'));
+    const recordedRef = recorded[slug]?.ref ?? null;
+    const availableRef = installed && recordedRef !== null
+      ? remoteHeadRef(item.package, (binary, args) => tryRunWithTimeout(binary, args, 5000))
+      : null;
+
+    const status = communitySkillStatus(installed, recordedRef, availableRef);
+
+    rows.push({ slug, package: item.package, installed, recorded_ref: recordedRef, available_ref: availableRef, status });
+  }
+  return rows;
+}
+
 export async function runDoctor(): Promise<DoctorReport> {
   const agentCompatibility = diagnoseAgentCompatibility(REPO_ROOT);
   const report: DoctorReport = {
@@ -468,6 +771,10 @@ export async function runDoctor(): Promise<DoctorReport> {
     deps_installed: existsSync(NODE_MODULES_DOTENV),
     playwright_browsers: playwrightBrowsersInstalled(),
     direnv: { installed: false },
+    community_skills: await collectCommunitySkills(),
+    harness_env: harnessEnvDiagnostic(),
+    project_schema: projectSchemaDiagnostic(),
+    env_schema: envSchemaDiagnostic(),
     pending_actions: [],
   };
 
@@ -557,6 +864,37 @@ export async function runDoctor(): Promise<DoctorReport> {
     );
   }
 
+  // Jira manifest baseline - is this project's `work_types:` set behind upstream's?
+  // `jira:sync-workflows` catalogs ONLY what `.agents/jira-required.yaml` declares, so a
+  // manifest missing a work type upstream has added regenerates a truncated
+  // `jira-workflows.json`, exits 0, and drops every transition on that type into the
+  // unmapped-status fallback for good.
+  //
+  // WARN-ONLY and never a pending_action: a project may legitimately not use a work type.
+  // Shelled out rather than imported because `cli/` is import-closed and may not reach into
+  // `scripts/` (AGENTS.md 4.5); the baseline lives in
+  // `scripts/lib/jira-required-baseline.ts` so it travels as ordinary synced code.
+  if (existsSync(join(process.cwd(), '.agents', 'jira-required.yaml'))) {
+    const baseline = tryRun('bun', ['run', '--silent', 'jira:baseline', '--json']);
+    if (baseline.ok) {
+      try {
+        const parsed = JSON.parse(baseline.stdout) as { missingLocally?: string[] };
+        const missing = parsed.missingLocally ?? [];
+        if (missing.length > 0) {
+          tui.log.warn(
+            `.agents/jira-required.yaml is behind the upstream baseline: ${missing.join(', ')}.\n`
+            + '       jira:sync-workflows catalogs only the work types the manifest declares, so\n'
+            + '       transitions on those resolve through the unmapped-status fallback.\n'
+            + '       Not an error if this project does not use them. Detail: `bun run jira:baseline`.',
+          );
+        }
+      }
+      catch {
+        // Malformed output is not a doctor failure. The standalone command reports it.
+      }
+    }
+  }
+
   // node_modules / dotenv-cli
   if (!report.deps_installed) {
     report.pending_actions.push({
@@ -617,6 +955,31 @@ export async function runDoctor(): Promise<DoctorReport> {
       type: 'shell_command',
       target: 'git restore opencode.jsonc',
       hint: 'opencode.jsonc is missing. Restore from git — it is the committed OpenCode config.',
+    });
+  }
+
+  if (!report.harness_env.ok) {
+    const blocking = report.harness_env.findings.filter(f => f.blocking);
+    report.pending_actions.push({
+      type: 'shell_command',
+      target: 'bun run harness:env',
+      hint: 'The per-harness credential surfaces disagree with .env, so an MCP server '
+        + `launched without a command line gets no credential: ${
+          blocking.map(f => `${f.kind} (${f.names.join(', ')})`).join('; ')}`,
+      where: `${CLAUDE_LOCAL_SETTINGS} + ${OPENCODE_SECRET_DIR}/`,
+    });
+  }
+
+  // The env schema verdict. Only an INVALID load is an action: a missing
+  // standalone binary is reported in its section and becomes a requirement
+  // when the MCP servers are wrapped, not before.
+  if (report.env_schema.validation === 'invalid') {
+    report.pending_actions.push({
+      type: 'shell_command',
+      target: 'bunx varlock load',
+      hint: 'Your .env does not satisfy the committed env schema (.env.schema + .env.core.schema). '
+        + 'The command prints what is missing with sensitive values redacted; fill .env and re-run doctor.',
+      where: report.env_schema.errors[0],
     });
   }
 
@@ -697,6 +1060,101 @@ function printHuman(report: DoctorReport): void {
     v === 'set' ? 'set' : 'missing',
   ]);
   process.stdout.write(`${tui.table(['Variable', 'Status', 'Value'], envRows)}\n`);
+
+  // Per-harness credential surfaces. Its own section because it is per-VARIABLE
+  // and per-surface, which a single check row cannot carry: an exit code says
+  // something is stale, it does not say WHICH credential is missing, and that
+  // gap is how a missing credential becomes a mystery an hour later.
+  tui.section('Harness credential surfaces (.env -> the files a harness reads at startup)');
+  process.stdout.write(`  ${tui.statusIcon(report.harness_env.ok ? 'ok' : 'fail')} ${report.harness_env.summary}\n`);
+  process.stdout.write(`  allowlist: ${report.harness_env.allowlist.join(', ') || '(none)'}\n`);
+  for (const finding of report.harness_env.findings) {
+    const icon = tui.statusIcon(finding.blocking ? 'fail' : 'warn');
+    process.stdout.write(`  ${icon} ${finding.kind}: ${finding.names.join(', ') || '-'}\n`);
+    process.stdout.write(`    ${finding.detail}\n`);
+  }
+  if (!report.harness_env.ok) {
+    process.stdout.write('  Fix: bun run harness:env  (values are never printed by the generator or by this report)\n');
+  }
+  process.stdout.write('\n');
+
+  // Env schema (varlock). Its own section because it carries three different
+  // facts — is the schema there, which varlock can run, does the developer's
+  // .env satisfy it — and the last one is the diagnosis Rule #10 lacked: a
+  // missing credential named BEFORE an MCP server dies on it. Nothing here
+  // prints a value; `--agent` redacts and this report keeps only names.
+  tui.section('Env schema (varlock: .env.schema + .env.core.schema)');
+  const es = report.env_schema;
+  const binaryNote = es.binary === 'standalone'
+    ? `standalone binary${es.binary_version ? ` ${es.binary_version}` : ''}`
+    : es.binary === 'devDependency'
+      ? `devDependency only${es.binary_version ? ` (${es.binary_version})` : ''}; the standalone binary becomes required when MCP servers are wrapped`
+      : 'not found; run bun install (devDependency) or see bun run setup for the standalone binary';
+  process.stdout.write(`  ${tui.statusIcon(es.schema_present ? 'ok' : 'fail')} schema files ${es.schema_present ? 'present' : 'missing (bun run vars:schema)'}\n`);
+  process.stdout.write(`  ${tui.statusIcon(es.binary === 'missing' ? 'fail' : es.binary === 'standalone' ? 'ok' : 'warn')} varlock: ${binaryNote}\n`);
+  if (es.validation === 'ok') {
+    process.stdout.write(`  ${tui.statusIcon('ok')} .env satisfies the schema (${es.items} items resolved, values redacted)\n`);
+  }
+  else if (es.validation === 'invalid') {
+    process.stdout.write(`  ${tui.statusIcon('fail')} .env does not satisfy the schema:\n`);
+    for (const line of es.errors) { process.stdout.write(`    ${line}\n`); }
+    process.stdout.write('  Fix: fill the named items in .env, then: bunx varlock load --agent\n');
+  }
+  else {
+    process.stdout.write(`  ${tui.statusIcon('warn')} validation skipped (schema or devDependency absent)\n`);
+  }
+  process.stdout.write('\n');
+
+  // Project schema gap. Its own section and NOT a check row, for the same
+  // reason the community-skills block is not one: nothing here is a failure,
+  // and it must never push the report to `needs action`. It answers a
+  // different question from the checks above — not "is something broken" but
+  // "has upstream moved and am I still on the old shape".
+  if (report.project_schema.note !== null || report.project_schema.gaps.length > 0) {
+    tui.section('Project config vs upstream schema (.agents/project.yaml)');
+    if (report.project_schema.note !== null) {
+      process.stdout.write(`  ${tui.statusIcon('warn')} ${report.project_schema.note}\n`);
+    }
+    else {
+      const total = report.project_schema.gaps.reduce((n, g) => n + g.paths.length, 0);
+      process.stdout.write(`  ${tui.statusIcon('warn')} upstream declares ${total} key path(s) this project does not have\n`);
+      for (const gap of report.project_schema.gaps) {
+        process.stdout.write(`  ${gap.block}${gap.wholeBlock ? ' (whole block)' : ''}: ${gap.paths.join(', ')}\n`);
+      }
+      process.stdout.write('  Fix: bun run up  (offers to insert them, one prompt per block, insert-only)\n');
+    }
+    if (report.project_schema.exempt.length > 0) {
+      process.stdout.write(`  silenced via updater.schema_exempt: ${report.project_schema.exempt.join(', ')}\n`);
+    }
+    process.stdout.write('\n');
+  }
+
+  // T3 community skills. Deliberately its own section and NOT a check row:
+  // nothing here is a failure, and an outdated skill must not push the report
+  // to `needs action` (see DoctorReport.community_skills for why there is no
+  // reinstall path).
+  if (report.community_skills.length > 0) {
+    tui.section('Community skills (T3 — installed once, gitignored, reported only)');
+    const shortRef = (ref: string | null): string => ref === null ? '-' : ref.slice(0, 8);
+    const icon = (status: CommunitySkillRow['status']): string =>
+      tui.statusIcon(status === 'current' ? 'ok' : status === 'outdated' || status === 'not-installed' ? 'warn' : 'warn');
+    const note: Record<CommunitySkillRow['status'], string> = {
+      'current': 'up to date with upstream',
+      'outdated': 'upstream has moved since install',
+      'not-installed': 'declared but absent — run bun run setup',
+      'untracked': 'installed before the baseline existed; re-run bun run setup to start tracking',
+      'unknown': 'remote unreachable — no verdict',
+    };
+    const rows = report.community_skills.map(skill => [
+      skill.slug,
+      `${icon(skill.status)} ${skill.status}`,
+      shortRef(skill.recorded_ref),
+      shortRef(skill.available_ref),
+      note[skill.status],
+    ]);
+    process.stdout.write(`${tui.table(['Skill', 'Status', 'Installed', 'Available', 'Note'], rows)}\n`);
+    process.stdout.write('  Updating one is a manual decision: these live outside git, so an overwrite has no backup.\n\n');
+  }
 
   if (compat.errors.length > 0) {
     tui.section('Cross-harness compatibility errors');

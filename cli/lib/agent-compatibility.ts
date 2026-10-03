@@ -23,9 +23,26 @@ import type { Stats } from 'node:fs';
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, normalize, relative, resolve } from 'node:path';
 
-import { validateHookCompatibility, validateMcpParity } from './agent-compatibility-contracts.ts';
+import { validateEslintBlockWiring, validateHookCompatibility, validateMcpParity } from './agent-compatibility-contracts.ts';
 
 export const CLAUDE_INSTRUCTIONS_SHIM = '@AGENTS.md\n';
+
+/**
+ * Line endings as this module generates them, so a comparison survives a
+ * checkout that does not have `.gitattributes`.
+ *
+ * Every generated surface here is written with pure `\n`, but `.gitattributes`
+ * is a file a downstream project can delete, and under `core.autocrlf=true`
+ * git then hands back `\r\n`. Without this, the shim comparison THROWS —
+ * taking down `agents:compat`, `agents:compat:check`, `repo:check` and the
+ * pre-push hook at once — and every generated wrapper reads as stale, so the
+ * repair rewrites all of them on every run and the tree never comes clean.
+ * `updater-harness-migration.ts` already keeps a loose comparison for exactly
+ * this reason; this is the same defence, stated once.
+ */
+export function normalizeNewlines(text: string): string {
+  return text.replace(/\r\n/g, '\n');
+}
 
 /** OS-generated files that never count as skill content. */
 export const OS_METADATA_FILES = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini']);
@@ -115,9 +132,9 @@ export interface CompatibilityCheck {
 }
 
 /** The surface a compatibility error belongs to, so a report can group them. */
-export type CompatibilityErrorGroup = 'alias' | 'wrappers' | 'hooks' | 'mcp' | 'instructions';
+export type CompatibilityErrorGroup = 'alias' | 'wrappers' | 'hooks' | 'mcp' | 'lint' | 'instructions';
 
-export const COMPATIBILITY_GROUP_ORDER: CompatibilityErrorGroup[] = ['instructions', 'alias', 'wrappers', 'hooks', 'mcp'];
+export const COMPATIBILITY_GROUP_ORDER: CompatibilityErrorGroup[] = ['instructions', 'alias', 'wrappers', 'hooks', 'mcp', 'lint'];
 
 export const COMPATIBILITY_GROUP_LABEL: Record<CompatibilityErrorGroup, string> = {
   instructions: 'Instructions (AGENTS.md + CLAUDE.md shim, canonical skills)',
@@ -125,6 +142,7 @@ export const COMPATIBILITY_GROUP_LABEL: Record<CompatibilityErrorGroup, string> 
   wrappers: 'Command wrappers (.claude/commands, .opencode/commands)',
   hooks: 'Hook adapters',
   mcp: 'MCP parity (.mcp.json, opencode.jsonc, .codex/config.toml)',
+  lint: 'Lint config wiring (eslint.config.js <- eslint.config.base.js)',
 };
 
 /** Classify one error message by its wording (the messages are ours). */
@@ -133,6 +151,9 @@ export function compatibilityErrorGroup(message: string): CompatibilityErrorGrou
   if (/command wrapper|command alias/i.test(message)) { return 'wrappers'; }
   if (/skills alias|\.claude\/skills/i.test(message)) { return 'alias'; }
   if (/hook/i.test(message)) { return 'hooks'; }
+  // A synced block that the project-owned consumer never wired: the rule is
+  // on disk and enforcing nothing. Not an instructions problem.
+  if (/eslint\.config/i.test(message)) { return 'lint'; }
   return 'instructions';
 }
 
@@ -184,6 +205,15 @@ function desiredAliasTarget(paths: CompatibilityPaths, platform: NodeJS.Platform
   return platform === 'win32' ? paths.canonicalSkills : POSIX_CLAUDE_SKILLS_TARGET;
 }
 
+/**
+ * Whether a junction target points at the canonical skills directory.
+ *
+ * Called only from the `win32` branches, where the filesystem is
+ * case-insensitive: `readlinkSync` can return a drive-letter (or any segment)
+ * cased differently from `process.cwd()`, and a case-SENSITIVE comparison then
+ * reports an unexpected target and makes the repair unlink and recreate a
+ * junction that was already correct. Case-fold both sides.
+ */
 function resolvesToCanonical(
   linkPath: string,
   actualTarget: string,
@@ -192,7 +222,8 @@ function resolvesToCanonical(
   const resolvedTarget = isAbsolute(actualTarget)
     ? resolve(actualTarget)
     : resolve(join(linkPath, '..'), actualTarget);
-  return normalize(resolvedTarget) === normalize(resolve(canonicalTarget));
+  const fold = (path: string): string => normalize(path).toLowerCase();
+  return fold(resolvedTarget) === fold(resolve(canonicalTarget));
 }
 
 function lstatIfPresent(path: string): Stats | null {
@@ -275,7 +306,7 @@ function assertCanonicalSources(paths: CompatibilityPaths): void {
   if (!existsSync(paths.claudeShim) || !lstatSync(paths.claudeShim).isFile()) {
     throw new Error(`Claude instruction shim missing: ${relative(paths.root, paths.claudeShim)}`);
   }
-  const shim = readFileSync(paths.claudeShim, 'utf8');
+  const shim = normalizeNewlines(readFileSync(paths.claudeShim, 'utf8'));
   if (shim !== CLAUDE_INSTRUCTIONS_SHIM) {
     throw new Error('CLAUDE.md must contain exactly `@AGENTS.md` followed by one newline.');
   }
@@ -408,7 +439,7 @@ export function validateCommandAliases(root: string): string[] {
         errors.push(`${host.id} command wrapper missing: ${relative(root, wrapperPath)}`);
         continue;
       }
-      const actual = readFileSync(wrapperPath, 'utf8');
+      const actual = normalizeNewlines(readFileSync(wrapperPath, 'utf8'));
       if (actual !== expected) {
         const copiedWorkflow = actual.split('\n').length > expected.split('\n').length + 2;
         errors.push(`${host.id} command wrapper ${copiedWorkflow ? 'contains workflow prose' : 'is stale'}: ${relative(root, wrapperPath)}`);
@@ -463,7 +494,7 @@ export function repairCommandWrappers(root = process.cwd()): number {
     for (const alias of manifest.aliases) {
       const path = join(directory, `${alias.alias}.md`);
       const expected = commandWrapper(alias);
-      if (!existsSync(path) || readFileSync(path, 'utf8') !== expected) {
+      if (!existsSync(path) || normalizeNewlines(readFileSync(path, 'utf8')) !== expected) {
         writeFileSync(path, expected);
         written++;
       }
@@ -486,6 +517,7 @@ export function checkAgentCompatibility(
     errors.push(...validateCommandAliases(paths.root));
     errors.push(...validateHookCompatibility(paths.root));
     errors.push(...validateMcpParity(paths.root));
+    errors.push(...validateEslintBlockWiring(paths.root));
   }
   catch (error) {
     errors.push(error instanceof Error ? error.message : String(error));

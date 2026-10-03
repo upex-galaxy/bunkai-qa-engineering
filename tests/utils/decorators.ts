@@ -231,8 +231,20 @@ const SENSITIVE_KEYS = new Set(['password', 'token', 'secret', 'authorization', 
 const MAX_STRING_LEN = 80;
 const MAX_OBJECT_LEN = 120;
 
+// Positional string args carry no key, so a password passed as `loginAs(email, password)`
+// would print verbatim. Mask any arg whose value equals a secret-looking env var instead.
+const SENSITIVE_ENV_NAME = /PASSWORD|SECRET|TOKEN|API_KEY/i;
+const SENSITIVE_VALUES = new Set(
+  Object.entries(process.env)
+    .filter(([name, value]) => SENSITIVE_ENV_NAME.test(name) && value !== undefined && value.length >= 4)
+    .map(([, value]) => value as string),
+);
+
 function formatValue(value: unknown, key?: string): string {
   if (key && SENSITIVE_KEYS.has(key.toLowerCase())) {
+    return '"***"';
+  }
+  if (typeof value === 'string' && (SENSITIVE_VALUES.has(value) || value.startsWith('bk_pat_'))) {
     return '"***"';
   }
   if (value === null) {

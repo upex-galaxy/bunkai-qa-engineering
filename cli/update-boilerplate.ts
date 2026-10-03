@@ -20,9 +20,11 @@ import * as path from 'node:path';
 
 import pc from 'picocolors';
 import { checkAgentCompatibility, COMMAND_ALIAS_MANIFEST, repairAgentSurfaces, SKILLS_ALIAS_DEFERRED_MARKER } from './lib/agent-compatibility.ts';
+import { applyInsertions, planInsertions, projectDelta, SCHEMA_FILE, SCHEMA_SOURCE } from './lib/agents-schema.ts';
 import * as tui from './lib/tui';
 import {
   cleanupTempDir,
+  createBackupDir,
   detectGitVersion,
   gitVersionMeetsMin,
   isLocalTemplateSource,
@@ -33,6 +35,7 @@ import {
   suggestCommitMessage,
   UPDATER_UPSTREAM_DIR_ENV,
 } from './lib/updater-core';
+import { DOCTRINE_FILE, runDoctrineLedger } from './lib/updater-doctrine';
 import { detectProtectedDrift, mergeProtectedWatchlist, persistMarkers, readProjectProtectedPaths, splitFirstProjectAdvice } from './lib/updater-drift';
 import {
   applyHarnessMigration,
@@ -55,6 +58,7 @@ import {
   runVerdict,
 } from './lib/updater-parity';
 import { makePbiCacheMigrationHook } from './lib/updater-pbi';
+import { CLAUDE_SETTINGS_FILE, mergeAllowList } from './lib/updater-settings';
 import { parseDotEnvExampleKeys, requiredNow, VAR_MANIFEST } from './lib/variables-manifest.ts';
 
 // --- CONFIGURATION ---
@@ -82,9 +86,24 @@ const GATE_TIMEOUT_MS = 120_000;
  */
 export const GATE_SCRIPTS = ['types:check', 'lint:check', 'kata:manifest:check', 'skills:check'] as const;
 
-const TOOLING_FILES = ['.editorconfig', '.prettierrc', '.gitattributes'];
-const AGENTS_DOCS_FILES = ['README.md'];
+const TOOLING_FILES = ['.editorconfig', '.prettierrc', '.gitattributes', 'tsconfig.base.json', 'eslint.config.base.js', 'bunfig.toml'];
+// The SYNCED half of the variables module. A file-list, not a directory:
+// `config/variables.ts` (watchlisted) and `config/validateTestEnv.ts` are
+// project-owned - the whole point of the split is that they are NOT synced.
+const CONFIG_CORE_FILES = ['variables.core.ts'];
+// `.agents/README.md` plus the GENERATED schema. The schema is plainly SYNCED
+// — never bootstrapOnly — because it is upstream's template, not the project's
+// identity: a project must receive each release's copy or the diff compares it
+// against a template frozen at scaffold time and reports nothing to do.
+const AGENTS_DOCS_FILES = ['README.md', 'project.schema.yaml'];
 const ENV_TEMPLATE_FILES = ['.env.example'];
+// The varlock env schema, in two halves like `config/variables{.core,}.ts`:
+// `.env.core.schema` is GENERATED from cli/lib/variables-manifest.ts by
+// `bun run vars:schema` and plainly synced; `.env.schema` imports it, carries
+// the root decorators and the project's own variables, and is delivered ONCE
+// (PROTECTED_WATCHLIST below folds it into bootstrapOnlyPaths). Neither file
+// holds a value. `env-template` stays alongside until `.env.example` retires.
+const ENV_SCHEMA_FILES = ['.env.schema', '.env.core.schema'];
 // `.claude/settings.json` holds the project's permission allow/deny lists and
 // the hook wiring. Component `agent-root-config` delivers it ONCE (bootstrapOnly:
 // a project without the file gets upstream's copy, exactly like `.codex/`); once
@@ -134,15 +153,19 @@ export const COMPONENTS: Component[] = [
   { name: 'cli', type: 'directory', paths: ['cli'] },
   { name: 'vscode', type: 'directory', paths: ['.vscode'] },
   // `.husky/pre-commit` and `.husky/pre-push` are on PROTECTED_WATCHLIST (the
-  // project's gates live there): delivered once when missing, never
-  // overwritten. Anything else under `.husky/` (the `_/` helpers) keeps syncing.
+  // project's gates and their ordering live there): delivered once when missing,
+  // never overwritten. Everything else under `.husky/` keeps syncing — which is
+  // exactly how `framework-gates.sh` reaches a project scaffolded earlier: the
+  // gates upstream owns sit in that synced file, and each hook sources it.
   { name: 'husky', type: 'directory', paths: ['.husky'] },
   { name: 'agents-docs', type: 'file-list', paths: ['.agents'], files: AGENTS_DOCS_FILES },
   { name: 'tooling', type: 'file-list', paths: ['.'], files: TOOLING_FILES },
+  { name: 'config-core', type: 'file-list', paths: ['config'], files: CONFIG_CORE_FILES },
   // `.env.example` carries NO secrets (placeholder values only) and fast-forwards
   // safely. Shipping it is the prerequisite for env-var drift detection — the
   // afterApply hook can only diff against an `.env.example` we have shipped.
   { name: 'env-template', type: 'file-list', paths: ['.'], files: ENV_TEMPLATE_FILES },
+  { name: 'env-schema', type: 'file-list', paths: ['.'], files: ENV_SCHEMA_FILES },
 ];
 
 // --- ARG PARSE ---
@@ -428,9 +451,13 @@ interface RunFacts {
   promptKept: boolean
   /** `.context/PBI/` paths still tracked in git, and where the migration recipe was saved. */
   pbiCache: PbiCacheFact | null
+  /** Permission allow-list entries the additive merge added to `.claude/settings.json`. */
+  allowListAdded: string[]
+  /** One-line evidence for the unresolved-doctrine ledger row, when AGENTS.md carries debt. */
+  doctrineDebt: string | null
   parity: { findings: ParityFinding[], report: ParityReport } | null
 }
-const runFacts: RunFacts = { compat: null, envNewKeys: [], migration: null, migrationPlanned: false, aliasDeferred: false, gates: [], gatesSkippedReason: null, promptKept: false, pbiCache: null, parity: null };
+const runFacts: RunFacts = { compat: null, envNewKeys: [], migration: null, migrationPlanned: false, aliasDeferred: false, gates: [], gatesSkippedReason: null, promptKept: false, pbiCache: null, allowListAdded: [], doctrineDebt: null, parity: null };
 
 // --- ENV-VAR DRIFT DETECTION (afterApply hook) ---
 //
@@ -514,6 +541,49 @@ async function detectEnvVarDrift(
   if (res.status !== 0) {
     sink.warn('`bun run setup --variables` terminó con error o fue cancelado.');
   }
+}
+
+// --- CLAUDE PERMISSION ALLOW LIST (afterApply hook) ---
+//
+// `.claude/settings.json` is bootstrap-only AND watched, so a skill shipped
+// upstream used to arrive without the `Skill(<name>)` entry that authorizes it
+// and silently could not be invoked. This merges ONE array additively —
+// `permissions.allow` — and leaves `deny`, `ask`, `hooks`, `env` and every
+// other key exactly as the project wrote them. See `updater-settings.ts` for
+// why removals are deliberately not remembered.
+//
+// Backup before write, like every other mutation the run makes: the file is on
+// the watchlist, so a consumer who dislikes the addition restores it from
+// `.backups/` and expresses the removal in `deny`.
+function makeAllowListHook(
+  templateDir: string,
+  sink: ReportSink,
+  dryRun: boolean,
+): (summary: RunSummary) => Promise<void> {
+  return async (summary: RunSummary): Promise<void> => {
+    if (dryRun) {
+      runFacts.allowListAdded = mergeAllowList(process.cwd(), templateDir).added;
+      return;
+    }
+    const localPath = path.join(process.cwd(), CLAUDE_SETTINGS_FILE);
+    const { added, merged } = mergeAllowList(process.cwd(), templateDir);
+    if (merged === null) { return; }
+    try {
+      // This run's backup dir when it made one; otherwise its own, so the
+      // pre-write backup contract holds even on a run that wrote nothing else.
+      const dir = summary.backupDir ?? createBackupDir(process.cwd());
+      const backupPath = path.join(dir, CLAUDE_SETTINGS_FILE);
+      fs.mkdirSync(path.dirname(backupPath), { recursive: true });
+      fs.copyFileSync(localPath, backupPath);
+      fs.writeFileSync(localPath, merged, 'utf-8');
+    }
+    catch (err) {
+      sink.warn(`No se pudo fusionar la allow list de ${CLAUDE_SETTINGS_FILE}: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+    runFacts.allowListAdded = added;
+    sink.step(`Permisos agregados a ${CLAUDE_SETTINGS_FILE}: ${added.length}`);
+  };
 }
 
 // --- SKILLS REGISTRY REGEN (afterApply hook) ---
@@ -619,124 +689,119 @@ function makeKataManifestHook(sink: ReportSink): (summary: RunSummary) => Promis
   };
 }
 
-// --- GIT_STRATEGY UPSERT (afterApply hook) ---
+// --- SCHEMA-DRIVEN BACK-FILL for .agents/project.yaml (afterApply hook) ---
 //
-// The `git_strategy:` block in `.agents/project.yaml` (git workflow definition,
-// read by the git-flow-master skill) was added to the boilerplate AFTER some
-// projects were already scaffolded. `.agents/project.yaml` is bootstrapOnly, so
-// the regular sync NEVER overwrites it — a pre-feature project would silently
-// stay without the block. This hook back-fills it ONCE, APPEND-ONLY.
+// This ONE hook replaces the two hand-written ones that targeted
+// `.agents/project.yaml` (`upsertGitStrategyBlock` and the `qa_epics`
+// back-fill). They are gone, and the treadmill with them: a key added upstream
+// used to need a new hook written by hand, and `orchestration:` is the proof
+// that mechanism does not scale — it is the newest block and nobody wrote its
+// hook, so today NOTHING gives it to a project scaffolded before it existed.
 //
-// HARD CONSTRAINT: append-only. It NEVER edits, reorders, or deletes any
-// existing line in the consumer's project.yaml — it only appends the missing
-// block at EOF. This preserves every user-set value verbatim.
+// What arrives instead is derived from `.agents/project.schema.yaml`, which is
+// generated from upstream's own yaml and gated against it, so a key cannot
+// exist upstream and be missing from what this hook offers.
 //
-// Like detectEnvVarDrift, the upstream clone still sits in the template dir
-// (cleanup happens after afterApply). We lift the `git_strategy:` block (with
-// its leading comment header) out of the upstream copy and append it to the
-// consumer's file.
+// Everything the old hooks promised is kept verbatim, because those promises
+// are what make writing to a project's identity file acceptable at all:
+// INSERT-ONLY, never an edit to an existing line, idempotent, interactive
+// confirm, and `--auto` warns without mutating. One prompt per BLOCK: per-key
+// prompting on a project 46 paths behind is abusive, and a single
+// all-or-nothing prompt hides what is being accepted.
+//
+// The two `jira-required.yaml` back-fills below are NOT replaced. That file has
+// the same drift problem and a much richer shape, and giving it this treatment
+// is a follow-up with its own wildcards, not a freebie.
 
-/**
- * Extract the `git_strategy:` block from an upstream `.agents/project.yaml`,
- * INCLUDING the contiguous comment header immediately preceding it.
- *
- * Strategy: find the `git_strategy:` line, walk BACKWARDS over contiguous
- * leading `#` comment lines to capture the header, then walk FORWARDS over all
- * indented (space-prefixed) lines until the next top-level key or top-level
- * comment introducing another section. Returns the block as a trimmed string,
- * or null if no `git_strategy:` key exists upstream.
- */
-function extractUpstreamGitStrategyBlock(upstreamYaml: string): string | null {
-  const lines = upstreamYaml.split('\n');
-  const keyIdx = lines.findIndex(l => l.startsWith('git_strategy:'));
-  if (keyIdx === -1) { return null; }
-
-  // Walk backwards over the contiguous comment header (stop at blank/non-comment).
-  let start = keyIdx;
-  while (start - 1 >= 0 && /^\s*#/.test(lines[start - 1])) { start -= 1; }
-
-  // Walk forwards over indented body lines (block scalars, nested keys, lists).
-  let end = keyIdx; // inclusive index of last block line
-  for (let i = keyIdx + 1; i < lines.length; i += 1) {
-    const line = lines[i];
-    if (line.trim() === '') { continue; } // blank lines inside the block are tolerated
-    if (/^\s/.test(line)) { end = i; continue; } // indented → still part of the block
-    break; // top-level key or top-level comment → block ended
+/** Upstream's version, for the `NEW in <release>` marker. See `markRelease`. */
+function upstreamRelease(templateDir: string): string | null {
+  try {
+    const raw = fs.readFileSync(path.join(templateDir, 'package.json'), 'utf8');
+    const version = (JSON.parse(raw) as { version?: string }).version;
+    return typeof version === 'string' && version !== '' ? version : null;
   }
-
-  return lines.slice(start, end + 1).join('\n').trimEnd();
+  catch { return null; }
 }
 
-/**
- * Back-fill a missing `git_strategy:` block into the consumer's
- * `.agents/project.yaml`. Append-only; never modifies existing lines.
- */
-async function upsertGitStrategyBlock(
+async function backfillProjectYamlFromSchema(
   templateDir: string,
   sink: ReportSink,
   nonInteractive: boolean,
 ): Promise<void> {
-  const consumerYaml = path.join(process.cwd(), '.agents', 'project.yaml');
-  if (!fs.existsSync(consumerYaml)) { return; }
+  const consumerPath = path.join(process.cwd(), SCHEMA_SOURCE);
+  const schemaPath = path.join(templateDir, SCHEMA_FILE);
+  if (!fs.existsSync(consumerPath) || !fs.existsSync(schemaPath)) { return; }
 
-  let consumerContent: string;
+  let consumer: string;
+  let schema: string;
   try {
-    consumerContent = fs.readFileSync(consumerYaml, 'utf8');
+    consumer = fs.readFileSync(consumerPath, 'utf8');
+    schema = fs.readFileSync(schemaPath, 'utf8');
   }
-  catch {
-    return; // unreadable consumer file — nothing to do.
+  catch { return; }
+
+  const delta = projectDelta(consumer, schema);
+  if (delta.error) {
+    // Invariant 2: say so. A silently skipped comparison that reports success
+    // is worse than no comparison, because it certifies its own emptiness.
+    sink.warn(`No se pudo comparar \`${SCHEMA_SOURCE}\` contra el schema: ${delta.error}`);
+    return;
   }
+  if (delta.gaps.length === 0) { return; }
 
-  // Already has a top-level git_strategy block → NO-OP. Never touch it.
-  if (/^git_strategy:/m.test(consumerContent)) { return; }
+  const release = upstreamRelease(templateDir);
+  const total = delta.gaps.reduce((n, g) => n + g.paths.length, 0);
 
-  // Absent → pre-feature project. Lift the block from the upstream clone.
-  const upstreamYaml = path.join(templateDir, '.agents', 'project.yaml');
-  if (!fs.existsSync(upstreamYaml)) { return; }
-
-  let block: string | null;
-  try {
-    block = extractUpstreamGitStrategyBlock(fs.readFileSync(upstreamYaml, 'utf8'));
-  }
-  catch {
-    return; // unreadable upstream — skip.
-  }
-  if (!block) { return; }
-
-  // CI / non-interactive: never modify the file — just flag it.
   if (nonInteractive) {
-    sink.warn('Tu `.agents/project.yaml` no tiene el bloque `git_strategy` (definición del flujo de git).');
-    sink.step('Modo --auto: ejecuta el updater de forma interactiva para agregarlo (o añádelo manualmente).');
+    sink.warn(`Tu \`${SCHEMA_SOURCE}\` no tiene ${total} clave(s) que el schema de upstream declara.`);
+    for (const gap of delta.gaps) {
+      sink.step(`  ${gap.block}${gap.wholeBlock ? ' (bloque completo)' : ''}: ${gap.paths.join(', ')}`);
+    }
+    sink.step('Modo --auto: no se modifica nada. Ejecuta el updater interactivo, o `bun run agents:schema --project`.');
     return;
   }
 
-  // Interactive: OFFER to append (append-only — existing values untouched).
-  const proceed = await sink.confirm(
-    'Tu `.agents/project.yaml` no tiene el nuevo bloque `git_strategy` (definición del flujo de git). ¿Agregarlo ahora? (append-only — tus valores existentes nunca se modifican)',
-    false,
-  );
-  if (!proceed) {
-    sink.step('Omitido. Puedes agregar el bloque `git_strategy` más tarde.');
-    return;
+  let current = consumer;
+  const applied: string[] = [];
+  for (const gap of delta.gaps) {
+    const what = gap.wholeBlock
+      ? `el bloque \`${gap.block}\` completo (${gap.paths.length} clave(s))`
+      : `${gap.paths.length} clave(s) nueva(s) en \`${gap.block}\`: ${gap.paths.join(', ')}`;
+    const proceed = await sink.confirm(
+      `Tu \`${SCHEMA_SOURCE}\` no tiene ${what}. ¿Insertarlas ahora? (insert-only — ningún valor tuyo se modifica)`,
+      false,
+    );
+    if (!proceed) { continue; }
+
+    // A whole missing block is inserted as ONE unit, not leaf by leaf: its
+    // children come with it, and asking for each would be the per-key
+    // prompting this design rejected.
+    const targets = gap.wholeBlock ? [gap.block] : gap.paths;
+    const plan = planInsertions(current, schema, targets, release);
+    const result = applyInsertions(current, plan);
+    if (result.error) {
+      sink.warn(`No se insertó \`${gap.block}\`: ${result.error}`);
+      continue;
+    }
+    for (const skip of plan.skipped) { sink.warn(`  \`${skip.path}\` no se pudo ubicar: ${skip.reason}`); }
+    current = result.text;
+    applied.push(...plan.inserted);
   }
 
-  // APPEND ONLY — preserve the existing file verbatim, and prepend exactly one
-  // blank line before the block regardless of the file's trailing-newline state:
-  //  - ends with "\n"  → add "\n" (a blank line) then the block.
-  //  - no trailing "\n" → add "\n\n" (close the last line + a blank line).
-  const sep = consumerContent.endsWith('\n') ? '\n' : '\n\n';
-  try {
-    fs.appendFileSync(consumerYaml, `${sep}${block}\n`);
+  if (applied.length === 0) {
+    sink.step('Omitido. Ejecuta `bun run agents:schema --project` cuando quieras ver qué falta.');
+    return;
   }
+  try { fs.writeFileSync(consumerPath, current); }
   catch (err) {
-    sink.warn(`No se pudo agregar el bloque \`git_strategy\`: ${err instanceof Error ? err.message : String(err)}`);
+    sink.warn(`No se pudo escribir \`${SCHEMA_SOURCE}\`: ${err instanceof Error ? err.message : String(err)}`);
     return;
   }
-  sink.step('Bloque `git_strategy` agregado al final de `.agents/project.yaml` (append-only).');
-  sink.step('Revisa la estrategia o ejecuta "set up our git strategy" en Claude (git-flow-master) para definir la tuya.');
+  sink.step(`Insertadas ${applied.length} clave(s) en \`${SCHEMA_SOURCE}\`: ${applied.join(', ')}.`);
+  sink.step(`Cada una lleva un comentario \`# NEW in ${release ?? '?'}\` y queda sin valor. Revísalas con \`git diff ${SCHEMA_SOURCE}\`.`);
 }
 
-// --- METHODOLOGY YAML BLOCK BACK-FILL (qa_epics, qa_assignee, subtask — afterApply hooks) ---
+// --- METHODOLOGY YAML BLOCK BACK-FILL (qa_assignee, subtask — afterApply hooks) ---
 //
 // Two defect-management blocks live in bootstrapOnly files (the sync NEVER
 // overwrites them): the `qa_epics` block under `qa:` in `.agents/project.yaml`,
@@ -801,14 +866,6 @@ interface YamlBackfillSpec {
   insert: (consumerYaml: string, block: string) => string | null
   label: string
 }
-
-const QA_EPICS_BACKFILL: YamlBackfillSpec = {
-  consumerRel: path.join('.agents', 'project.yaml'),
-  presence: /^[ \t]*qa_epics:/m,
-  extract: y => extractIndentedYamlBlock(y, 'qa_epics', '  '),
-  insert: (y, b) => insertBlockAtEndOfSection(y, 'qa', b),
-  label: 'qa_epics',
-};
 
 const QA_ASSIGNEE_BACKFILL: YamlBackfillSpec = {
   consumerRel: path.join('.agents', 'jira-required.yaml'),
@@ -987,7 +1044,11 @@ const PROTECTED_WATCHLIST: ProtectedWatchEntry[] = [
   { path: 'AGENTS.md', reason: 'per-project AI memory (identity, env URLs, custom rules); CLAUDE.md is only a generated shim onto it', markerPath: '.template/claude-md.upstream.sha' },
   { path: 'allurerc.mjs', reason: 'report name + dashboard layout adapted per project' },
   { path: 'playwright.config.ts', reason: 'projects, timeouts and reporters adapted per stack' },
-  { path: 'config/variables.ts', reason: 'environment/variable map adapted per project' },
+  { path: 'config/variables.ts', reason: 'environment/variable map adapted per project. The instance resolver and the TMS/browser/reporting blocks moved to the synced `config/variables.core.ts`, because an adapted copy used to stop receiving resolver fixes for the host the Jira-Direct provider writes results onto.' },
+  // Same split for the env schema: the framework half (`.env.core.schema`) is
+  // generated and synced; this importer holds the project's own variables and
+  // root decorators, so it is delivered once and then only reported on.
+  { path: '.env.schema', reason: 'project-owned half of the varlock env schema (root decorators + the project\'s own variables). The framework half is the synced, generated `.env.core.schema` it imports.' },
   { path: 'tests/components/TestContext.ts', reason: 'KATA L1 base adapted to the target stack' },
   { path: 'tests/components/TestFixture.ts', reason: 'KATA L4 fixture registry adapted per project' },
   { path: 'tests/components/ApiFixture.ts', reason: 'API fixture wiring adapted per project' },
@@ -1009,8 +1070,8 @@ const PROTECTED_WATCHLIST: ProtectedWatchEntry[] = [
   { path: '.github/workflows/smoke.yml', reason: 'CI suite adapted (secrets, envs, jobs)' },
   { path: '.github/workflows/sanity.yml', reason: 'CI suite adapted (secrets, envs, jobs)' },
   { path: '.agents/project.yaml', reason: 'per-project identity + env map, but upstream keeps ADDING structural blocks (e.g. git_strategy). A project scaffolded before a block existed never learns it should have one.', structural: true },
-  { path: 'tsconfig.json', reason: 'path aliases (@utils, @api, @schemas, @variables) are the contract every synced file imports through — a new upstream alias breaks synced code in a project whose tsconfig never learned it.' },
-  { path: 'eslint.config.js', reason: 'lint rules evolve upstream and .husky/pre-commit runs eslint against this local config.' },
+  { path: 'tsconfig.json', reason: 'project-owned `include` / `exclude`: which directories this repo type-checks. The path aliases every synced file imports through moved to the synced `tsconfig.base.json` this file extends, so a new upstream alias now arrives on its own.' },
+  { path: 'eslint.config.js', reason: 'project-owned overrides; .husky/pre-commit runs eslint against this local config. The shared rules and the cli/ import-closure block that guards the updater live in the synced `eslint.config.base.js` this file spreads.' },
   // The three MCP registries are project-owned since 8.2 (they used to sync
   // through `agent-root-config`): a consumer adds its own servers there.
   { path: '.mcp.json', reason: 'MCP registry with project-specific servers/vars' },
@@ -1021,8 +1082,14 @@ const PROTECTED_WATCHLIST: ProtectedWatchEntry[] = [
   // 8.2 every run force-applied upstream's copy over a committed merge and
   // re-raised the same row forever. Same delivery as `.claude/settings.json`:
   // once when missing (bootstrapOnlyPaths below), then project-owned.
-  { path: '.husky/pre-commit', reason: 'project gates live here' },
-  { path: '.husky/pre-push', reason: 'project gates live here' },
+  //
+  // The gates UPSTREAM owns no longer live here: they moved to the plainly
+  // synced `.husky/framework-gates.sh`, which each hook sources and calls in one
+  // function. That is the only way a gate added upstream reaches a project
+  // scaffolded earlier — a never-overwritten hook cannot grow one. The hooks
+  // stay watched for what is genuinely theirs: ordering, and their own gates.
+  { path: '.husky/pre-commit', reason: 'project gates and their ordering live here; the gates upstream owns come from the synced .husky/framework-gates.sh, so a hook that does not source it never sees another one' },
+  { path: '.husky/pre-push', reason: 'project gates and their ordering live here; the gates upstream owns come from the synced .husky/framework-gates.sh, so a hook that does not source it never sees another one' },
 ];
 
 /**
@@ -1256,6 +1323,9 @@ function makeParityHook(sink: ReportSink, priorLockSha: string, dryRun: boolean,
       archivedSkillsDir,
       heldBack,
       envNewKeys: runFacts.envNewKeys,
+      allowListAdded: runFacts.allowListAdded,
+      doctrineDebt: runFacts.doctrineDebt,
+      doctrineFile: DOCTRINE_FILE,
       localEdits: (summary.localEditsOverwritten ?? []).map(edit => ({
         ...edit,
         backupPath: summary.backupDir ? path.join(summary.backupDir, edit.path) : null,
@@ -1744,6 +1814,9 @@ async function main(): Promise<void> {
         ? composeHooks(
             sink,
             async () => { runFacts.envNewKeys = computeEnvNewKeys(UPSTREAM_DIR); },
+            // Read-only: records what the real run would add, writes nothing.
+            makeAllowListHook(UPSTREAM_DIR, sink, true),
+            async () => { runFacts.doctrineDebt = runDoctrineLedger(process.cwd(), UPSTREAM_DIR, { dryRun: true }); },
             // Read-only detection so the preview's table matches the real run's.
             makePbiCacheMigrationHook({ promptOutPath: path.join(process.cwd(), PBI_MIGRATION_PROMPT_PATH), dryRun: true }, sink, (fact) => { runFacts.pbiCache = fact; }),
             makeParityHook(sink, priorLockSha, true, watchlist),
@@ -1754,9 +1827,21 @@ async function main(): Promise<void> {
             // the sync must already resolve skills through `.claude/skills`.
             makeAgentCompatibilityHook(sink),
             makeKataManifestHook(sink),
+            // Before the compat check reads settings.json? No: after. The merge
+            // only ADDS allow entries, which no compatibility contract asserts
+            // on, and running it late keeps the hook order above untouched.
+            makeAllowListHook(UPSTREAM_DIR, sink, false),
+            // The unresolved-doctrine ledger. Content-tracked, so unlike every
+            // other watched-file nudge it survives `keep project` and clears
+            // only when the section is actually written. Runs before the parity
+            // hook, which folds its one row in.
+            async () => { runFacts.doctrineDebt = runDoctrineLedger(process.cwd(), UPSTREAM_DIR); },
             async () => detectEnvVarDrift(UPSTREAM_DIR, sink, nonInteractive),
-            async () => upsertGitStrategyBlock(UPSTREAM_DIR, sink, nonInteractive),
-            makeYamlBackfillHook(QA_EPICS_BACKFILL, UPSTREAM_DIR, sink, nonInteractive),
+            // ONE schema-driven hook for `.agents/project.yaml`, replacing the
+            // two hand-written ones (`git_strategy`, `qa_epics`). The two
+            // below still target `.agents/jira-required.yaml`, which is a
+            // follow-up.
+            async () => backfillProjectYamlFromSchema(UPSTREAM_DIR, sink, nonInteractive),
             makeYamlBackfillHook(QA_ASSIGNEE_BACKFILL, UPSTREAM_DIR, sink, nonInteractive),
             makeYamlBackfillHook(SUBTASK_WORKTYPE_BACKFILL, UPSTREAM_DIR, sink, nonInteractive),
             // Legacy git-tracked PBI cache detection: the recipe goes to its

@@ -1,24 +1,36 @@
 /**
  * KATA Architecture - Environment Variables Configuration
  *
- * SINGLE SOURCE OF TRUTH for all environment variables.
- * This is the ONLY file that should read process.env.
+ * PROJECT-OWNED. `bun run up` never overwrites this file: every project adapts
+ * its environments, its URLs, its credential map and its auth endpoints, and
+ * that adaptation is the point.
+ *
+ * The synced half is `config/variables.core.ts`. It holds the `.env` bootstrap,
+ * the Atlassian instance-resolver wiring, and the TMS / browser / reporting
+ * blocks that synced code reads. Those used to live here, which meant an
+ * adapted copy of this file stopped receiving resolver fixes — and the resolver
+ * feeds `config.tms.jira.url`, the host the Jira-Direct TMS provider WRITES
+ * results back onto. A stale host there does not fail loudly; it writes to the
+ * wrong site in silence.
+ *
+ * WHAT TO EDIT HERE: `Environment`, `UserRole`, `envDataMap`,
+ * `userCredentialsMap`, `resolveTestUser()`, and the `auth` block. Everything else is imported and should be changed upstream.
  *
  * Bun automatically loads .env files - no dotenv dependency needed.
- * But the Playwright VSCode extension requires reading process.env as Node.js, so we use loadEnvFile()
+ * But the Playwright VSCode extension requires reading process.env as Node.js,
+ * so the core calls loadEnvFile() at import time.
  *
  * Usage:
  *   import { config, env } from '@variables';
  */
 
-// Load .env file into process.env (Playwright VSCode extension needs it)
-// In CI, env vars come from GitHub Secrets, so .env doesn't exist - hence try/catch
-try {
-  process.loadEnvFile();
-}
-catch {
-  // .env file doesn't exist (expected in CI environments)
-}
+import {
+  BROWSER_CONFIG,
+  CORE_ENV,
+  REPORTING_CONFIG,
+  TMS_CONFIG,
+} from './variables.core';
+
 // ============================================
 // Environment Type Definitions
 // ============================================
@@ -31,70 +43,18 @@ export type Environment = 'local' | 'staging'; // Add more when needed (e.g., 'p
 export type UserRole = 'user' | 'viewer' | 'member' | 'admin' | 'owner';
 
 // ============================================
-// Destructure Environment Variables (Single Access)
+// Test-User Credentials (variables from .env)
+// Which variable holds which environment's credentials is project vocabulary,
+// so the read stays here rather than in the synced core.
+// After validation, current environment credentials are guaranteed to exist.
 // ============================================
 
 const {
-  // === Environment Detection ===
-  TEST_ENV = 'local', // Used: env.current, selects URLs and credentials
-  CI, // Used: env.isCI (global.setup, KataReporter)
-  BUILD_ID, // Used: env.buildId (jiraSync)
-
-  // === Test User Credentials (only current TEST_ENV required) ===
   LOCAL_USER_EMAIL, // Required if TEST_ENV=local
   LOCAL_USER_PASSWORD, // Required if TEST_ENV=local
   STAGING_USER_EMAIL, // Required if TEST_ENV=staging
   STAGING_USER_PASSWORD, // Required if TEST_ENV=staging
-
-  // === TMS Configuration ===
-  TMS_PROVIDER = 'xray', // Used: config.tms.provider (jiraSync) - 'xray' | 'jira'
-  AUTO_SYNC = 'false', // Used: config.tms.autoSync (jiraSync, global.teardown)
-
-  // === Xray Cloud (required only if TMS_PROVIDER=xray AND AUTO_SYNC=true) ===
-  XRAY_CLIENT_ID = '', // Required if AUTO_SYNC=true (jiraSync)
-  XRAY_CLIENT_SECRET = '', // Required if AUTO_SYNC=true (jiraSync)
-  XRAY_PROJECT_KEY = '', // Used: config.tms.xray.projectKey (jiraSync)
-
-  // === Atlassian credentials (single source of truth) ===
-  // Used by MCP, acli, xray-cli, scripts/sync-jira-*.ts, cli/doctor.ts and
-  // the Jira-Direct TMS provider. Required only if TMS_PROVIDER=jira AND
-  // AUTO_SYNC=true (or when using MCP / acli / scripts locally).
-  ATLASSIAN_URL = '',
-  ATLASSIAN_EMAIL = '',
-  ATLASSIAN_API_TOKEN = '',
-  // === Jira-specific operational params (NOT credentials) ===
-  // Optional override. Left empty on purpose: custom-field ids are per-instance
-  // data and must not be hardcoded here (see the `acli` skill, anti-pattern T2).
-  // When empty, it resolves at runtime from `.agents/jira-fields.json` -> the
-  // `test_status` slug. Regenerate that catalog with `bun run jira:sync-fields --force`.
-  JIRA_TEST_STATUS_FIELD = '', // Used: config.tms.jira.testStatusField
-
-  // === Browser Configuration ===
-  HEADLESS = 'true', // Used: config.browser.headless (playwright.config)
-  DEFAULT_TIMEOUT = '30000', // Used: config.browser.defaultTimeout (playwright.config, ApiBase)
-
-  // === Reporting Configuration ===
-  ALLURE_RESULTS_DIR = './allure-results', // Used: config.reporting.allureResultsDir (playwright.config)
-  SCREENSHOT_ON_FAILURE = 'true', // Used: config.reporting.screenshotOnFailure (playwright.config)
-  VIDEO_ON_FAILURE = 'true', // Used: config.reporting.videoOnFailure (playwright.config, CI only)
 } = process.env;
-
-// ============================================
-// Environment Detection
-// ============================================
-
-export const env = {
-  current: TEST_ENV as Environment,
-  isLocal: TEST_ENV === 'local' || TEST_ENV === undefined,
-  isStaging: TEST_ENV === 'staging',
-  isCI: CI === 'true',
-  buildId: BUILD_ID ?? 'local',
-} as const;
-
-// ============================================
-// Test-User Credentials Mapping (variables from .env)
-// After validation, current environment credentials are guaranteed to exist
-// ============================================
 
 const userCredentialsMap: Record<Environment, { email: string, password: string }> = {
   local: {
@@ -108,12 +68,24 @@ const userCredentialsMap: Record<Environment, { email: string, password: string 
 };
 
 // ============================================
+// Environment Detection
+// ============================================
+
+export const env = {
+  ...CORE_ENV,
+  current: CORE_ENV.current as Environment,
+  isLocal: CORE_ENV.current === 'local',
+  isStaging: CORE_ENV.current === 'staging',
+} as const;
+
+// ============================================
 // Role-aware credential resolution (multi-user per environment)
 // ============================================
 //
 // Reads role-scoped env vars on demand: {ENV}_{ROLE}_EMAIL, {ENV}_{ROLE}_PASSWORD
 // and {ENV}_{ROLE}_API_TOKEN. The 'user' role keeps the legacy {ENV}_USER_* keys.
-// This is the only place that reads process.env, preserving the single-source rule.
+// Like the credential map above, this read stays in the project half: role and
+// variable names are project vocabulary, never the synced core's.
 //
 // Examples:
 //   resolveTestUser('user')             → LOCAL_USER_EMAIL / LOCAL_USER_PASSWORD
@@ -186,33 +158,8 @@ export const config = {
   // Test User (configure in .env)
   testUser: envData.user,
 
-  // TMS
-  tms: {
-    provider: TMS_PROVIDER as 'xray' | 'jira' | 'none',
-    autoSync: AUTO_SYNC === 'true',
-    xray: {
-      clientId: XRAY_CLIENT_ID,
-      clientSecret: XRAY_CLIENT_SECRET,
-      projectKey: XRAY_PROJECT_KEY,
-    },
-    jira: {
-      url: ATLASSIAN_URL,
-      user: ATLASSIAN_EMAIL,
-      apiToken: ATLASSIAN_API_TOKEN,
-      testStatusField: JIRA_TEST_STATUS_FIELD,
-    },
-  },
-
-  // Browser
-  browser: {
-    headless: HEADLESS !== 'false',
-    defaultTimeout: Number.parseInt(DEFAULT_TIMEOUT, 10),
-  },
-
-  // Reporting
-  reporting: {
-    allureResultsDir: ALLURE_RESULTS_DIR,
-    screenshotOnFailure: SCREENSHOT_ON_FAILURE !== 'false',
-    videoOnFailure: VIDEO_ON_FAILURE !== 'false',
-  },
+  // TMS / Browser / Reporting — synced (config/variables.core.ts)
+  tms: TMS_CONFIG,
+  browser: BROWSER_CONFIG,
+  reporting: REPORTING_CONFIG,
 } as const;

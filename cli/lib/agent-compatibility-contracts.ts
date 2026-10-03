@@ -306,20 +306,43 @@ function stripTrailingCommas(source: string): string {
   return result;
 }
 
-const PLACEHOLDER = /\$\{([A-Z][A-Z0-9_]*)\}|\{env:([A-Z][A-Z0-9_]*)\}/g;
+/**
+ * OpenCode's `{file:<path>/<VAR>}` form, which substitutes a FILE'S CONTENTS.
+ *
+ * It belongs here because it is a DEPENDENCY, not a literal.
+ * `{file:.auth/opencode/TAVILY_API_KEY}` says the server needs TAVILY_API_KEY
+ * exactly as `{env:TAVILY_API_KEY}` does; only the delivery route differs, and
+ * `scripts/harness-env.ts` generates those files from `.env`. This checker exists
+ * to assert SEMANTIC parity across the three hosts, so reading the file form as
+ * an opaque literal reported the hosts as disagreeing when they agree. Teaching
+ * the normalizer this form is not loosening the contract, it is correcting a
+ * blind spot the contract always had, which only surfaced once something finally
+ * used the other route.
+ *
+ * WHAT KEEPS IT SAFE, and do not widen it: only an ALL-CAPS final path segment
+ * matches. A generic `{file:some/config.json}` or `{file:certs/ca.pem}` still
+ * reads as a literal, which is correct — those are files, not credentials named
+ * after a variable. Widening this pattern would start swallowing real literals.
+ */
+const FILE_REF = /\{file:(?:[^}]*\/)?([A-Z][A-Z0-9_]*)\}/g;
 
-/** OpenCode spells a placeholder `{env:VAR}`; compare it as `${VAR}`. */
+const PLACEHOLDER = /\$\{([A-Z][A-Z0-9_]*)\}|\{env:([A-Z][A-Z0-9_]*)\}|\{file:(?:[^}]*\/)?([A-Z][A-Z0-9_]*)\}/g;
+
+/** OpenCode spells a placeholder `{env:VAR}` or `{file:dir/VAR}`; compare both as `${VAR}`. */
 function canonicalPlaceholders(text: string): string {
-  return text.replace(/\{env:([A-Z][A-Z0-9_]*)\}/g, (_match, name: string) => ref(name));
+  return text
+    .replace(/\{env:([A-Z][A-Z0-9_]*)\}/g, (_match, name: string) => ref(name))
+    .replace(FILE_REF, (_match, name: string) => ref(name));
 }
 
-/** Every `${VAR}` / `{env:VAR}` referenced anywhere inside `value`. */
+/** Every `${VAR}` / `{env:VAR}` / `{file:dir/VAR}` referenced anywhere inside `value`. */
 function placeholderNames(value: unknown): string[] {
   const names = new Set<string>();
   const visit = (entry: unknown): void => {
     if (typeof entry === 'string') {
       for (const match of entry.matchAll(PLACEHOLDER)) {
-        names.add(match[1] ?? match[2]);
+        const name = match[1] ?? match[2] ?? match[3];
+        if (name !== undefined) { names.add(name); }
       }
     }
     else if (Array.isArray(entry)) {
@@ -552,6 +575,21 @@ function personalAbsolutePath(command: string): boolean {
   return /(?:^|[\s"'])(?:\/Users\/|\/home\/|[A-Za-z]:[\\/]Users[\\/])/.test(command);
 }
 
+/**
+ * The repository-relative script a hook command executes, or null when the
+ * command names none.
+ *
+ * Every adapter reaches the emitter through a root placeholder — `$CLAUDE_PROJECT_DIR`
+ * for Claude, `$root` for both Codex forms — so whatever follows that placeholder IS
+ * the repository-relative path, wherever the emitter happens to live. Deriving it
+ * rather than hardcoding `.agents/hooks/` is the point: a rename of the emitter is
+ * exactly what this is here to catch.
+ */
+export function hookScriptPath(command: string): string | null {
+  const match = /(?:\$CLAUDE_PROJECT_DIR\/|\$root\/|\$root\s+')([^"')]+\.m?js)/.exec(command);
+  return match === null ? null : match[1];
+}
+
 function readHookCommand(settings: JsonObject, host: 'claude' | 'codex'): JsonObject {
   const hooks = object(settings.hooks, `${host} hooks`);
   const event = hooks.UserPromptSubmit;
@@ -601,6 +639,20 @@ export function validateHookCompatibility(root = process.cwd()): string[] {
       if (personalAbsolutePath(command)) {
         errors.push(`${host} hook command contains an absolute personal path.`);
       }
+      // `.claude/settings.json` and `.codex/hooks.json` are bootstrap-only: the
+      // updater ships them once and never overwrites them, so an upstream rename
+      // of the emitter leaves a downstream project pointing at a file that no
+      // longer exists. The hook is what injects the `AGENT IDENTITY:` line that
+      // git-flow-master copies into the mandatory commit trailers, so that
+      // failure is silent trailer loss rather than an error. Resolve the path
+      // the adapter actually carries, not the one the constant above pins.
+      const script = hookScriptPath(command);
+      if (script === null) {
+        errors.push(`${host} hook command does not name a repository-relative hook script.`);
+      }
+      else if (!existsSync(join(resolvedRoot, script))) {
+        errors.push(`${host} hook command points at a file that does not exist: ${script}`);
+      }
     }
 
     const shared = readFileSync(join(resolvedRoot, '.agents', 'hooks', 'personality-reinject.mjs'), 'utf8');
@@ -642,6 +694,66 @@ export function validateHookCompatibility(root = process.cwd()): string[] {
     errors.push(error instanceof Error ? error.message : String(error));
   }
 
+  return errors;
+}
+
+/**
+ * Every scoped config block `eslint.config.base.js` exports must be wired into
+ * `eslint.config.js`.
+ *
+ * THE HOLE THIS CLOSES. The base is SYNCED, so a new block reaches every
+ * project on the next `bun run up`. `eslint.config.js` is on the protected
+ * watchlist and is NEVER overwritten, and the wiring — importing the block and
+ * passing it to `antfu(...)` — lives only there. So upstream can ship a rule
+ * that lands on disk, exports cleanly, and enforces NOTHING, while
+ * `lint:check` stays green and the parity report shows at most a
+ * non-blocking drift row. Measured on this repo: `CLI_IMPORT_CLOSURE` has
+ * carried that hole since it was introduced, and `KATA_IMPORT_ALIASES`
+ * inherited it the day it was added.
+ *
+ * This is a NAME check on purpose. Verifying the blocks actually take effect
+ * would mean executing the consumer's flat config, which depends on its
+ * plugins resolving — a check that cannot run is worse than a coarse one that
+ * does. A project is free to narrow a block's `files` afterwards; it is not
+ * free to drop it silently.
+ */
+export function validateEslintBlockWiring(root = process.cwd()): string[] {
+  const basePath = join(root, 'eslint.config.base.js');
+  const consumerPath = join(root, 'eslint.config.js');
+  if (!existsSync(basePath) || !existsSync(consumerPath)) { return []; }
+
+  let base: string;
+  let consumer: string;
+  try {
+    base = readFileSync(basePath, 'utf8');
+    consumer = readFileSync(consumerPath, 'utf8');
+  }
+  catch { return []; }
+
+  // Scoped blocks are SCREAMING_SNAKE exports; `BASE_ESLINT_OPTIONS` is the
+  // options object spread into the first argument, not a block, so it is
+  // excluded by name.
+  const blocks = [...base.matchAll(/^export const ([A-Z][A-Z0-9_]*)\s*=/gm)]
+    .map(m => m[1])
+    .filter(name => name !== 'BASE_ESLINT_OPTIONS');
+
+  // Comments are stripped before the search, and the search is word-bounded.
+  // Both matter, and the first one was a live hole the moment this check was
+  // written: `eslint.config.js`'s own JSDoc says "Extra project-only config
+  // blocks go after `CLI_IMPORT_CLOSURE`", so a raw `includes` found that name
+  // in prose and passed a consumer that had stopped wiring the block at all.
+  // The word boundary closes the second: without it, wiring
+  // `CLI_IMPORT_CLOSURE_EXTRA` silently satisfies `CLI_IMPORT_CLOSURE`.
+  const code = consumer
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1');
+
+  const errors: string[] = [];
+  for (const name of blocks) {
+    if (!new RegExp(`\\b${name}\\b`).test(code)) {
+      errors.push(`eslint.config.js does not wire ${name} from eslint.config.base.js: the rule ships but enforces nothing. Add it to the import and to the antfu(...) call.`);
+    }
+  }
   return errors;
 }
 

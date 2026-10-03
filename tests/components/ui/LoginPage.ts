@@ -14,6 +14,8 @@
  * 5. SUCCESS      → URL leaves /login and lands on /projects
  */
 
+import type { Locator } from '@playwright/test';
+
 import type { TestContextOptions } from '@TestContext';
 
 import { expect } from '@playwright/test';
@@ -56,7 +58,27 @@ export class LoginPage extends UiBase {
     // Existing account → password step is revealed after check-email resolves
     const passwordInput = this.page.getByTestId('login-password');
     await expect(passwordInput).toBeVisible({ timeout: 15000 });
-    await passwordInput.fill(password);
+    await this.fillSecret(passwordInput, password);
+  }
+
+  /**
+   * Set a secret input value without leaking it into report step titles.
+   *
+   * `locator.fill(value)` renders its step as `Fill "<value>"`, and that title
+   * lands verbatim in the Allure and HTML reports (CI artifacts of a public
+   * repo). Playwright has no option to redact it, so the value is set through
+   * the native setter + an `input` event instead: React sees a normal change,
+   * and the step renders as a plain `Evaluate`.
+   */
+  private async fillSecret(input: Locator, value: string): Promise<void> {
+    await input.focus();
+    await input.evaluate((el, secret) => {
+      // Native setter with `el` as receiver, so React's value tracker registers the change
+      Reflect.set(HTMLInputElement.prototype, 'value', secret, el);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+    await expect(input).not.toHaveValue('');
   }
 
   // ============================================
@@ -86,7 +108,7 @@ export class LoginPage extends UiBase {
    * @param email - Account email
    * @param password - Account password
    */
-  @atc('BK-101')
+  @atc('BK-313')
   async loginAs(email: string, password: string): Promise<void> {
     await this.fillEmailFirstForm(email, password);
     await this.page.getByTestId('login-signin').click();
@@ -101,17 +123,22 @@ export class LoginPage extends UiBase {
    *
    * IMPORTANT: Call goto() before this ATC. Use an EXISTING email with a
    * WRONG password so the email-first flow reveals the password step.
-   * Submits and verifies the user stays on /login (no redirect).
+   * Submits and verifies the inline error alert is shown and the user stays
+   * on /login (no redirect).
    *
    * @param email - Existing account email
    * @param password - Wrong password
    */
-  @atc('BK-102')
+  @atc('BK-314')
   async loginWithInvalidCredentials(email: string, password: string): Promise<void> {
     await this.fillEmailFirstForm(email, password);
     await this.page.getByTestId('login-signin').click();
 
-    // Fixed assertion - failed sign-in keeps the user on the login page
+    // Fixed assertions - inline error alert (data-testid="login-error") is shown
+    // and the failed sign-in keeps the user on the login page
+    await expect(
+      this.page.getByRole('alert').filter({ hasText: 'That email or password is incorrect.' }),
+    ).toBeVisible();
     await expect(this.page).toHaveURL(/\/login/);
   }
 }

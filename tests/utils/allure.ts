@@ -45,6 +45,55 @@ export interface AttachRequestResponseArgs {
 }
 
 // ============================================
+// Secret Masking
+// ============================================
+
+/**
+ * Report output is uploaded as CI artifacts from a public repo, so request and
+ * response bodies are masked before they reach Allure. Keys that name a secret
+ * lose their value; strings that ARE a secret (PAT, Bearer header, or the exact
+ * value of a secret-looking env var) are masked wherever they appear.
+ */
+const MASK = '***';
+const SENSITIVE_KEY = /password|secret|token|authorization|api_?key/i;
+const SENSITIVE_ENV_NAME = /PASSWORD|SECRET|TOKEN|API_KEY/i;
+const SECRET_ENV_VALUES = Object.entries(process.env)
+  .filter(([name, value]) => SENSITIVE_ENV_NAME.test(name) && value !== undefined && value.length >= 4)
+  .map(([, value]) => value as string);
+
+function maskString(value: string): string {
+  let masked = value
+    .replace(/Bearer\s+\S+/gi, `Bearer ${MASK}`)
+    .replace(/bk_pat_[\w.-]+/g, MASK);
+  for (const secret of SECRET_ENV_VALUES) {
+    masked = masked.split(secret).join(MASK);
+  }
+  return masked;
+}
+
+/**
+ * Deep-copy `data` with every secret masked. Non-secret data (emails, ids,
+ * names) is kept as-is so the attachment stays useful for debugging.
+ */
+export function maskSecrets(data: unknown): unknown {
+  if (typeof data === 'string') {
+    return maskString(data);
+  }
+  if (Array.isArray(data)) {
+    return data.map(item => maskSecrets(item));
+  }
+  if (data !== null && typeof data === 'object') {
+    return Object.fromEntries(
+      Object.entries(data).map(([key, value]) => [
+        key,
+        SENSITIVE_KEY.test(key) && value !== null && typeof value !== 'object' ? MASK : maskSecrets(value),
+      ]),
+    );
+  }
+  return data;
+}
+
+// ============================================
 // Filename Generation
 // ============================================
 
@@ -84,6 +133,7 @@ export function generateAllureFilename(args: AllureFilenameArgs): string {
 
 /**
  * Attach JSON data to Allure report with error handling.
+ * Secrets are masked first (see `maskSecrets`).
  *
  * Silently fails if Allure is not available (e.g., in setup projects).
  *
@@ -106,7 +156,8 @@ export async function attachJsonToAllure(args: AttachJsonArgs): Promise<void> {
       return;
     }
 
-    const content = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+    const masked = maskSecrets(data);
+    const content = typeof masked === 'string' ? masked : JSON.stringify(masked, null, 2);
     await allure.attachment(name, content, contentType);
   }
   catch {
