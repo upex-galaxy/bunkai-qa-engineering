@@ -227,4 +227,4 @@ orchestration:
 # ignored. Empty by default. Read directly by the updater (not a {{VAR}} source): the
 # nested list is skipped by vars:check like git_strategy and qa.qa_epics.
 updater:
-  protected_paths: [scripts/lint-skills.ts] # kept: protected for its 2 project-only STALE_PATH_ALLOWED entries (upstream example specs deleted at adapt time that skill bodies still cite) — see the note in the file
+  protected_paths: [scripts/lint-skills.ts] # kept: upstream copy plus project-only STALE_PATH_ALLOWED entries (2 example specs deleted at adapt time, and the maintainer-only .context/ADR/* + .context/api-architecture.md cites that synced skill bodies carry but this repo never receives) — see the notes in the file
