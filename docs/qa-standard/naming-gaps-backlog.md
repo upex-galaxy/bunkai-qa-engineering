@@ -6,7 +6,7 @@
 > favor of low-risk documentation; lint enforcement remains an optional future pass).
 >
 > **Ratification deltas vs the original proposals** (decided at implementation):
-> - **Gap 4 (ADR)** — manual allocation via the README Index (`max(NNNN)+1`); the `bun run adr:next`
+> - **Gap 4 (ADR)** — manual allocation via the README Index (`max(NNNN)+1`); the `adr:next`
 >   script was NOT built.
 > - **Gap 8 (test-execution folders)** — documented the EXISTING sync convention
 >   `test-executions/{TESTEXEC|RETESTEXEC}-{KEY}-{slug}.md` (NOT the rejected `{EXEC-KEY}-{ts}/`).
@@ -20,7 +20,7 @@
 | 1 | Test-data files | `{resource}-{variant}.json` → `users-valid.json`, `orders-boundary.json` | `test-automation/references/automation-standards.md` (tests/data) |
 | 2 | Evidence / screenshots | `{KEY}-step{NN}-{action}.png` → `UPEX-101-step3-error-shown.png` | `sprint-testing/references/reporting-templates.md` (evidence/) |
 | 3 | Mock / stub responses | `tests/data/mocks/{endpoint}/{method}.{status}.json` → `auth/login/200.json` | `test-automation/references` (mocking) |
-| 4 | ADR file numbering | `ADR-{NNNN}-{slug}.md` + a `bun run adr:next` number pre-allocator | `.context/ADR/README.md` · `agentic-qa-core/references/adr-doctrine.md` |
+| 4 | ADR file numbering | `ADR-{NNNN}-{slug}.md` + an `adr:next` number pre-allocator (not built, see Gap 4 above) | `.context/ADR/README.md` · `agentic-qa-core/references/adr-doctrine.md` |
 | 5 | Env identifiers | `local · qa · staging · production` (lowercase, no abbreviations) | `.agents/project.yaml` `environments` · CLAUDE.md §7 |
 | 6 | Test module folders | `{domain-plural}/` kebab-case → `orders/`, `user-management/` | `test-automation/references/automation-standards.md` (tests/e2e, tests/integration) |
 | 7 | Allure suite labels | derive from the Playwright tag (`@smoke`/`@regression`/…) — single source, no duplication | `regression-testing/SKILL.md` · `test-automation` (tags) |

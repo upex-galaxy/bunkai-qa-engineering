@@ -83,8 +83,8 @@ The installer is self-diagnosing: every stage prints the exact install URL or co
 | ---------------------------------------------------------------------------------- | ----------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | **Bun**                                                                            | `>= 1.0.0`  | `bun run setup:doctor --preflight` (Step 0) | `✗ Preflight failed · Bun X.Y.Z is too old (need >= 1.0.0) · Fix: bun upgrade`                  |
 | **`node_modules/@inquirer/prompts`** (proxy for `bun install`)                     | —           | Preflight (Step 0)                          | `✗ Preflight failed · Missing node_modules/@inquirer/prompts · Fix: bun install`                |
-| **Agent CLI** — Claude Code (`~/.claude/`) **or** OpenCode (`~/.config/opencode/`) | latest      | `install.ts:556` (Step 4)                   | `✗ No agents detected. Install Claude Code or OpenCode and re-run.` followed by both docs URLs  |
-| `git`                                                                              | any         | Scaffolder (`runners.ts:23`) + Husky hooks  | `ENVIRONMENT · git is required but not found on PATH. · Install: https://git-scm.com/downloads` |
+| **Agent CLI** — Claude Code (`~/.claude/`) **or** OpenCode (`~/.config/opencode/`) | latest      | `detectAgents` in `cli/install.ts` (Step 4) | `✗ No agents detected. Install Claude Code or OpenCode and re-run.` followed by both docs URLs  |
+| `git`                                                                              | any         | Scaffolder (`runners.ts`) + Husky hooks     | `ENVIRONMENT · git is required but not found on PATH. · Install: https://git-scm.com/downloads` |
 | `tar`                                                                              | any         | Scaffolder (`download.ts`)                  | `ENVIRONMENT · tar is required to extract the template tarball.`                                |
 
 The agent-CLI check is the gotcha that bites first-timers most often: a missing `gh` or `acli` just yields a warning later, but a missing agent CLI hard-stops Step 4. Install Claude Code or OpenCode first, then run `bun run setup`.
@@ -93,7 +93,7 @@ The agent-CLI check is the gotcha that bites first-timers most often: a missing 
 
 | Tool          | Min version | Enforced at                   | What happens on miss                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ------------- | ----------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **gentle-ai** | `>= 1.26.5` | `install.ts:500-545` (Step 2) | Prints `gentle-ai not detected on PATH.` then offers two paths: (a) show install commands (`brew install gentle-ai` on macOS, `go install github.com/Gentleman-Programming/gentle-ai/cmd/gentle-ai@latest` on Linux) and exit, or (b) continue without gentle-ai. Older-than-min version triggers `gentle-ai X.Y.Z is older than required 1.26.5. Upgrade with: gentle-ai update` and the setup continues with the warning. |
+| **gentle-ai** | `>= 1.26.5` | `detectGentleAi` in `cli/install.ts` (Step 2) | Prints `gentle-ai not detected on PATH.` then offers two paths: (a) show install commands (`brew install gentle-ai` on macOS, `go install github.com/Gentleman-Programming/gentle-ai/cmd/gentle-ai@latest` on Linux) and exit, or (b) continue without gentle-ai. Older-than-min version triggers `gentle-ai X.Y.Z is older than required 1.26.5. Upgrade with: gentle-ai update` and the setup continues with the warning. |
 
 If you skip gentle-ai, Engram persistent memory is NOT installed (no cross-session memory). The locally committed QA workflow skills (`/shift-left-testing`, `/sprint-testing`, `/test-automation`, `/test-documentation`, `/regression-testing`, `/agentic-qa-core`, vendored `/judgment-day`) keep working, and the 7 canonical MCPs are still configured.
 
@@ -101,9 +101,9 @@ If you skip gentle-ai, Engram persistent memory is NOT installed (no cross-sessi
 
 These CLIs are **not optional** for the workflow — each one is consumed by a specific skill (`gh` for `/git-flow-master` + `/regression-testing`, `acli` for `/acli` + `/shift-left-testing` + `/sprint-testing` + `/test-documentation`, `playwright-cli` for `/playwright-cli`, `resend` for `/resend-cli`, `jq` for `acli ... --json | jq ...` pipelines). The installer cannot guess which skills you will run, so it ships them as **lazy-required**: a missing binary surfaces as a warning during Step 10 but never blocks setup. Install them up front if you plan to use the whole stack, or on-demand when the owning skill surfaces a missing-binary error.
 
-The check itself is a **PATH probe** (`which <name>` on POSIX, `where <name>` on Windows — see `install.ts:403`). Presence only — no version compare, no auto-install.
+The check itself is a **PATH probe** (`which <name>` on POSIX, `where <name>` on Windows — see `which` in `cli/install.ts`). Presence only — no version compare, no auto-install.
 
-`install.ts` Step 10 (`verifyExternalClis`) iterates the `EXTERNAL_CLIS` array (`install.ts:185`) and prints a per-CLI status table:
+`install.ts` Step 10 (`verifyExternalClis`) iterates the `EXTERNAL_CLIS` array in `cli/install.ts` and prints a per-CLI status table:
 
 ```text
 CLI              Status      Purpose
@@ -132,7 +132,7 @@ Missing per-skill CLIs do not exit the installer. Install them lazily when the o
 
 ### MCP credentials — 7 env vars filled into `.env`
 
-`cli/doctor.ts:39` declares `REQUIRED_VARS` consumed by the 6 canonical MCPs plus the ATLASSIAN_* family used by acli + scripts/sync-jira-*.ts. Missing keys do not block setup, but every `bun run setup:doctor` will list them under `pending_actions` with the canonical `where` URL (token-generation page) until they are filled.
+`VAR_MANIFEST` in `cli/lib/variables-manifest.ts` (read by `cli/doctor.ts`) declares the vars consumed by the 6 canonical MCPs plus the ATLASSIAN_* family used by acli + scripts/sync-jira-*.ts. Missing keys do not block setup, but every `bun run setup:doctor` will list them under `pending_actions` with the canonical `where` URL (token-generation page) until they are filled.
 
 ```
 TAVILY_API_KEY                                  → https://app.tavily.com/ → API keys
@@ -156,7 +156,7 @@ The OpenAPI MCP is schema-read-only — no credential is injected into it. Authe
 
 ## Running setup from an AI agent
 
-Most users today ask an AI (Claude Code, OpenCode, Cursor, …) to drive the setup instead of running it by hand. The installer is built for both flows; the AI path uses a few specific entry points:
+Most users ask an AI (Claude Code, OpenCode, Cursor, …) to drive the setup instead of running it by hand. The installer is built for both flows; the AI path uses a few specific entry points:
 
 ### `bun run setup:doctor` — read-only health check
 
@@ -493,9 +493,7 @@ What you keep: every workflow skill committed in this repo (`/sprint-testing`, `
 
 - [CLAUDE.md § Quick Start](./CLAUDE.md) — entry point for `bun run setup` and `/agentic-qa-onboard`
 - [.claude/skills/agentic-qa-onboard/SKILL.md](./.claude/skills/agentic-qa-onboard/SKILL.md) — the orientation skill itself
-- [docs/setup/README.md](./docs/setup/README.md) — index of setup guides in this repo
-- [docs/setup/jira-setup-guide.md](./docs/setup/jira-setup-guide.md) — Jira/Atlassian credentials + acli login flow
-- [docs/setup/mcp-dbhub.md](./docs/setup/mcp-dbhub.md) / [mcp-openapi.md](./docs/setup/mcp-openapi.md) — MCP-specific setup notes
+- `bun run docs` — the human documentation site (`docs/`); its Setup section covers [Jira and Xray](./docs/core/setup/jira-xray.html), [DBHub](./docs/core/setup/dbhub.html) and [OpenAPI](./docs/core/setup/openapi.html)
 
 ---
 

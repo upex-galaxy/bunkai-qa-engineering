@@ -1,5 +1,7 @@
 # Ola F · Deudas de doctrina del boilerplate + runner de evals
 
+<!-- volatile-ok-file: dated worker report (2026-09-15); its file:line cites and "hoy" record the boilerplate at that date -->
+
 Worker de la Ola F del refactor del IQL (`agentic-qa-boilerplate`, worktree `iql-ola-f-boilerplate`,
 rama `saiotest/iql-ola-f-boilerplate`, base `main` @ `9be1309`). Fuente: `.claude/briefs/F7-boilerplate.md`.
 Coordinador: sesión `IQL-090-ola-f` (repo webapp).
@@ -150,8 +152,8 @@ dentro del snippet es parte del ejemplo doctrinal, no una promesa de que ese arc
 
 | sourcePath roto | Apuntaba a | Corregido a | Verificado |
 |---|---|---|---|
-| `tests/components/ApiBase.ts` | (no existe) | `tests/components/api/ApiBase.ts` | Contiene el método `apiPOST` citado en el snippet |
-| `tests/components/UiBase.ts` | (no existe) | `tests/components/ui/UiBase.ts` | Contiene el getter `page()` fail-fast citado en el snippet |
+| tests/components/ApiBase.ts | (no existe) | `tests/components/api/ApiBase.ts` | Contiene el método `apiPOST` citado en el snippet |
+| tests/components/UiBase.ts | (no existe) | `tests/components/ui/UiBase.ts` | Contiene el getter `page()` fail-fast citado en el snippet |
 
 Los otros 12 `sourcePath` resolvían correctamente a un archivo real:
 

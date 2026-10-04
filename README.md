@@ -128,8 +128,8 @@ POSTMAN_API_KEY
 | **Start a new project — magic command (recommended)** | `bunx create-agentic-qa@latest <your-repo-name>` — official scaffolder ([npm](https://www.npmjs.com/package/create-agentic-qa))                                                                               |
 | **Start a new project — GitHub "Use this template"**  | Click [**Use this template**](https://github.com/upex-galaxy/agentic-qa-boilerplate/generate) → clone your new repo → `bun install && bun run setup` (see [Other ways to start](#other-ways-to-start)) |
 | **Contribute to the boilerplate itself**              | `git clone …` then `bun install && bun run setup` (see [Other ways to start](#other-ways-to-start))                                                                                                    |
-| **Get oriented before installing**                    | `bun run onboarding` — opens `docs/onboarding.html` with sidebar nav                                                                                                                                   |
-| **Understand the methodology**                        | [`docs/agentic-quality-engineering.md`](docs/agentic-quality-engineering.md)                                                                                                                           |
+| **Get oriented before installing**                    | `bun run onboarding` — opens the docs site on its "Empezar aquí" page (`docs/core/empezar-aqui.html`)                                                                                                   |
+| **Understand the methodology**                        | `bun run docs` → Metodología ([IQL](docs/core/metodologia/iql.html), [how this repo implements it](docs/core/metodologia/este-repo.html))                                                                  |
 | **See what `bun run setup` configures**               | [`INSTALLER.md`](INSTALLER.md) — run `bun cli/doctor.ts` after setup                                                                                                                                   |
 | **You're an AI agent**                                | [`CLAUDE.md`](CLAUDE.md) (auto-loaded each session)                                                                                                                                                    |
 
@@ -338,7 +338,7 @@ XRAY_PROJECT_KEY=
 
 ### (b) Runtime URLs — `config/variables.ts`
 
-Update `envDataMap` in `config/variables.ts` with your application URLs. The `Environment` type currently accepts `local` and `staging`; extend the type when you need a third environment.
+Update `envDataMap` in `config/variables.ts` with your application URLs. The `Environment` type accepts `local` and `staging`; extend the type when you need a third environment.
 
 ```typescript
 const envDataMap: Record<
@@ -382,7 +382,7 @@ bun run test:ui
 # Run specific test types
 bun run test:e2e           # E2E tests only
 bun run test:integration   # API tests only
-bun run test:e2e:critical  # Tests marked @critical
+bun run test:smoke         # smoke / @critical tests
 ```
 
 <br />
@@ -532,7 +532,7 @@ See the `/test-automation` skill (`references/kata-architecture.md`) for complet
 | `bun run test:headed`       | Run with browser visible |
 | `bun run test:e2e`          | Run E2E tests only       |
 | `bun run test:integration`  | Run API tests only       |
-| `bun run test:e2e:critical` | Run @critical tests      |
+| `bun run test:smoke`        | Run smoke / @critical    |
 | `bun run test:retries`      | Run with 2 retries       |
 | `bun run test:last-failed`  | Re-run failed tests      |
 
@@ -541,9 +541,8 @@ See the `/test-automation` skill (`references/kata-architecture.md`) for complet
 | Script                         | Description              |
 | ------------------------------ | ------------------------ |
 | `bun run test:report`          | Open Playwright report   |
-| `bun run test:allure`          | Generate and open Allure |
-| `bun run test:allure:generate` | Generate Allure only     |
-| `bun run test:allure:open`     | Open existing Allure     |
+| `bun run allure:generate`      | Generate Allure only     |
+| `bun run allure:open`          | Open existing Allure     |
 | `bun run test:sync`            | Sync results to TMS      |
 
 ### Code Quality
@@ -698,8 +697,8 @@ BUILD_ID
 | `/test-documentation`        | `/test-documentation`         | **Stage 4**. Analyze, prioritize (ROI) and document test cases in the TMS. Produces Candidate / Manual / Deferred verdicts.                                                                                                                                                                          |
 | `/test-automation`           | `/test-automation`            | **Stage 5**. Plan → Code → Review automated tests on KATA + Playwright + TypeScript.                                                                                                                                                                                                                 |
 | `/regression-testing`        | `/regression-testing`         | **Stage 6**. Execute regression / smoke / sanity suites via CI/CD, classify failures, emit GO / CAUTION / NO-GO.                                                                                                                                                                                     |
-| `/playwright-cli`            | `/playwright-cli`             | Browser automation CLI: screenshots, tracing, video recording, session management, request mocking. _(community skill — installed at PROJECT level by `bun run install`; not committed in repo.)_                                                                                                    |
-| `/playwright-best-practices` | `/playwright-best-practices`  | Playwright + TypeScript reference: flaky-test fixes, POM vs fixtures, axe-core, auth/OAuth, perf budgets, i18n, component testing. Auto-loads in the Code phase of `/test-automation`. _(community skill by currents.dev — installed at PROJECT level by `bun run install`; not committed in repo.)_ |
+| `/playwright-cli`            | `/playwright-cli`             | Browser automation CLI: screenshots, tracing, video recording, session management, request mocking. _(community skill — installed at PROJECT level by `bun run setup`; not committed in repo.)_                                                                                                    |
+| `/playwright-best-practices` | `/playwright-best-practices`  | Playwright + TypeScript reference: flaky-test fixes, POM vs fixtures, axe-core, auth/OAuth, perf budgets, i18n, component testing. Auto-loads in the Code phase of `/test-automation`. _(community skill by currents.dev — installed at PROJECT level by `bun run setup`; not committed in repo.)_ |
 | `/xray-cli`                  | `/xray-cli`                   | Xray Cloud test management CLI: tests, executions, plans, JUnit/Cucumber/Xray JSON imports, project backup/restore.                                                                                                                                                                                  |
 | `/acli`                      | `/acli`                       | Atlassian CLI for Jira Cloud — resolves `[ISSUE_TRACKER_TOOL]` and (in Modality B) `[TMS_TOOL]`.                                                                                                                                                                                                     |
 | `/git-flow-master`           | (auto on git/PR intents)      | End-to-end Git operator. Auto-detects branching strategy. Owns branch / commit / push / PR / conflict / chained-PR.                                                                                                                                                                                  |

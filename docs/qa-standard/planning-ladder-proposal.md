@@ -1,5 +1,7 @@
 # QA Planning Ladder — Nomenclature Proposal (RATIFIED, pending implementation)
 
+<!-- volatile-ok-file: dated design proposal (ratified 2026-06-26); "today" means the naming in use before the ladder -->
+
 > **Status**: core decisions **RATIFIED** by the user (2026-06-26) — ready to propagate into the
 > skills' `references/*.md`, `.agents/project.yaml` (`qa.qa_epics`), the sync script, the
 > traceability doctrine, and the Naming Codex deck. Implementation not yet started.
