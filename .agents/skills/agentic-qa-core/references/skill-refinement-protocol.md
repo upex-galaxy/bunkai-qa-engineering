@@ -1,6 +1,6 @@
 # Skill Refinement Protocol — how a session proposes a lesson for a skill
 
-> Cited by: the session-close step of every workflow skill (`shift-left-testing`, `sprint-testing`, `test-documentation`, `test-automation`, `regression-testing`, `framework-development`) and by `skill-scaffold.md` (the context-skill template).
+> Cited by: the session-close step of every skill marked `metadata.stage_owner: true` in its frontmatter, and by `skill-scaffold.md` (the context-skill template).
 > Companion to `session-management.md` §3 (the companion file this protocol writes lives INSIDE the running skill's scope) and `upstream-feedback.md` (the path a refinement takes when the target skill is upstream-owned).
 
 A session that learns something mid-flight writes a **proposal**, never the skill. The live `SKILL.md` and its `references/` change only through a human OK, per entry, because a skill is not a note: it is committed, loaded into every future session by trigger, projected into every subagent briefing through `REGISTRY.md`, and, for an upstream skill, propagated to every consumer by `bun run up`. A wrong lesson in Engram is a bad recollection. A wrong lesson in a skill is a shipped regression.
@@ -24,7 +24,7 @@ Entry genre already in the repo: `orca-orchestration/references/gotchas.md` rows
 
 | Moment | Write | Owner |
 |---|---|---|
-| A lesson is noticed | Append ONE block (§3) to `.session/<active-workflow-slug>/<scope>/refinements.md` — a companion file inside the running skill's OWN scope (`session-management.md` §3 permits companions; nothing else under `.session/` is allowed) | the session, unprompted |
+| A lesson is noticed | Append ONE block (§3) to `<<PRIMARY_ROOT>>/.session/<active-workflow-slug>/<scope>/refinements.md` (the primary checkout, also from a worktree) — a companion file inside the running skill's OWN scope (`session-management.md` §3 permits companions; nothing else under `.session/` is allowed) | the session, unprompted |
 | Same moment | `mem_save` with `topic_key: skill-refinement/<target-slug>` so the proposal survives a wiped `.session/` | the session |
 | Session close | The session footer (`session-footer-contract.md` Part 2) gains one line: `Refinements proposed: N → <path>` (`0` and no path when none) | the session |
 | Review | The owner reads the file and answers **apply / drop per entry**. Never auto-applied. An entry without a measurement is dropped at review | human |

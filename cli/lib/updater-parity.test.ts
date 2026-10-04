@@ -21,17 +21,21 @@ import {
   diffNoIndex,
   diffStats,
   frameworkGatesNote,
+  harnessLevelMcpNote,
+  legacyPlaywrightProfileKeys,
   lintStagedNoStashNote,
   markdownSectionDelta,
   missingConfigBlocks,
   PATH_PREREQUISITES,
   persistArchivedSkillMarkers,
+  PLAYWRIGHT_CLI_CONFIG,
   prerequisiteFor,
   protectNote,
   readGitStrategyStamp,
   renderParityReport,
   RESOLVED_BY_APPLY_MARK,
   resolvedByApply,
+  retiredMcpNote,
   runVerdict,
   strictVerdict,
   structuralEvidence,
@@ -67,11 +71,7 @@ const META: ParityMeta = {
   promptFile: '.agents/prompts/parity-plan.md',
 };
 
-const MANIFEST = JSON.stringify({
-  version: 1,
-  wrapperHosts: ['claude', 'opencode'],
-  aliases: [{ alias: 'sync-ai-memory', skill: 'sync-ai-memory', mode: 'default', forwardArguments: true }],
-});
+const SHADOW_ERROR = 'Command shadows skill acli: .claude/commands/acli.md; a command with a skill\'s name hides the skill\'s instructions (`bun run agents:compat` moves it to .backups/shadowing-commands/)';
 
 /** A project + upstream pair with every finding type present. */
 function fixture(): { root: string, upstream: string, input: ParityInput } {
@@ -90,16 +90,12 @@ function fixture(): { root: string, upstream: string, input: ParityInput } {
   write(root, '.codex/config.toml', '[mcp_servers.context7]\ncommand = "x"\n\n[mcp_servers.acme]\ncommand = "y"\n');
   write(upstream, '.codex/config.toml', '[mcp_servers.context7]\ncommand = "x"\n\n[mcp_servers.n8n]\ncommand = "z"\n');
 
-  // Commands: one manifest wrapper, one overlay wrapper, one rogue wrapper per
-  // host. The compat check names the Claude one; the OpenCode one is found by
-  // the disk scan alone (as when the check could not run).
-  write(upstream, '.agents/compatibility/command-aliases.json', MANIFEST);
-  write(root, '.agents/compatibility/command-aliases.json', MANIFEST);
+  // Commands: the retired alias overlay is still on disk, its command is the
+  // project's own now; one command carries a skill's name and fails the
+  // contract, another was already moved aside by the compat hook this run.
   write(root, '.agents/compatibility/command-aliases.project.json', JSON.stringify({ version: 1, aliases: [{ alias: 'acme-deploy' }] }));
-  write(root, '.claude/commands/sync-ai-memory.md', 'wrapper\n');
-  write(root, '.claude/commands/acme-deploy.md', 'overlay wrapper\n');
-  write(root, '.claude/commands/rogue.md', 'nobody produced this\n');
-  write(root, '.opencode/commands/rogue.md', 'nobody produced this\n');
+  write(root, '.claude/commands/acme-deploy.md', 'project command\n');
+  write(root, '.claude/commands/acli.md', 'shadows the acli skill\n');
 
   // Skills: the migration archived a colliding copy.
   write(root, '.agents/skills/acli/SKILL.md', '---\nname: acli\n---\nupstream body\n');
@@ -119,14 +115,14 @@ function fixture(): { root: string, upstream: string, input: ParityInput } {
     compatErrors: [
       'MCP n8n missing from codex: declared in .mcp.json, absent from .codex/config.toml',
       'MCP acme present in codex only: declare it in .mcp.json or remove it from .codex/config.toml',
-      'claude command wrapper contains workflow prose: .claude/commands/sync-ai-memory.md',
-      'Command wrapper not declared in any manifest: .claude/commands/rogue.md; add it to .agents/compatibility/command-aliases.project.json or delete it',
+      SHADOW_ERROR,
       'claude hook command must be exactly: node "$CLAUDE_PROJECT_DIR/.agents/hooks/personality-reinject.mjs"',
     ],
     archivedSkills: ['acli'],
     archivedSkillsDir: join(root, '.template/pre-agents-migration/skills'),
     heldBack: [{ component: 'cli', lockCommit: 'deadbeefcafe' }, { component: 'docs', lockCommit: null }],
     envNewKeys: ['N8N_API_KEY', 'RESEND_API_KEY'],
+    shadowingCommandsMoved: ['.opencode/commands/acli.md'],
   };
   return { root, upstream, input };
 }
@@ -264,16 +260,14 @@ describe('section-level evidence', () => {
 
 describe('compat error classification', () => {
   test('surface and suggestion follow the wording', () => {
-    expect(compatErrorSurface('claude command wrapper contains workflow prose: .claude/commands/x.md')).toBe('commands');
-    expect(compatErrorSuggestion('claude command wrapper contains workflow prose: .claude/commands/x.md')).toBe('run agents:compat');
+    // A command with a skill's name is a skills problem, and the repair moves it.
+    expect(compatErrorSurface(SHADOW_ERROR)).toBe('skills');
+    expect(compatErrorSuggestion(SHADOW_ERROR)).toBe('run agents:compat');
     expect(compatErrorSurface('Claude skills alias missing: .claude/skills')).toBe('skills');
     expect(compatErrorSuggestion('Claude skills alias missing: .claude/skills')).toBe('run agents:compat');
     expect(compatErrorSurface('codex hook command must be exactly: …')).toBe('hooks');
     expect(compatErrorSuggestion('codex hook command must be exactly: …')).toBe('take upstream');
     expect(compatErrorSurface('opencode MCP n8n mismatch: expected {…}, found {…}')).toBe('mcp');
-    const stray = 'Command wrapper not declared in any manifest: .claude/commands/stray.md; add it to .agents/compatibility/command-aliases.project.json or delete it';
-    expect(compatErrorSurface(stray)).toBe('commands');
-    expect(compatErrorSuggestion(stray)).toBe('add to overlay');
   });
 });
 
@@ -337,10 +331,10 @@ describe('collectParityFindings', () => {
     expect(findings.filter(f => f.path === '.codex/config.toml')).toHaveLength(1);
     expect(findings.filter(f => f.surface === 'mcp')).toHaveLength(1);
 
-    const wrapper = byPath('.claude/commands/sync-ai-memory.md');
-    expect(wrapper.surface).toBe('commands');
-    expect(wrapper.blocking).toBe(true);
-    expect(wrapper.suggested).toBe('run agents:compat');
+    const shadow = byPath('.claude/commands/acli.md');
+    expect(shadow.surface).toBe('skills');
+    expect(shadow.blocking).toBe(true);
+    expect(shadow.suggested).toBe('run agents:compat');
 
     const hook = findings.find(f => f.surface === 'hooks' && f.blocking);
     expect(hook?.suggested).toBe('take upstream');
@@ -351,11 +345,18 @@ describe('collectParityFindings', () => {
     expect(archived.suggested).toBe('decide');
     expect(archived.diff).toContain('project body');
 
-    // A stray wrapper is ONE row per path: the one the compat check named is
-    // blocking, the one only the disk scan found is not; both say `add to overlay`.
-    const rogue = findings.filter(f => f.surface === 'commands' && f.suggested === 'add to overlay');
-    expect(rogue.map(f => [f.path, f.blocking])).toEqual([['.claude/commands/rogue.md', true], ['.opencode/commands/rogue.md', false]]);
-    for (const f of rogue) { expect(f.evidence).toBe('wrapper not produced by .agents/compatibility/command-aliases.json nor .agents/compatibility/command-aliases.project.json'); }
+    // The command the hook moved this run: informational, names the backup.
+    const moved = byPath('.opencode/commands/acli.md');
+    expect(moved.surface).toBe('skills');
+    expect(moved.blocking).toBe(false);
+    expect(moved.evidence).toContain('moved to .backups/shadowing-commands/.opencode/commands/acli.md');
+
+    // The retired overlay: ONE informational row; the command it declared is
+    // the project's own file now and never a row.
+    const overlay = byPath('.agents/compatibility/command-aliases.project.json');
+    expect(overlay.surface).toBe('components');
+    expect(overlay.blocking).toBe(false);
+    expect(overlay.evidence).toMatch(/^informational: command aliases are retired/);
     expect(findings.some(f => f.path === '.claude/commands/acme-deploy.md')).toBe(false);
 
     const held = byPath('.template/boilerplate.lock.json');
@@ -375,9 +376,7 @@ describe('collectParityFindings', () => {
   test('a fully aligned project yields zero findings', () => {
     const root = temporaryRoot();
     const upstream = temporaryRoot();
-    write(root, '.agents/compatibility/command-aliases.json', MANIFEST);
-    write(upstream, '.agents/compatibility/command-aliases.json', MANIFEST);
-    write(root, '.claude/commands/sync-ai-memory.md', 'wrapper\n');
+    write(root, '.claude/commands/acme-deploy.md', 'a project command with its own name\n');
     write(root, '.agents/project.yaml', 'git_strategy:\n  strategy: solo-main\n  meta:\n    strategy_source: chosen\n');
     const findings = collectParityFindings({
       root,
@@ -392,12 +391,41 @@ describe('collectParityFindings', () => {
     expect(findings).toEqual([]);
   });
 
-  test('stray wrappers need a manifest to compare against', () => {
+  test('a compat warning is one informational row on its file, never blocking, folded into an error row on the same file', () => {
     const root = temporaryRoot();
-    write(root, '.claude/commands/anything.md', 'x\n');
-    const findings = collectParityFindings({
+    const upstream = temporaryRoot();
+    write(root, '.agents/project.yaml', 'git_strategy:\n  strategy: solo-main\n  meta:\n    strategy_source: chosen\n');
+    const warning = 'codex MCP dbhub starts without the .env loader in .codex/config.toml: set command = "bunx" and put [...] before the current command and args (reason).';
+    const base = {
       root,
-      upstreamDir: temporaryRoot(),
+      upstreamDir: upstream,
+      drift: [],
+      archivedSkills: [],
+      archivedSkillsDir: join(root, '.template/pre-agents-migration/skills'),
+      heldBack: [],
+      envNewKeys: [],
+    };
+
+    const alone = collectParityFindings({ ...base, compatErrors: [], compatWarnings: [warning] });
+    expect(alone).toHaveLength(1);
+    expect(alone[0]).toMatchObject({ surface: 'mcp', path: '.codex/config.toml', blocking: false, side: 'kept' });
+    expect(alone[0].evidence).toBe(`informational: ${warning}`);
+
+    const error = 'codex MCP openapi mismatch: expected {"a":1}, found {"a":2}';
+    const folded = collectParityFindings({ ...base, compatErrors: [error], compatWarnings: [warning] });
+    expect(folded).toHaveLength(1);
+    expect(folded[0].path).toBe('.codex/config.toml');
+    expect(folded[0].blocking).toBe(true);
+    expect(folded[0].evidence).toBe(`${error}; informational: ${warning}`);
+  });
+
+  test('a playwright-cli config with the old shared profile gets one informational row; a clean, absent or broken one gets none', () => {
+    const root = temporaryRoot();
+    const upstream = temporaryRoot();
+    write(root, '.agents/project.yaml', 'git_strategy:\n  strategy: solo-main\n  meta:\n    strategy_source: chosen\n');
+    const findings = (): ReturnType<typeof collectParityFindings> => collectParityFindings({
+      root,
+      upstreamDir: upstream,
       drift: [],
       compatErrors: [],
       archivedSkills: [],
@@ -405,7 +433,29 @@ describe('collectParityFindings', () => {
       heldBack: [],
       envNewKeys: [],
     });
-    expect(findings.filter(f => f.surface === 'commands')).toEqual([]);
+
+    expect(legacyPlaywrightProfileKeys(root)).toEqual([]);
+    expect(findings()).toEqual([]);
+
+    write(root, PLAYWRIGHT_CLI_CONFIG, JSON.stringify({ browser: { browserName: 'chromium', isolated: false, userDataDir: '.playwright/user-data' } }));
+    expect(legacyPlaywrightProfileKeys(root)).toEqual(['browser.isolated: false', 'browser.userDataDir']);
+    const both = findings();
+    expect(both).toHaveLength(1);
+    expect(both[0]).toMatchObject({ surface: 'components', path: '.playwright/cli.config.json', blocking: false, side: 'kept', suggested: 'merge' });
+    expect(both[0].evidence).toStartWith('informational: browser.isolated: false and browser.userDataDir still set');
+    expect(both[0].evidence).toContain('remove both keys');
+    expect(both[0].evidence).toContain('browser-sessions.md');
+    expect(both[0].evidence).toContain('ADR-0008');
+
+    write(root, PLAYWRIGHT_CLI_CONFIG, JSON.stringify({ browser: { userDataDir: '/tmp/x' } }));
+    expect(findings()[0].evidence).toContain('remove that key');
+
+    // `isolated: true` is not the legacy shape; only `false` shares a profile.
+    write(root, PLAYWRIGHT_CLI_CONFIG, JSON.stringify({ browser: { isolated: true, launchOptions: { headless: true } } }));
+    expect(findings()).toEqual([]);
+
+    write(root, PLAYWRIGHT_CLI_CONFIG, '{ not json');
+    expect(findings()).toEqual([]);
   });
 
   test('archived skills nudge once: this run, plus unreported archive entries, until their marker exists', () => {
@@ -700,6 +750,32 @@ describe('the husky hooks carry the gates split downstream', () => {
     expect(frameworkGatesNote('. "$(dirname -- "$0")/framework-gates.sh"\nframework_gates_pre_push\n', '.husky/pre-push')).toBeNull();
     // A mention in a comment is not an adoption.
     expect(frameworkGatesNote('# see framework-gates.sh\nbun run types:check\n', '.husky/pre-commit')).toContain('Adopt the gates split');
+    // commit-msg gets its own function, and the block forwards git's message file.
+    expect(frameworkGatesNote('bunx commitlint --edit "$1"\n', '.husky/commit-msg')).toContain('framework_gates_commit_msg "$1"');
+    expect(frameworkGatesNote('. "$(dirname -- "$0")/framework-gates.sh"\nframework_gates_commit_msg "$1"\n', '.husky/commit-msg')).toBeNull();
+  });
+
+  test('a project that already had its own commit-msg hook gets the row with the block to paste', () => {
+    const root = temporaryRoot();
+    const upstream = temporaryRoot();
+    write(root, '.husky/commit-msg', 'bunx commitlint --edit "$1"\n');
+    write(upstream, '.husky/commit-msg', 'GATES="$(dirname -- "$0")/framework-gates.sh"\nif [ -f "$GATES" ]; then\n  . "$GATES"\n  framework_gates_commit_msg "$1"\nfi\n');
+
+    const findings = collectParityFindings({
+      root,
+      upstreamDir: upstream,
+      drift: [{ path: '.husky/commit-msg', reason: 'project commit-message checks live here' }],
+      compatErrors: [],
+      archivedSkills: [],
+      archivedSkillsDir: join(root, '.template/pre-agents-migration/skills'),
+      heldBack: [],
+      envNewKeys: [],
+    });
+
+    const commitMsg = findings.find(f => f.path === '.husky/commit-msg');
+    expect(commitMsg!.evidence).toContain('does not source .husky/framework-gates.sh');
+    expect(commitMsg!.note).toContain('framework_gates_commit_msg "$1"');
+    expect(commitMsg!.blocking).toBe(false);
   });
 
   test('both hooks get the row, and pre-commit can carry both nudges at once', () => {
@@ -750,8 +826,7 @@ describe('renderParityReport', () => {
     const state = Object.fromEntries(report.surfaces.map(r => [r.surface, r.state]));
     expect(state).toEqual({
       instructions: 'warn',
-      skills: 'warn',
-      commands: 'blocked',
+      skills: 'blocked',
       hooks: 'blocked',
       mcp: 'blocked',
       env: 'warn',
@@ -760,7 +835,7 @@ describe('renderParityReport', () => {
       git: 'warn',
       gates: 'ok',
     });
-    expect(report.surfaces.map(r => r.label)).toEqual(['Instrucciones y config', 'Skills', 'Comandos', 'Hooks', 'MCP', 'Env', 'Componentes', 'package.json', 'Git', 'Verificación']);
+    expect(report.surfaces.map(r => r.label)).toEqual(['Instrucciones y config', 'Skills', 'Hooks', 'MCP', 'Env', 'Componentes', 'package.json', 'Git', 'Verificación']);
     expect(report.surfaces.find(r => r.surface === 'mcp')?.cell).toBe('1 hallazgo: .codex/config.toml');
 
     const prompt = report.prompt;
@@ -1242,8 +1317,8 @@ describe('the dry-run table marks what the apply step resolves by itself', () =>
     // A project-owned registry is never re-delivered: the contract needs a human.
     expect(resolvedByApply({ path: '.codex/config.toml', evidence: 'missing: n8n', suggested: 'take upstream', blocking: true })).toBe(false);
     expect(resolvedByApply({ path: '.claude/settings.json', evidence: 'stale hook command', suggested: 'take upstream', blocking: true })).toBe(false);
-    // A stray wrapper is a decision (declare it in the overlay, or delete it).
-    expect(resolvedByApply({ path: '.claude/commands/rogue.md', evidence: 'wrapper not produced by .agents/compatibility/command-aliases.json', suggested: 'add to overlay', blocking: true })).toBe(false);
+    // A command that shadows a skill is moved aside by the compat hook.
+    expect(resolvedByApply({ path: '.claude/commands/acli.md', evidence: SHADOW_ERROR, suggested: 'run agents:compat', blocking: true })).toBe(true);
   });
 
   test('the mark and its legend appear on a dry-run only', () => {
@@ -1256,5 +1331,102 @@ describe('the dry-run table marks what the apply step resolves by itself', () =>
     const real = buildParityPrompt([compat, drift], META);
     expect(real).not.toContain(RESOLVED_BY_APPLY_MARK);
     expect(real).toContain('Parity review after `bun run up` (upstream');
+  });
+});
+
+describe('retiredMcpNote', () => {
+  const upstream = JSON.stringify({ mcpServers: { context7: { command: 'bunx' } } });
+  test('names a retired server the project keeps, says why, and offers keep or remove', () => {
+    const project = JSON.stringify({ mcpServers: { context7: { command: 'bunx' }, playwright: { command: 'bunx' } } });
+    const note = retiredMcpNote('.mcp.json', project, upstream);
+    expect(note).not.toBeNull();
+    expect(note!.clause).toContain('upstream retired "playwright"');
+    expect(note!.note).toContain('/playwright-cli');
+    expect(note!.note).toContain('keep project');
+  });
+  test('silent when the project dropped it too, when upstream still has it, and on a non-MCP file', () => {
+    expect(retiredMcpNote('.mcp.json', upstream, upstream)).toBeNull();
+    const both = JSON.stringify({ mcpServers: { playwright: { command: 'bunx' } } });
+    expect(retiredMcpNote('.mcp.json', both, both)).toBeNull();
+    expect(retiredMcpNote('AGENTS.md', '# a', '# b')).toBeNull();
+  });
+  test('reads the Codex and OpenCode registries too', () => {
+    const codexProject = '[mcp_servers.playwright]\ncommand = "bunx"\n';
+    const codexUpstream = '[mcp_servers.context7]\ncommand = "bunx"\n';
+    expect(retiredMcpNote('.codex/config.toml', codexProject, codexUpstream)!.clause).toContain('playwright');
+    const ocProject = '{ "mcp": { "playwright": { "type": "local" } } }';
+    const ocUpstream = '{ "mcp": { "context7": { "type": "local" } } }';
+    expect(retiredMcpNote('opencode.jsonc', ocProject, ocUpstream)!.clause).toContain('playwright');
+  });
+});
+
+describe('harnessLevelMcpNote', () => {
+  const upstream = JSON.stringify({ mcpServers: { context7: { command: 'bunx' } } });
+  test('names a server the project keeps that upstream moved to harness level, with its former key', () => {
+    const project = JSON.stringify({ mcpServers: { context7: { command: 'bunx' }, tavily: { type: 'http', url: 'https://mcp.tavily.com/mcp/' } } });
+    const note = harnessLevelMcpNote('.mcp.json', project, upstream);
+    expect(note).not.toBeNull();
+    expect(note!.clause).toContain('"tavily" now run at harness level');
+    expect(note!.clause).toContain('TAVILY_API_KEY');
+    expect(note!.note).toContain('keep project');
+    expect(note!.note).toContain('claude mcp add --scope user');
+  });
+  test('silent when the project declares none of them, when upstream still has them, and on a non-MCP file', () => {
+    expect(harnessLevelMcpNote('.mcp.json', upstream, upstream)).toBeNull();
+    const both = JSON.stringify({ mcpServers: { postman: { type: 'http', url: 'https://mcp.postman.com/mcp' } } });
+    expect(harnessLevelMcpNote('.mcp.json', both, both)).toBeNull();
+    expect(harnessLevelMcpNote('AGENTS.md', '# a', '# b')).toBeNull();
+  });
+  test('silent on a harness-level server upstream never committed: nothing moved, so there is nothing to migrate', () => {
+    const project = JSON.stringify({ mcpServers: { context7: { command: 'bunx' }, exa: { type: 'http', url: 'https://mcp.exa.ai/mcp' } } });
+    expect(harnessLevelMcpNote('.mcp.json', project, upstream)).toBeNull();
+  });
+  test('reads the Codex and OpenCode registries too', () => {
+    const codexProject = '[mcp_servers.postman]\nurl = "https://mcp.postman.com/mcp"\n';
+    const codexUpstream = '[mcp_servers.context7]\ncommand = "bunx"\n';
+    expect(harnessLevelMcpNote('.codex/config.toml', codexProject, codexUpstream)!.clause).toContain('postman');
+    const ocProject = '{ "mcp": { "tavily": { "type": "remote", "url": "https://mcp.tavily.com/mcp/" } } }';
+    const ocUpstream = '{ "mcp": { "context7": { "type": "local" } } }';
+    expect(harnessLevelMcpNote('opencode.jsonc', ocProject, ocUpstream)!.clause).toContain('tavily');
+  });
+});
+
+describe('context map rows (informational)', () => {
+  function base(root: string): ParityInput {
+    return { root, upstreamDir: temporaryRoot(), drift: [], compatErrors: [], archivedSkills: [], archivedSkillsDir: join(root, 'x'), heldBack: [], envNewKeys: [] };
+  }
+  function put(root: string, rel: string, body: string): void {
+    const full = join(root, rel);
+    mkdirSync(dirname(full), { recursive: true });
+    writeFileSync(full, body);
+  }
+
+  test('a placeholder map with the old markdown map beside it is one non-blocking row naming both', () => {
+    const root = temporaryRoot();
+    put(root, '.agents/skills/business-data-context/references/business-data-map.html', '<!-- placeholder: run project-context mode data to generate this map -->\n<html></html>');
+    put(root, '.context/business/business-data-map.md', '# old');
+    const rows = collectParityFindings(base(root)).filter(f => f.path.includes('business-data-map'));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].blocking).toBe(false);
+    expect(rows[0].surface).toBe('skills');
+    expect(rows[0].evidence).toContain('informational:');
+    expect(rows[0].evidence).toContain('placeholder');
+    expect(rows[0].evidence).toContain('.context/business/business-data-map.md');
+    expect(rows[0].evidence).toContain('project-context mode data');
+  });
+
+  test('a generated map, or a skill the project does not have, raises no row', () => {
+    const root = temporaryRoot();
+    put(root, '.agents/skills/business-api-context/references/business-api-map.html', '<!-- generated by project-context mode api; edited in place by business-api-context refresh; do not hand-edit -->\n<html></html>');
+    const rows = collectParityFindings(base(root)).filter(f => f.path.includes('-map.html'));
+    expect(rows).toEqual([]);
+  });
+
+  test('a skill folder without its map raises the no-map row', () => {
+    const root = temporaryRoot();
+    put(root, '.agents/skills/business-e2e-context/SKILL.md', 'x');
+    const rows = collectParityFindings(base(root)).filter(f => f.path.includes('business-e2e-map'));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].evidence).toContain('has no map');
   });
 });

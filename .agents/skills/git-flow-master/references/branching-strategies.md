@@ -36,7 +36,7 @@ Eight strategies are supported. Each one tells the skill where new branches star
 
 **PR base**: `main` (when PRs are used at all — solo-main often skips PRs entirely).
 
-**Protected branches**: `main`. Confirm before any push.
+**Protected branches**: `main`. A direct push follows `git_strategy.policy.direct_push_to_protected` (`allowed` = push without asking, `confirm` = ask every push, `forbidden` = PR).
 
 **Release model**: continuous; every push is a release.
 
@@ -148,7 +148,7 @@ git_strategy:
 
 **Shape**: Vincent Driessen's classic (2010). `main` (releases only) + `develop` (integration) + `feature/*` (off `develop`) + `release/*` (off `develop`, merge to `main`) + `hotfix/*` (off `main`).
 
-**Best for**: products with explicit, infrequent versioned releases (desktop apps, libraries with semver, embedded software). Mostly **legacy** today; Driessen himself notes most teams should prefer trunk-based or GitHub Flow.
+**Best for**: products with explicit, infrequent versioned releases (desktop apps, libraries with semver, embedded software). Mostly **legacy**; Driessen himself notes most teams should prefer trunk-based or GitHub Flow.
 
 **Detection signals**:
 
@@ -367,6 +367,18 @@ Q3: Does the change have shared scaffolding (new types, new base classes, new sc
          A monolithic non-mechanical change without shared scaffolding is a planning smell.
 ```
 
+**Answering it is the deliverable, not the label.** Callers gate on this decision and reject a bare strategy name (`SKILL.md` Compact Rules, the chained-PR rule). Record each answer with the concrete reason drawn from THIS change, stop at the leaf, and return this three-line block:
+
+```
+Chain strategy: feature-branch-chain
+Decision trace: Q1=No (new fixture API and Page components, not a rename or formatter run) ·
+                Q2=No (the specs in slice 2 cannot compile without the fixture added in slice 1) ·
+                Q3=Yes (shared fixture + api/schemas types consumed by slices 2-4) → feature-branch-chain
+Decided by: /git-flow-master §Chained-PR decision tree (branching-strategies.md)
+```
+
+A `Yes` at Q1 ends the walk: write `Q2=n/a · Q3=n/a`; a `Yes` at Q2 writes `Q3=n/a`. Answers that do not lead to the stated leaf, or a "trace" that only repeats the conclusion, are malformed and count as no decision. A re-run (the real diff outgrew the estimate) replaces the whole block; it never appends a second leaf to the old trace.
+
 **Strategy outputs**:
 
 - `stacked-to-main` — 2 to 4 PRs, each branched off the strategy's default base. Each PR is self-contained; base always works after each merge.
@@ -395,7 +407,7 @@ The chosen plan is a **contract** for execution. If the actual diff exceeds the 
 
 ## git_strategy field rules (per strategy)
 
-Strategy Setup (SKILL.md 3.6) no longer renders a prose runbook into `AGENTS.md` — it **populates the `git_strategy:` block in `.agents/project.yaml`** (in place, preserving the rest of the file), the single source of truth. This section is the authoritative reference for WHAT field VALUES each strategy writes into that block. The detailed operational HOW (release commands, hotfix commands, invariant prose) is NOT persisted anywhere — it lives in this catalogue (the per-strategy sections above) and in `references/sdet-integration-trunk.md`, read on demand. (The yaml snippets below show only the `git_strategy` block; everything nests under that key inside `.agents/project.yaml`.)
+Strategy Setup (SKILL.md 3.6) does not render a prose runbook into `AGENTS.md` — it **populates the `git_strategy:` block in `.agents/project.yaml`** (in place, preserving the rest of the file), the single source of truth. This section is the authoritative reference for WHAT field VALUES each strategy writes into that block. The detailed operational HOW (release commands, hotfix commands, invariant prose) is NOT persisted anywhere — it lives in this catalogue (the per-strategy sections above) and in `references/sdet-integration-trunk.md`, read on demand. (The yaml snippets below show only the `git_strategy` block; everything nests under that key inside `.agents/project.yaml`.)
 
 The conceptual blocks that the old runbook rendered now map to `git_strategy` fields:
 

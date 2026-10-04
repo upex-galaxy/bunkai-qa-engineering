@@ -2,7 +2,7 @@
 name: pr-review-lead
 description: "Acts as a QA Lead / QA Architect reviewing a pull request's test-automation work against this repo's KATA doctrine (or the target repo's own doctrine, if it has one) and general QA best practices — grounding every finding in a concrete doctrine citation or code location, never a guess. Use whenever the user wants to review, audit, or give feedback on a colleague's or a teammate's PR, whether it lives in THIS repo or an external repo the user points at (owner/repo#PR via gh). Triggers on: revisa este PR, review this PR, revisá este pull request, dame feedback de este PR, actúa de QA lead, haz de QA lead reviewer, audita este pull request, pr-review-lead, revisión de PR externo, review external repo PR, dale feedback a este trabajo de automatización, evalúa este PR contra KATA, is this PR any good, cómo quedó este PR de automatización. Always runs a strictness preflight first (Flexible / Standard / Strict) before analyzing anything, and never posts a comment to GitHub without the user's explicit final OK. Do NOT use for reviewing your own uncommitted working-tree diff before opening a PR (that's the default code-review flow), for a blind dual-adversarial pass/fail review (that's `/judgment-day`), or for opening/merging the PR itself (that's `/git-flow-master`)."
 license: MIT
-compatibility: [claude-code, opencode]
+compatibility: [claude-code, codex, opencode]
 complementary_categories: [meta-skill]
 metadata:
   kind: workflow
@@ -80,7 +80,7 @@ Full lookup protocol (exact `gh api` commands for probing an external repo's doc
 ## Step 2 — Gather the PR
 
 - **This repo, current branch's PR**: `gh pr view`/`gh pr diff` against the working repo.
-- **External repo**: `gh pr view <N> --repo <owner>/<repo> --json ...` for metadata/commits/files, then per-file `gh api repos/<owner>/<repo>/pulls/<N>/files --paginate` for patches. Large PRs (`gh pr diff` errors past ~20k lines, a real limit you will hit) fall back to per-file patches via the same paginated `files` endpoint — never give up and skim the PR description instead of the code.
+- **External repo**: `gh pr view <N> --repo <owner>/<repo> --json ...` for metadata/commits/files, then per-file `gh api repos/<owner>/<repo>/pulls/<N>/files --paginate` for patches. Large PRs (`gh pr diff` errors on very large PRs with `PullRequest.diff too_large`) fall back to per-file patches via the same paginated `files` endpoint — never give up and skim the PR description instead of the code.
 - Distinguish real work from noise: a large diff is sometimes 95%+ an unrelated bulk sync/vendor-update commit. Check `commits[].messageHeadline` before assuming every line matters; call this out to the user rather than reviewing the noise commit line-by-line.
 
 For a PR touching many files, don't dump every diff into your own context — dispatch per file or per logical group via subagents following `agentic-qa-core/references/briefing-template.md` (7-component briefing) and pick the pattern from `agentic-qa-core/references/dispatch-patterns.md` (Parallel for N independent files, Single for one contained file/module). Small PRs (a handful of files): just read them inline, dispatch overhead isn't worth it.
@@ -118,7 +118,7 @@ Once the user confirms which findings and (if they haven't already established a
 
 Show the complete drafted feedback and wait for an explicit go-ahead ("post it", "dale", "sí, postea", or equivalent) — never infer approval from silence or from the user having approved a draft earlier for a *different* PR in the same session. Only after that, post it:
 
-- This repo: post as a PR review comment on the current repo's PR.
+- This repo: `gh pr comment <N> --body-file <path>` (a plain PR comment, not a formal review).
 - External repo: `gh pr comment <N> --repo <owner>/<repo> --body-file <path>`.
 
 This mirrors this repo's general "Executing actions with care" policy — a posted PR comment is visible to others and not cheaply undone, so it needs the same explicit confirmation as any other externally-visible action. Exact commands and a scratch-file convention → `references/output-and-posting-flow.md`.
@@ -132,7 +132,7 @@ This skill is not on AGENTS.md §3's mandatory-briefing list, but reuses the sam
 | Stage | Pattern | Subagent role |
 |---|---|---|
 | Probe external repo for its own doctrine (Step 1) | Single | one agent checks for `AGENTS.md`/`.agents/skills`/`.context`, reports what exists |
-| Fetch N independent file diffs (Step 2, large PR) | Parallel | one agent per file or small file-group, returns the patch + a one-line summary; cap at 10 per `dispatch-patterns.md` |
+| Fetch N independent file diffs (Step 2, large PR) | Parallel | one agent per file or small file-group, returns the patch + a one-line summary; cap per `dispatch-patterns.md` |
 | Analyze against doctrine (Step 3) | Single or inline | for small/medium PRs, do this inline — you already have the diffs and doctrine loaded; only dispatch if the PR is large enough that isolating the analysis pass protects your own context |
 
 Never dispatch a subagent to draft or post the final feedback (Steps 6-7) — those steps involve user-facing tone decisions and an externally-visible action, both of which stay with the orchestrator per `agentic-qa-core/references/orchestration-doctrine.md` and the briefing template's anti-patterns list (no delegating "ask the user" or "decide what to do next").

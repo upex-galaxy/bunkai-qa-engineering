@@ -1,6 +1,6 @@
 ---
 name: jira-instance-migration
-description: Repoint this repo at a new Atlassian/Jira instance after a site migration, and regenerate the `.agents/` catalogs whose custom-field IDs the migration invalidated. Takes two inputs (source instance, target instance); detects the source from the repo and asks for whatever is missing before touching anything. Triggers on 'jira instance migration', 'migrar la instancia de jira', 'cambió la URL de Jira', 'jira site migration', 'we moved Jira workspaces', 'repoint jira', 'nuevo site de jira', 'actualizar ATLASSIAN_URL', 'the jira URL changed'. Do NOT use for: first-time Jira setup (see docs/setup/jira-setup-guide.md), routine catalog refresh with no instance change (run `bun run jira:sync-*` directly), or Jira ticket operations (use /acli).
+description: Repoint this repo at a new Atlassian/Jira instance after a site migration, and regenerate the `.agents/` catalogs whose custom-field IDs the migration invalidated. Takes two inputs (source instance, target instance); detects the source from the repo and asks for whatever is missing before touching anything. Triggers on 'jira instance migration', 'migrar la instancia de jira', 'cambió la URL de Jira', 'jira site migration', 'we moved Jira workspaces', 'repoint jira', 'nuevo site de jira', 'actualizar ATLASSIAN_URL', 'the jira URL changed'. Do NOT use for: first-time Jira setup (see docs/core/setup/jira-xray.html), routine catalog refresh with no instance change (run `bun run jira:sync-*` directly), or Jira ticket operations (use /acli).
 license: MIT
 compatibility: [claude-code, copilot, cursor, codex, opencode]
 ---
@@ -12,8 +12,8 @@ Repoint this repository at a new Atlassian instance and regenerate everything th
 **Inputs**: `$ARGUMENTS` — the source instance and the target instance, in that order. Both may be omitted; Phase 0 resolves them.
 
 ```
-/jira-instance-migration oldsite.atlassian.net newsite.atlassian.net
-/jira-instance-migration                         # -> Phase 0 detects and asks
+/jira-administration instance-migration oldsite.atlassian.net newsite.atlassian.net
+/jira-administration instance-migration                         # -> Phase 0 detects and asks
 ```
 
 ---
@@ -22,9 +22,9 @@ Repoint this repository at a new Atlassian instance and regenerate everything th
 
 A site migration reassigns custom-field IDs instead of preserving them. The old ID usually still exists on the new instance, pointing at a **different field**. So the failure mode is not a 404 — it is a `200 OK` that writes your data into the wrong field, silently, forever.
 
-That is why this command has two halves. Repointing the URL is the easy half. Regenerating the `.agents/` catalogs is the half that prevents silent corruption.
+That is why this mode has two halves. Repointing the URL is the easy half. Regenerating the `.agents/` catalogs is the half that prevents silent corruption.
 
-A second silent failure sits alongside it: `.env` and the `acli` session are independent. Change one and not the other, and REST calls hit the new instance while `acli` keeps reading the old one, with no error to tell you.
+A second silent failure sits alongside it: `.agents/project.yaml` and the `acli` session are independent. Change one and not the other, and REST calls hit the new instance while `acli` keeps reading the old one, with no error to tell you.
 
 ---
 
@@ -59,7 +59,7 @@ Three outcomes:
 
 Normalize both to the bare host (`site.atlassian.net`, no scheme, no trailing slash). Then confirm as one line and wait:
 
-> Migrating `<source>` -> `<target>`. Three places change: `.env`, `.agents/project.yaml`, and your machine-global `acli` session. Confirm?
+> Migrating `<source>` -> `<target>`. Two places change: `.agents/project.yaml` (the only place the host is written) and your machine-global `acli` session. Any stale `ATLASSIAN_URL` the probes found gets deleted, not updated. Confirm?
 
 **Verify the target is reachable and populated before proceeding.** Migrating into an empty or half-provisioned instance regenerates empty catalogs and publishes them, which is worse than doing nothing:
 
@@ -70,7 +70,7 @@ Normalize both to the bare host (`site.atlassian.net`, no scheme, no trailing sl
   output=HTTP status
 ```
 
-Anything other than `200` stops the command.
+Anything other than `200` stops the mode.
 
 ---
 
@@ -94,7 +94,7 @@ Classify every hit into change / do-not-change, and **present the table to the u
 
 ### Does not change
 
-- **A vanity / alias domain** (an org-owned hostname that fronts Jira instead of the numbered or named instance slug). If one appears in the code, leave it: these normally redirect to whatever instance is currently active, which is exactly why already-published `/browse/` links survive a migration. **But the alias is invisible from the repo** — tell the user to confirm by hand that it now resolves to the target. If it still points at the source, every published link is broken and nothing in the codebase reveals it.
+- **A vanity / alias domain** (an org-owned hostname that fronts Jira instead of the numbered or named instance slug). If one appears in the code, leave it: these normally redirect to whatever instance is active at the time, which is exactly why already-published `/browse/` links survive a migration. **But the alias is invisible from the repo** — tell the user to confirm by hand that it now resolves to the target. If it still points at the source, every published link is broken and nothing in the codebase reveals it.
 - **Historical records** — sprint reports, retros, changelogs of closed work. Rewriting them falsifies the past.
 - **Code whose pattern already generalizes.** If the logic matches the instance with a regex rather than a literal (`/site\d+\.atlassian\.net/`), it already supports the target and only a comment names the source. Read the code before deciding; do not edit a pattern that already generalizes.
 - **Regenerable cache** — `.context/PBI/` is rebuilt by the sync, so occurrences there clear themselves.
@@ -111,7 +111,7 @@ Anything that fits neither list — a CI workflow, a README, `.mcp.json`, a depl
 
 > **The files are not the whole story — check the process environment.** A stale `ATLASSIAN_URL` inherited from whatever spawned this session still shadows anything that reads the env var directly, and it survives a full application restart because it is re-inherited every time. `bun run vars:env:check` reports it; so does `bun run setup:doctor`, which flags a host resolved from the env instead of the yaml. To hunt the source, walk the ancestry with `ps eww -p <pid>` and test the login shell in isolation with `env -i HOME=$HOME zsh -l -c 'printenv ATLASSIAN_URL'` — testing from the contaminated shell inherits the bad value and gives a false negative.
 >
-> **Template-repo carve-out for step 1.** A boilerplate/template repo ships `.agents/project.yaml` with every value `null` on purpose — downstream projects inherit the file verbatim, so a concrete site baked into it is wrong for all of them. Detect this by reading `project.project_name` in the same file: if it is `null`, the repo is an un-onboarded template. **Leave `atlassian_url: null`** and say so in the report. The same rule applies to `project_key` in Phase 4. Only a real, onboarded project gets the value written.
+> **Template-repo carve-out for step 1.** A freshly scaffolded project receives `.agents/project.yaml` seeded from the blank template (`.agents/project.schema.yaml`), every identity value `null` until the project is onboarded; a concrete site written into it before then is a guess. Detect this by reading `project.project_name` in the same file: if it is `null`, the repo is an un-onboarded template. The boilerplate's own yaml is filled and is not this case: `bun run agents:schema` blanks its identity before anything travels. **Leave `atlassian_url: null`** and say so in the report. The same rule applies to `project_key` in Phase 4. Only a real, onboarded project gets the value written.
 
 ```text
 TOKEN=$(grep '^ATLASSIAN_API_TOKEN=' .env | cut -d= -f2-)
@@ -183,7 +183,7 @@ Project issue type "Task" exists in <KEY> but is not declared in
 
 So a stale manifest declaring 3 work types regenerates a catalog with 3 work types, exits `0`, and reports success. The migration looks clean and the catalog is missing everything the manifest forgot to ask for. Same silent-success failure this whole command exists to prevent, entering through the input side.
 
-The manifest goes stale invisibly because **the boilerplate updater neither syncs it nor warns about it**: it sits in `bootstrapOnlyPaths` (so `bun run update` never overwrites the project's customizations) and is absent from the drift watchlist (so nothing reports that it has fallen behind). A project scaffolded from an older boilerplate can be many versions behind with zero signal.
+The manifest goes stale quietly because **the updater never overwrites it** (`bootstrapOnly`, so `bun run up` never touches the project's customizations) and reports structural gaps only as informational rows (`AGENTS.md` §4.5; `bun run jira:baseline` warns when it declares fewer work types than upstream's baseline). A project scaffolded from an older boilerplate can be many versions behind with only that warning as signal.
 
 Compare against upstream before regenerating:
 
@@ -217,7 +217,7 @@ Three behaviors to anticipate, and they differ per script — do not assume one 
 
 - **`jira:sync-fields` REQUIRES `--force`.** Its populated-catalog guard sits on the main path, so a plain re-run stops with `already populated. Re-run with --force to overwrite.` and exits `1`.
 - **`jira:sync-workflows` does NOT need `--force`, and should not get it.** Its identical-looking guard lives *inside* the `--upex` branch only, so the normal Jira path is idempotent. Adding `--force` re-prompts for already-mapped slugs and buys nothing. (In practice a canonical slug with exactly one candidate auto-resolves either way; prompts only appear on a collision or a no-match.)
-- **`jira:sync-link-types` has NO `--force` flag at all.** Its argument parser knows only `--dry-run`, `--json`, `--verbose`, `--help` and `--upex`, and has no `default:` case — so `--force` is silently swallowed rather than rejected. Passing it appears to work, which is exactly why it is worth not teaching.
+- **`jira:sync-link-types` has NO `--force` flag at all.** Its argument parser (check `--help`) has no `default:` case — so `--force` is silently swallowed rather than rejected. Passing it appears to work, which is exactly why it is worth not teaching.
 
 Plus one behavior shared with Phase 2:
 
@@ -296,7 +296,7 @@ grep -rnE '(TRANSITION|STATUS|LINK_?TYPE)[A-Z_]*\s*[=:]\s*"?[0-9]{2,}' \
 
 These resolve through `.agents/jira-workflows.json` (`{{jira.transition.<work_type>.<slug>}}`, `{{jira.<work_type>.<status>}}`) and `.agents/jira-link-types.json`. A literal number is the same latent bug wearing different clothes.
 
-**Also sweep the override channel.** Projects often expose an env var or config constant that PINS a field ID, as an escape hatch over the catalog (`*_FIELD`, `*_FIELD_ID`, `*_CUSTOM_FIELD`). A pinned value survives the catalog regeneration untouched and keeps pointing at the old instance — the exact silent-write bug this command exists to prevent, reintroduced through the back door:
+**Also sweep the override channel.** Projects often expose an env var or config constant that PINS a field ID, as an escape hatch over the catalog (`*_FIELD`, `*_FIELD_ID`, `*_CUSTOM_FIELD`). A pinned value survives the catalog regeneration untouched and keeps pointing at the old instance — the exact silent-write bug this mode exists to prevent, reintroduced through the back door:
 
 ```bash
 grep -rniE '(FIELD|CUSTOMFIELD)(_ID)?\s*[=:]\s*.?customfield_[0-9]{4,}' \
@@ -342,5 +342,5 @@ Give the operator these, and flag the last three as needing a human:
 3. Catalog counts: fields, work types, link types, plus any missing required slug and any field left with empty options.
 4. At least one custom-field ID before/after, as proof the regeneration reached the new instance, **plus** the id-to-name verification result — "N ids checked against the live instance, 0 mismatches" is the claim worth making; "the diff was large" is not.
 5. **Manual check**: does the vanity/alias domain now resolve to the target? Not visible from the repo.
-6. **Manual check**: if the manifest was behind, whatever made it drift will make it drift again. The updater treats it as bootstrap-only and does not watch it for drift, so nothing will report the next gap either. Say so.
+6. **Manual check**: if the manifest was behind, whatever made it drift will make it drift again. The updater treats it as bootstrap-only and reports structural gaps only as informational rows (`bun run jira:baseline` warns on a truncated manifest, nothing blocks), so the next gap will be just as quiet. Say so.
 7. **Team broadcast**: everyone re-runs the `acli` login on their own machine — a stale session returns old-instance data with no error, which is the one failure mode nobody notices. If the team consumes the upstream reference catalog via `--upex`, add that nobody should run it until the upstream has published its post-migration catalogs.

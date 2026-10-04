@@ -3,7 +3,7 @@
  *
  * Claude Code and Codex run this file as a `UserPromptSubmit` command hook and
  * read its stdout; OpenCode imports the same exports from its plugin adapter
- * (`.opencode/plugins/personality-reinject.js`). The emitter carries three
+ * (`.opencode/plugins/personality-reinject.js`). The emitter carries four
  * payloads, in this order:
  *
  *   1. `PERSONALITY_CONTRACT` — the AGENTS.md §2 output contract, re-injected
@@ -13,6 +13,9 @@
  *      `Session:` commit trailers, which are NOT attribution.
  *   3. The `ORCA:` line — emitted only when an `orca` binary is on PATH, so a
  *      machine without Orca never hears about it (silence rule).
+ *   4. At most ONE setup warning: `MISSING_ENV_LINE` when the checkout has no
+ *      `.env`, else `UNPROVISIONED_WORKTREE_LINE` when it is a linked worktree
+ *      that never ran `bun run worktree:provision`.
  *
  * Verified sources only. Claude Code: the hook input carries `session_id`,
  * `prompt` and an optional `session_title`, and the JSON output supports
@@ -50,7 +53,7 @@ export const IDENTITY_PREFIX = 'AGENT IDENTITY:';
  * cannot detect any other way in time.
  *
  * A harness reads its MCP config and spawns every MCP server BEFORE any hook
- * runs (measured: 3 of 3). So by the time you read this line those servers are
+ * runs (measured on all three harnesses). So by the time you read this line those servers are
  * already alive, already holding whatever credential they were given, and a
  * missing one shows up much later as an auth error that reads like a broken
  * tool. We cannot fix that session. We CAN stop the human from spending an hour
@@ -68,6 +71,21 @@ export const MISSING_ENV_LINE = [
   'the main checkout; in a fresh clone run `bun run setup`. Then `bun run harness:env`.',
 ].join(' ');
 
+/**
+ * Emitted in a linked worktree that has no `node_modules/` or no `.husky/_/`.
+ *
+ * The worktrees Claude Code and the Codex app create copy `.worktreeinclude`
+ * and nothing else: no dependencies, no hook shims, no `.claude/skills` alias.
+ * `core.hooksPath` is shared with the primary and points at `.husky/_`, so with
+ * that directory missing every commit in the worktree skips every gate and
+ * succeeds. Nothing else says so.
+ */
+export const UNPROVISIONED_WORKTREE_LINE = [
+  'WORKTREE: this linked worktree is not provisioned (no node_modules/ or .husky/_),',
+  'so git hooks do not run here, repo scripts may fail and Claude Code may not see the repo skills.',
+  'Run `bun run worktree:provision` in it, then restart the session.',
+].join(' ');
+
 export const ORCA_CONTEXT_LINE = [
   'ORCA: available.',
   'Multi-session orchestration -> /orca-orchestration.',
@@ -76,10 +94,19 @@ export const ORCA_CONTEXT_LINE = [
 ].join(' ');
 
 /**
- * A workflow skill plus an issue key in the first prompt names the session.
- * Matches unanchored, so it also accepts the native-path fleet-worker shape
- * (`/sprint-testing BK-123 fleet worker: …`): the workflow name and the key
- * still appear adjacent, only trailed by more prompt text.
+ * The fleet-worker token names the session after the roster label:
+ * `/<skill> <label> fleet worker` → `<label>`. Any skill slug qualifies (a
+ * fleet is not limited to the workflow skills) and the label is whatever the
+ * conductor wrote: a ticket key, `<KEY>-<slug>`, or a kebab slug. Unanchored,
+ * because on the supervised path the runtime prepends its own preamble to the
+ * prompt that carries the token.
+ */
+export const FLEET_PROMPT_PATTERN
+  = /(?:^|\s)\/([a-z][a-z0-9-]*)\s+([A-Za-z0-9][\w.-]{0,59})\s+fleet worker\b/;
+
+/**
+ * Outside a fleet, a workflow skill plus an issue key in the first prompt
+ * names the session `<KEY>-<workflow>`.
  */
 export const WORKFLOW_PROMPT_PATTERN
   = /(sprint-testing|test-automation|shift-left-testing|regression-testing|framework-development)\s+([A-Z][A-Z0-9]+-\d+)/;
@@ -201,12 +228,13 @@ function codexThreadName(sessionId, env, home) {
 }
 
 /**
- * User-set name → the name verbatim. Derived (or a name whose origin we cannot
- * establish) → `<name> (<id8>)`, so two auto-named sessions stay distinct. Only
- * an id → the full id. Nothing → `unknown`.
+ * User-set name, or one this hook set from a prompt token → the name verbatim.
+ * Derived (or a name whose origin we cannot establish) → `<name> (<id8>)`, so
+ * two auto-named sessions stay distinct. Only an id → the full id. Nothing →
+ * `unknown`.
  */
 export function sessionLabel({ sessionName = '', nameSource = 'none', sessionId = '' } = {}) {
-  if (sessionName && nameSource === 'user') { return sessionName; }
+  if (sessionName && (nameSource === 'user' || nameSource === 'hook')) { return sessionName; }
   if (sessionName && sessionId) { return `${sessionName} (${sessionId.slice(0, 8)})`; }
   if (sessionName) { return sessionName; }
   if (sessionId) { return sessionId; }
@@ -217,7 +245,8 @@ export function sessionLabel({ sessionName = '', nameSource = 'none', sessionId 
  * One resolution per prompt: harness, session id, session name and its origin,
  * the label the commit trailers use, and the worktree.
  *
- * `nameSource` is `user` | `derived` | `unknown` | `none`. `unknown` means a
+ * `nameSource` is `user` | `hook` | `derived` | `unknown` | `none`. `hook` is
+ * Claude Code's record of a title this emitter set. `unknown` means a
  * name exists but nothing tells us who set it (Claude Code's `session_title`
  * hook field, Codex's `thread_name`), which is exactly the case where the hook
  * must NOT overwrite the title.
@@ -236,7 +265,7 @@ export function resolveAgentIdentity(options = {}) {
       sessionId = sessionId || text(record.sessionId);
       if (text(record.name)) {
         sessionName = record.name;
-        nameSource = record.nameSource === 'user' ? 'user' : 'derived';
+        nameSource = record.nameSource === 'user' || record.nameSource === 'hook' ? record.nameSource : 'derived';
       }
     }
     if (!sessionName && text(hookInput.session_title)) {
@@ -318,6 +347,29 @@ export function envFileMissing(options = {}) {
   catch { return false; }
 }
 
+/**
+ * Is the checkout a LINKED worktree missing what provisioning adds?
+ *
+ * A worktree's `.git` is a file `gitdir: <common>/worktrees/<name>`; a
+ * submodule's is a file too, but its gitdir sits under `modules/`, so the
+ * pointer is read rather than trusting the file type. Three cheap stats and one
+ * tiny read: this runs on every prompt.
+ */
+export function worktreeUnprovisioned(options = {}) {
+  const { env = process.env, existsSync: exists = existsSync, readFileSync: read = readFileSync } = options;
+  const root = options.repoRoot ?? env.CLAUDE_PROJECT_DIR ?? env.CODEX_PROJECT_DIR ?? process.cwd();
+  if (!root) { return false; }
+  try {
+    const pointer = String(read(join(root, '.git'), 'utf8'));
+    if (!/^gitdir:.*[\\/]worktrees[\\/][^\\/\s]+\s*$/m.test(pointer)) { return false; }
+    return !exists(join(root, 'node_modules')) || !exists(join(root, '.husky', '_'));
+  }
+  catch {
+    // `.git` is a directory (primary checkout) or absent: not a linked worktree.
+    return false;
+  }
+}
+
 export function identityLine(identity) {
   return `${IDENTITY_PREFIX} worktree=${identity.worktree} session=${identity.label} harness=${identity.harness}`;
 }
@@ -330,6 +382,7 @@ export function agentContextLines(options = {}) {
   const lines = [PERSONALITY_CONTRACT, identityLine(identity)];
   if (orca) { lines.push(ORCA_CONTEXT_LINE); }
   if (options.envMissing ?? envFileMissing({ env })) { lines.push(MISSING_ENV_LINE); }
+  else if (options.worktreeUnprovisioned ?? worktreeUnprovisioned({ env })) { lines.push(UNPROVISIONED_WORKTREE_LINE); }
   return lines;
 }
 
@@ -344,11 +397,21 @@ function sanitizeTitle(value) {
 /**
  * A title only when no human named the session: `nameSource` `user` (a `/rename`
  * or `--name`) and `unknown` (a name of unverifiable origin) are both left
- * alone. An explicit `--name <value>` wins first, then the workflow +
- * issue-key shape, which yields `<KEY>-<workflow>`.
+ * alone. A name this hook set earlier (`hook`) may be replaced, because a
+ * re-engaged fleet terminal receives a new task with a new label. The
+ * fleet-worker token wins first and yields the label, then an explicit
+ * `--name <value>`, then the workflow + issue-key shape, `<KEY>-<workflow>`.
+ * A title equal to the current name is not re-emitted.
  */
 export function proposeSessionTitle({ prompt = '', identity = {} } = {}) {
   if (identity.nameSource === 'user' || identity.nameSource === 'unknown') { return ''; }
+  const title = titleFromPrompt(prompt);
+  return title === identity.sessionName ? '' : title;
+}
+
+function titleFromPrompt(prompt) {
+  const fleet = FLEET_PROMPT_PATTERN.exec(prompt);
+  if (fleet) { return sanitizeTitle(fleet[2]); }
   const explicit = EXPLICIT_NAME_PATTERN.exec(prompt);
   if (explicit) { return sanitizeTitle(explicit[1] ?? explicit[2] ?? ''); }
   const workflow = WORKFLOW_PROMPT_PATTERN.exec(prompt);

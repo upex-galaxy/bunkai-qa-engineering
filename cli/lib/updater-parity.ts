@@ -15,9 +15,9 @@
  *  - skills the cross-harness migration archived because `.agents/skills/`
  *    already owned the name (this run's, plus any archive dir entry that has
  *    not been nudged yet; one marker per skill under `.template/upstream-sha/`);
- *  - command wrappers no manifest produced (upstream manifest, plus the
- *    optional project overlay `command-aliases.project.json`), ONE row per
- *    path whether the compat check named it or the disk scan found it;
+ *  - the retired command-alias overlay when a project still has one (one
+ *    informational row), and every project command the compat hook moved
+ *    aside because it carried a skill's name (one informational row each);
  *  - components held back this run, with their lock commits;
  *  - `.env` keys upstream documents and the project lacks;
  *  - the `git_strategy` provenance stamp in `.agents/project.yaml`.
@@ -36,6 +36,7 @@
  */
 
 import type { CompatibilityErrorGroup } from './agent-compatibility.ts';
+import type { MapStatus } from './context-maps.ts';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -43,15 +44,17 @@ import * as path from 'node:path';
 import { parse as parseYaml } from 'yaml';
 
 import { stripJsonComments } from './agent-compatibility-contracts.ts';
-import { COMMAND_ALIAS_MANIFEST, COMMAND_ALIAS_PROJECT_MANIFEST, compatibilityErrorGroup, undeclaredCommandWrappers } from './agent-compatibility.ts';
+import { compatibilityErrorGroup, HARNESS_COMMAND_DIRS, RETIRED_COMMAND_ALIAS_OVERLAY, SHADOWING_COMMANDS_BACKUP_DIR } from './agent-compatibility.ts';
 import { hasDeepWalk, walkGovernedFile } from './agents-schema.ts';
+import { contextMapAdvice, contextMapStatuses, mapRelPath } from './context-maps.ts';
+import { HARNESS_LEVEL_MCPS } from './harness-level-mcps.ts';
 import { CLAUDE_SETTINGS_FILE } from './updater-settings';
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-export type ParitySurface = 'instructions' | 'skills' | 'commands' | 'hooks' | 'mcp' | 'env' | 'components' | 'package' | 'git' | 'gates';
+export type ParitySurface = 'instructions' | 'skills' | 'hooks' | 'mcp' | 'env' | 'components' | 'package' | 'git' | 'gates';
 
 /**
  * `take upstream` is reserved for content the project lacks entirely. A row
@@ -60,7 +63,7 @@ export type ParitySurface = 'instructions' | 'skills' | 'commands' | 'hooks' | '
  * there would delete it.
  */
 export type ParitySuggestion
-  = 'keep project' | 'take upstream' | 'merge' | 'add to overlay' | 'run agents:compat' | 'decide';
+  = 'keep project' | 'take upstream' | 'merge' | 'run agents:compat' | 'decide';
 
 export interface ParityFinding {
   id: number
@@ -80,7 +83,7 @@ export interface ParityFinding {
    * project-declared path, never overwritten), `overwritten` = upstream's (the
    * project's version is in the named backup). Absent when the row is not a
    * contest between two copies of the same file (env keys, gates, held-back
-   * components, a stray wrapper).
+   * components, a retired overlay).
    */
   side?: 'kept' | 'overwritten'
   /** Full paired diff, written to the saved file under the finding's heading. */
@@ -146,6 +149,8 @@ export interface ParityInput {
   drift: ParityDriftInput[]
   /** `checkAgentCompatibility().errors`. */
   compatErrors: string[]
+  /** `checkAgentCompatibility().warnings`: one informational row each, never blocking. */
+  compatWarnings?: string[]
   /** Skills to report as archived (names only); see `archivedSkillsToReport`. */
   archivedSkills: string[]
   /** Directory holding the archived skills (`<MIGRATION_BACKUP_DIR>/skills`). */
@@ -165,8 +170,14 @@ export interface ParityInput {
   packageJsonKept?: PackageJsonKeptInput[]
   /** Quality gates run after the apply; only failed / timed-out ones become rows. */
   gates?: GateResult[]
+  /** Project commands the compat hook moved to `SHADOWING_COMMANDS_BACKUP_DIR` this run. */
+  shadowingCommandsMoved?: string[]
   /** A legacy git-tracked `.context/PBI/` cache (see `updater-pbi.ts`): one row, the recipe in its file. */
   pbiCache?: PbiCacheInput | null
+  /** Context map states; defaults to reading them from `root` (`contextMapStatuses`). */
+  contextMaps?: MapStatus[]
+  /** Shared-profile keys in the project's playwright-cli config; defaults to reading `root` (`legacyPlaywrightProfileKeys`). */
+  playwrightProfileKeys?: string[]
   /** Prerequisite declarations, keyed by repo-relative path. Defaults to `PATH_PREREQUISITES`. */
   prerequisites?: Record<string, PathPrerequisite>
   /** Which shipped skill reads which top-level config block. Defaults to `CONFIG_BLOCK_READERS`. */
@@ -215,7 +226,6 @@ export interface ParityReport {
 export const PARITY_PROMPT_PATH = path.join('.agents', 'prompts', 'parity-plan.md');
 /** One marker per archived skill, next to the watchlist sha markers (gitignored). */
 const ARCHIVED_SKILL_MARKER_DIR = path.join('.template', 'upstream-sha');
-const WRAPPER_UNDECLARED_EVIDENCE = `wrapper not produced by ${COMMAND_ALIAS_MANIFEST} nor ${COMMAND_ALIAS_PROJECT_MANIFEST}`;
 
 const MCP_HOST_FILE: Record<string, string> = {
   claude: '.mcp.json',
@@ -224,13 +234,12 @@ const MCP_HOST_FILE: Record<string, string> = {
 };
 
 /** Order of the surfaces in every table. */
-export const SURFACE_ORDER: ParitySurface[] = ['instructions', 'skills', 'commands', 'hooks', 'mcp', 'env', 'components', 'package', 'git', 'gates'];
+export const SURFACE_ORDER: ParitySurface[] = ['instructions', 'skills', 'hooks', 'mcp', 'env', 'components', 'package', 'git', 'gates'];
 
 /** English labels for the prompt (the AI reads it). */
 const SURFACE_LABEL_EN: Record<ParitySurface, string> = {
   instructions: 'Instructions',
   skills: 'Skills',
-  commands: 'Commands',
   hooks: 'Hooks',
   mcp: 'MCP',
   env: 'Env',
@@ -244,7 +253,6 @@ const SURFACE_LABEL_EN: Record<ParitySurface, string> = {
 const SURFACE_LABEL_ES: Record<ParitySurface, string> = {
   instructions: 'Instrucciones y config',
   skills: 'Skills',
-  commands: 'Comandos',
   hooks: 'Hooks',
   mcp: 'MCP',
   env: 'Env',
@@ -281,7 +289,10 @@ export const HUSKY_PRE_COMMIT = '.husky/pre-commit';
 /** Its pre-push sibling. Same delivery: once when missing, then project-owned. */
 export const HUSKY_PRE_PUSH = '.husky/pre-push';
 
-/** The SYNCED file both hooks source to get the gates upstream owns. */
+/** The commit-message sibling. Same delivery; its gates are warn-only. */
+export const HUSKY_COMMIT_MSG = '.husky/commit-msg';
+
+/** The SYNCED file every hook sources to get the gates upstream owns. */
 export const HUSKY_GATES_FILE = '.husky/framework-gates.sh';
 
 export interface PathPrerequisite {
@@ -419,13 +430,13 @@ export const RESOLVED_BY_APPLY_MARK = '(resolved by apply)';
 
 /**
  * Surfaces a real run repairs on its own: the sync DELIVERS these files (the
- * hook emitter, the OpenCode plugin adapter, the alias manifest, both wrapper
- * sets, the instructions shim), so a contract broken against an old copy is
+ * hook emitter, the OpenCode plugin adapter, the instructions shim), so a
+ * contract broken against an old copy is
  * fixed by applying the new one. Matched against the row's path AND its
  * evidence, because a contract message names the file it is about even when the
  * row's own path could not be extracted from it (`(compat)`).
  */
-const SELF_HEALING_COMPAT_PATHS = ['.agents/hooks/', '.opencode/plugins/', '.agents/compatibility/', '.claude/commands/', '.opencode/commands/', 'CLAUDE.md'];
+const SELF_HEALING_COMPAT_PATHS = ['.agents/hooks/', '.opencode/plugins/', 'CLAUDE.md'];
 
 /** Project-owned registries the apply step never overwrites: their contract needs a human. */
 const APPLY_CANNOT_FIX_PATHS = ['.claude/settings.json', '.mcp.json', 'opencode.jsonc', '.codex/config.toml'];
@@ -437,11 +448,10 @@ const APPLY_CANNOT_FIX_PATHS = ['.claude/settings.json', '.mcp.json', 'opencode.
  * (`SELF_HEALING_COMPAT_PATHS`). Measured on a live sync: 22 rows / 12 blocking
  * on the dry-run, 16 / 6 on the run that applied, and the delta was exactly the
  * six hook-emitter contract rows the 90 applied files resolved by themselves.
- * A stray wrapper (`add to overlay`) and a project-owned registry are never
- * self-healing: both need a decision.
+ * A project-owned registry is never self-healing: it needs a decision. A
+ * command that shadows a skill is (`run agents:compat`): the hook moves it.
  */
 export function resolvedByApply(finding: Pick<ParityFinding, 'suggested' | 'path' | 'evidence' | 'blocking'>): boolean {
-  if (finding.suggested === 'add to overlay') { return false; }
   if (finding.suggested === 'run agents:compat') { return true; }
   // Only a failed contract self-heals; watched-file drift is a decision by design.
   if (!finding.blocking) { return false; }
@@ -480,7 +490,7 @@ export function lintStagedNoStashNote(projectHook: string): string | null {
 }
 
 /**
- * Both husky hooks are bootstrap-only: delivered once when missing, then
+ * Every husky hook is bootstrap-only: delivered once when missing, then
  * project-owned, because a project's own gates live in them. The cost was that
  * a gate added upstream never reached a project scaffolded earlier — four of
  * them had already failed to land anywhere downstream.
@@ -489,7 +499,10 @@ export function lintStagedNoStashNote(projectHook: string): string | null {
  * SYNCED `.husky/framework-gates.sh`, and each hook sources it and calls one
  * function. A hook that predates the split keeps every gate inlined and will
  * never see another one, and nothing but this row can tell it so — which is the
- * same shape as the `--no-stash` note, and the same reason it exists.
+ * same shape as the `--no-stash` note, and the same reason it exists. The same
+ * holds for a project that already had its own `.husky/commit-msg` (commitlint,
+ * say) when upstream added one: ours is never delivered over it, so this row is
+ * the only way the warn-only trailer check reaches it.
  *
  * Returns the adoption note while the hook does not source the gates file; null
  * once it does.
@@ -499,7 +512,9 @@ export function frameworkGatesNote(projectHook: string, hookPath: string): strin
     .split('\n')
     .some(line => !line.trimStart().startsWith('#') && line.includes('framework-gates.sh'));
   if (sourced) { return null; }
-  const fn = hookPath === HUSKY_PRE_PUSH ? 'framework_gates_pre_push' : 'framework_gates_pre_commit';
+  const fn = hookPath === HUSKY_PRE_PUSH
+    ? 'framework_gates_pre_push'
+    : hookPath === HUSKY_COMMIT_MSG ? 'framework_gates_commit_msg "$1"' : 'framework_gates_pre_commit';
   return [
     `Adopt the gates split in ${hookPath}. Your gates and their ordering stay yours; replace only the block`,
     'that runs upstream\'s gates with the call below, and every gate a future release adds arrives with',
@@ -906,6 +921,73 @@ function costSignal(
   return { parts: [`same ${units(2)} and ${unit === 'heading' ? 'bodies' : 'values'}; formatting or comments differ`], suggested: 'keep project' };
 }
 
+/**
+ * A downstream project's protected MCP file still declares a server upstream
+ * moved to HARNESS level (ADR-0005, D3: web search, Postman). The file is on
+ * the watchlist, so nothing overwrites it; this note is how the project learns
+ * the server is now the harness's business. Returns the clause for the row and
+ * the longer note, or null when the project declares none of them or upstream
+ * still has them.
+ */
+export function harnessLevelMcpNote(filePath: string, project: string, upstream: string): { clause: string, note: string } | null {
+  if (!Object.values(MCP_HOST_FILE).includes(filePath)) { return null; }
+  const mine = configEntries(project, filePath);
+  const theirs = configEntries(upstream, filePath);
+  if (!mine || !theirs) { return null; }
+  const registries = ['mcpServers', 'mcp', 'mcp_servers'];
+  // Only a server upstream once committed moved; one it never shipped has no migration to explain.
+  const moved = HARNESS_LEVEL_MCPS.filter(m => m.formerEnvVar !== null
+    && registries.some(r => mine.has(`${r}.${m.id}`)) && !registries.some(r => theirs.has(`${r}.${m.id}`)));
+  if (moved.length === 0) { return null; }
+  const ids = moved.map(m => m.id);
+  const vars = moved.flatMap(m => (m.formerEnvVar === null ? [] : [m.formerEnvVar]));
+  return {
+    clause: `${listNames(ids)} now run at harness level (upstream removed them and their keys ${listNames(vars)}): keep them here as project-only servers, or remove them and connect them once per machine`,
+    note: [
+      `Upstream no longer commits ${listNames(ids)}: a remote MCP server whose only project-side content is an API key is the harness's business, and the skills resolve it by capability whatever the server prefix (ADR-0005; .agents/skills/agentic-qa-core/references/mcp-capabilities.md).`,
+      'Two valid answers for this project:',
+      `  - keep project: the server stays a project-only entry in ${filePath} and its key stays in your .env and .env.example (the manifest no longer declares ${listNames(vars)}, so vars:env:check treats the uncommented line as an orphan unless you keep it commented or declare it in .env.schema).`,
+      `  - remove it here (and from the other two host files) and connect it at user level: Claude Code \`claude mcp add --scope user\` or a claude.ai connector; OpenCode ~/.config/opencode/opencode.json; Codex \`codex mcp add\`. Then drop ${listNames(vars)} from .env.`,
+      'bun run setup:doctor reports which of these servers your user-level configs already declare.',
+    ].join('\n'),
+  };
+}
+
+/**
+ * Local servers upstream once committed and then RETIRED outright (no
+ * harness-level replacement): the capability they served moved to a CLI.
+ * Keyed by server id; the value is the one-line reason the row prints.
+ */
+export const RETIRED_MCPS: Readonly<Record<string, string>> = {
+  playwright: 'browser automation is `/playwright-cli` only, and no skill resolves a browser MCP any more',
+};
+
+/**
+ * A downstream project's protected MCP file still declares a server upstream
+ * RETIRED (`RETIRED_MCPS`). Nothing overwrites the file; this note is how the
+ * project learns why the server left and that keeping it is a valid answer.
+ * Null when the project declares none of them or upstream still has them.
+ */
+export function retiredMcpNote(filePath: string, project: string, upstream: string): { clause: string, note: string } | null {
+  if (!Object.values(MCP_HOST_FILE).includes(filePath)) { return null; }
+  const mine = configEntries(project, filePath);
+  const theirs = configEntries(upstream, filePath);
+  if (!mine || !theirs) { return null; }
+  const registries = ['mcpServers', 'mcp', 'mcp_servers'];
+  const retired = Object.keys(RETIRED_MCPS).filter(id =>
+    registries.some(r => mine.has(`${r}.${id}`)) && !registries.some(r => theirs.has(`${r}.${id}`)));
+  if (retired.length === 0) { return null; }
+  return {
+    clause: `upstream retired ${listNames(retired)}: keep it here as a project-only server, or remove it`,
+    note: [
+      ...retired.map(id => `Upstream no longer commits ${listNames([id])}: ${RETIRED_MCPS[id]}.`),
+      'Two valid answers for this project:',
+      `  - keep project: the server stays a project-only entry in ${filePath} (and in the other two host files); agents:compat:check still compares it across hosts, just without a pinned shape.`,
+      '  - remove it from all three host files.',
+    ].join('\n'),
+  };
+}
+
 /** Evidence for a watched file, from its two copies plus the diff. */
 export function watchedFileEvidence(filePath: string, project: string, upstream: string, diff: string): WatchedFileEvidence {
   const stats = formatStats(diffStats(diff));
@@ -998,13 +1080,12 @@ export function describeWatchedFile(filePath: string, project: string, upstream:
 
 const MCP_MISSING_RE = /^MCP (\S+) missing from (\w+):/;
 const MCP_EXTRA_RE = /^MCP (\S+) present in (\w+) only:/;
-/** `validateCommandAliases` names a wrapper file no manifest produced. */
-const WRAPPER_UNDECLARED_RE = /^Command wrapper not declared in any manifest: (\S+?);/;
 
 const COMPAT_GROUP_SURFACE: Record<CompatibilityErrorGroup, ParitySurface> = {
   instructions: 'instructions',
   alias: 'skills',
-  wrappers: 'commands',
+  // A command that shadows a skill is a skills problem: the skill is what stops loading.
+  commands: 'skills',
   hooks: 'hooks',
   mcp: 'mcp',
   lint: 'gates',
@@ -1016,13 +1097,12 @@ export function compatErrorSurface(message: string): ParitySurface {
 }
 
 /**
- * Generated surfaces are rebuilt by `agents:compat`; a wrapper no manifest
- * declares is the project's to declare (overlay) or delete; anything else
- * comes from upstream's shape.
+ * Generated surfaces are rebuilt by `agents:compat`, and the same repair moves
+ * a command that shadows a skill aside; anything else comes from upstream's
+ * shape.
  */
 export function compatErrorSuggestion(message: string): ParitySuggestion {
-  if (WRAPPER_UNDECLARED_RE.test(message)) { return 'add to overlay'; }
-  return /command wrapper|skills alias|\.claude\/skills/i.test(message) ? 'run agents:compat' : 'take upstream';
+  return /command shadows skill|skills alias|\.claude\/skills/i.test(message) ? 'run agents:compat' : 'take upstream';
 }
 
 function compatErrorPath(message: string): string {
@@ -1032,6 +1112,29 @@ function compatErrorPath(message: string): string {
   if (host && /MCP/.test(message)) { return MCP_HOST_FILE[host[1].toLowerCase()]; }
   if (/skills alias|\.claude\/skills/.test(message)) { return '.claude/skills'; }
   return '(compat)';
+}
+
+/** Delivered once by the `playwright-cli-config` component, then project-owned. */
+export const PLAYWRIGHT_CLI_CONFIG = '.playwright/cli.config.json';
+
+/**
+ * The keys in the project's playwright-cli config that pin every session to
+ * one shared on-disk profile: `browser.isolated: false` and any
+ * `browser.userDataDir` (ADR-0008 removed both). Empty when the file is
+ * absent, unparseable, or clean: a broken file is the CLI's to report.
+ */
+export function legacyPlaywrightProfileKeys(root: string): string[] {
+  const file = path.join(root, PLAYWRIGHT_CLI_CONFIG);
+  if (!fs.existsSync(file)) { return []; }
+  let browser: unknown;
+  try { browser = (JSON.parse(fs.readFileSync(file, 'utf8')) as { browser?: unknown }).browser; }
+  catch { return []; }
+  if (typeof browser !== 'object' || browser === null || Array.isArray(browser)) { return []; }
+  const block = browser as Record<string, unknown>;
+  const keys: string[] = [];
+  if (block.isolated === false) { keys.push('browser.isolated: false'); }
+  if (Object.prototype.hasOwnProperty.call(block, 'userDataDir')) { keys.push('browser.userDataDir'); }
+  return keys;
 }
 
 // ============================================================================
@@ -1050,17 +1153,6 @@ function watchedSurface(filePath: string, source: 'upstream' | 'project' = 'upst
   // Synced component files kept as the project's own (.husky hooks, a declared path).
   if (filePath.startsWith('.husky/') || source === 'project') { return 'components'; }
   return 'instructions';
-}
-
-/**
- * Wrappers on disk that no manifest (upstream, project overlay) produces, as the
- * compat engine sees them. Without a manifest there is nothing to compare
- * against, so a project that has not received `agent-compatibility` yet yields
- * nothing instead of throwing.
- */
-function wrappersNoManifestProduced(root: string): string[] {
-  try { return undeclaredCommandWrappers(root); }
-  catch { return []; }
 }
 
 // ============================================================================
@@ -1170,12 +1262,18 @@ export function collectParityFindings(input: ParityInput): ParityFinding[] {
         hookNotes.push({ clause: 'lint-staged still runs without --no-stash, which breaks every commit behind the .claude/skills symlink', note: noStash });
       }
     }
-    if (entry.path === HUSKY_PRE_COMMIT || entry.path === HUSKY_PRE_PUSH) {
+    if (entry.path === HUSKY_PRE_COMMIT || entry.path === HUSKY_PRE_PUSH || entry.path === HUSKY_COMMIT_MSG) {
       const gates = frameworkGatesNote(project, entry.path);
       if (gates !== null) {
         hookNotes.push({ clause: `this hook does not source ${HUSKY_GATES_FILE}, so no gate a future release adds will ever run here`, note: gates });
       }
     }
+    // An MCP host file still carrying a server upstream moved to harness level:
+    // the row explains the move; the file is never overwritten.
+    const harnessLevel = harnessLevelMcpNote(entry.path, project, upstream);
+    if (harnessLevel !== null) { hookNotes.push(harnessLevel); }
+    const retired = retiredMcpNote(entry.path, project, upstream);
+    if (retired !== null) { hookNotes.push(retired); }
     drifted.set(entry.path, {
       surface: watchedSurface(entry.path, entry.source),
       path: entry.path,
@@ -1191,9 +1289,8 @@ export function collectParityFindings(input: ParityInput): ParityFinding[] {
     });
   }
 
-  // 2. Compat errors. MCP set errors fold into one finding per host; a wrapper
-  //    no manifest declares is one row per path; the rest stay one finding
-  //    each. All of them block: the contract failed. A drifted watched file on
+  // 2. Compat errors. MCP set errors fold into one finding per host; the rest
+  //    stay one finding each. All of them block: the contract failed. A drifted watched file on
   //    the same path folds in: compat evidence first, drift evidence appended,
   //    the full diff kept for the saved file. Upstream's shape is suggested
   //    only when the project holds nothing of its own there; a project-only
@@ -1214,15 +1311,8 @@ export function collectParityFindings(input: ParityInput): ParityFinding[] {
       diff: driftFinding.diff,
     });
   };
-  const wrappersReported = new Set<string>();
   const mcpByHost = new Map<string, { missing: string[], extra: string[] }>();
   for (const error of input.compatErrors) {
-    const undeclared = WRAPPER_UNDECLARED_RE.exec(error);
-    if (undeclared) {
-      wrappersReported.add(undeclared[1]);
-      pushCompat({ surface: 'commands', path: undeclared[1], evidence: WRAPPER_UNDECLARED_EVIDENCE, suggested: 'add to overlay', blocking: true });
-      continue;
-    }
     const missing = MCP_MISSING_RE.exec(error);
     const extra = MCP_EXTRA_RE.exec(error);
     const match = missing ?? extra;
@@ -1254,6 +1344,26 @@ export function collectParityFindings(input: ParityInput): ParityFinding[] {
       evidence: parts.join('; '),
       suggested: sets.extra.length === 0 ? 'take upstream' : 'merge',
       blocking: true,
+    });
+  }
+  // Compat warnings: a contract the project cannot satisfy by syncing (a
+  // bootstrap-only file upstream improved later). Informational, never
+  // blocking; the warning itself names what to add. One row per path: it
+  // folds into a compat row already on that path, or onto its drift row.
+  for (const warning of input.compatWarnings ?? []) {
+    const warningPath = compatErrorPath(warning);
+    const existing = compat.find(f => f.path === warningPath);
+    if (existing) {
+      existing.evidence = `${existing.evidence}; informational: ${warning}`;
+      continue;
+    }
+    pushCompat({
+      surface: compatErrorSurface(warning),
+      path: warningPath,
+      evidence: `informational: ${warning}`,
+      suggested: 'merge',
+      blocking: false,
+      side: 'kept',
     });
   }
   // The doctrine ledger: one aggregated row for AGENTS.md sections this project
@@ -1301,15 +1411,27 @@ export function collectParityFindings(input: ParityInput): ParityFinding[] {
     });
   }
 
-  // 4. Command wrappers no manifest knows about, when the compat check did not
-  //    already name them (it did not run, or the manifest was missing then).
-  for (const wrapper of wrappersNoManifestProduced(input.root)) {
-    if (wrappersReported.has(wrapper)) { continue; }
+  // 4. Harness commands. The alias layer is retired: a skill is invoked by its
+  //    own name plus a mode, and nothing generates command files any more. A
+  //    project that declared its own aliases keeps its wrapper files as plain
+  //    harness commands; the overlay that listed them is inert, named once.
+  //    A command that carried a skill's name was moved aside by the compat
+  //    hook, one row each, so the project can port anything worth keeping.
+  if (fs.existsSync(path.join(input.root, RETIRED_COMMAND_ALIAS_OVERLAY))) {
     findings.push({
-      surface: 'commands',
-      path: wrapper,
-      evidence: WRAPPER_UNDECLARED_EVIDENCE,
-      suggested: 'add to overlay',
+      surface: 'components',
+      path: RETIRED_COMMAND_ALIAS_OVERLAY,
+      evidence: `informational: command aliases are retired and nothing reads this overlay any more; the commands it declared are plain harness command files now (${HARNESS_COMMAND_DIRS.join(', ')}): edit them there, and delete the overlay when convenient`,
+      suggested: 'keep project',
+      blocking: false,
+    });
+  }
+  for (const moved of input.shadowingCommandsMoved ?? []) {
+    findings.push({
+      surface: 'skills',
+      path: moved,
+      evidence: `informational: this command had the name of a skill and would have replaced the skill's instructions; moved to ${SHADOWING_COMMANDS_BACKUP_DIR}/${moved}; port anything worth keeping into the skill, then drop the backup`,
+      suggested: 'keep project',
       blocking: false,
     });
   }
@@ -1332,6 +1454,38 @@ export function collectParityFindings(input: ParityInput): ParityFinding[] {
   //     correct (measured: full rule parity with upstream while 370 paths
   //     stayed tracked), so the first instinct — go fix `.gitignore` — is a
   //     detour. An ignore rule never untracks what is already in the index.
+  // Context maps (cli/lib/context-maps.ts): a delivered skill whose map was
+  // never generated, with the old markdown it replaces beside it when there is
+  // some. Informational, never blocking: the map is generated by a skill step,
+  // not by a sync, and the old files are input, never deletion candidates.
+  for (const status of input.contextMaps ?? contextMapStatuses(input.root)) {
+    const advice = contextMapAdvice(status);
+    if (advice === null) { continue; }
+    findings.push({
+      surface: 'skills',
+      path: mapRelPath(status.skill),
+      evidence: `informational: ${advice}`,
+      suggested: 'keep project',
+      blocking: false,
+    });
+  }
+
+  // The playwright-cli config ships once and is never overwritten, so a copy
+  // scaffolded before ADR-0008 keeps launching every named session on ONE
+  // shared on-disk profile. Informational: the fix is two deleted keys, and
+  // the human decides when (browser-sessions.md, rule of the OK).
+  const profileKeys = input.playwrightProfileKeys ?? legacyPlaywrightProfileKeys(input.root);
+  if (profileKeys.length > 0) {
+    findings.push({
+      surface: 'components',
+      path: PLAYWRIGHT_CLI_CONFIG,
+      evidence: `informational: ${profileKeys.join(' and ')} still set: every session name shares one on-disk profile, so a named session isolates nothing; remove ${profileKeys.length === 1 ? 'that key' : 'both keys'} from "browser" (keep "headless": true), with the owner's OK. Doctrine: .agents/skills/agentic-qa-core/references/browser-sessions.md, .context/ADR/ADR-0008-browser-session-isolation.md`,
+      suggested: 'merge',
+      blocking: false,
+      side: 'kept',
+    });
+  }
+
   if (input.pbiCache && input.pbiCache.tracked > 0) {
     const testSpecs = input.pbiCache.testSpecs ?? 0;
     const specsClause = testSpecs > 0

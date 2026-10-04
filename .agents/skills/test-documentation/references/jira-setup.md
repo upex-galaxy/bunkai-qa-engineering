@@ -7,7 +7,7 @@ Configuration checklist for Jira projects used by this boilerplate. Covers both 
 
 Which modality is active is resolved by `test-documentation/SKILL.md` §Phase 0. Run the applicable section(s) once per project as part of `/project-discovery` onboarding.
 
-Skills that depend on this setup: `sprint-testing`, `test-documentation`, `regression-testing`, `fix-traceability`.
+Skills that depend on this setup: `sprint-testing`, `test-documentation` (including mode `repair-traceability`), `regression-testing`.
 
 > **Before publishing rich-text bodies to Jira fields configured below** (ATP, ATR, Test Case body, Test Plan body), read `../../agentic-qa-core/references/jira-publishing-gotchas.md` — covers the two ADF conversion gotchas (`md-to-adf` mark collision + MCP batched custom-field rejection) that silently fail HTTP 400.
 
@@ -40,9 +40,14 @@ Project Settings → Issue types → Actions → Add Xray Issue Types. Select al
 
 ### 2.3 Configure Requirement Coverage
 
-Project Settings → Apps → Xray Settings → Test Coverage. Select `Story` and `Epic` as coverable issue types. Optionally add `Bug`. Save.
+The coverable issue types are declared once: every work type `.agents/jira-required.yaml` marks `coverable: true` under `work_types`, by its `jira_issue_type` name. Configure Xray from that list, not from memory, so Xray's coverage and the PBI sync agree on which issues a Test can cover.
 
-Global: Settings → Apps → Xray → Issue Type Mapping → Requirement Issue Types = `Story, Epic`, Defect Issue Types = `Bug`.
+Project Settings → Apps → Xray Settings → Test Coverage. Select every coverable issue type. Save.
+
+Global: Settings → Apps → Xray → Issue Type Mapping:
+
+- Requirement Issue Types = the same coverable issue types.
+- Defect Issue Types = `Bug, Defect`: the two broken-AC classes of `../../agentic-qa-core/references/defect-management-doctrine.md` Part 1, so a Defect filed pre-release can be attached to a Test Run exactly like a Bug. An Improvement is not a broken AC and stays out of this mapping.
 
 ### 2.4 Test workflow
 
@@ -60,8 +65,8 @@ XRAY_CLIENT_SECRET=...
 ATLASSIAN_EMAIL=you@example.com
 ATLASSIAN_API_TOKEN=...
 JIRA_PROJECT_KEY=PROJ
-XRAY_TEST_PLAN_KEY=PROJ-300      # optional
-XRAY_ENVIRONMENT=staging         # optional
+XRAY_PROJECT_KEY=PROJ            # optional, local sync only
+STP_EXECUTION_KEY=PROJ-194       # target Test Execution (RTR or sprint STR) for the write-back; never a Plan key
 ```
 
 Verify with `[TMS_TOOL] auth_status()` (load `/xray-cli` skill — it owns the literal command shape).
@@ -92,14 +97,14 @@ The skill writes into these fields when creating TCs. Add them to the Test issue
 | Labels | Multi-select (default) | Yes | `regression`, `smoke`, `e2e`, `automation-candidate`, etc. |
 | Components | Multi-select (default) | Yes | Affected product module — mandatory on every Test (defect-management doctrine Part 3) |
 | Epic Link | Epic picker | Yes | Points to the Regression Epic |
-| Test Status | Select (custom) | Yes | `NOT RUN` / `PASSED` / `FAILED` / `BLOCKED` — the Execution Status per `tms-conventions.md` §IQL |
+| Test Status | Select (custom) | Yes | the options `test_status.options` in `.agents/jira-required.yaml` declares — the Execution Status per `tms-conventions.md` §IQL |
 | Workflow Status | (workflow) | Yes | `Draft` / `In Design` / `READY` / … / `AUTOMATED` / `DEPRECATED` |
 | Automation Candidate | Checkbox (custom) | Yes | Boolean flag — redundant with labels but easier to filter |
 | Linked Issues | Links (default) | Yes | "is tested by" → Story, "is blocked by" → Bug |
 
 Create the two custom fields:
 
-1. Settings → Issues → Custom fields → Add field → Select List (single choice) → Name `Test Status` → Options `NOT RUN`, `PASSED`, `FAILED`, `BLOCKED`. Associate with the Test issue type.
+1. Settings → Issues → Custom fields → Add field → Select List (single choice) → Name `Test Status` → Options as `test_status.options` in `.agents/jira-required.yaml` declares them. Associate with the Test issue type.
 2. Add field → Checkbox → Name `Automation Candidate`. Associate with the Test issue type.
 
 After creating the fields, run `bun run jira:sync-fields --force` so the numeric IDs Jira assigned are auto-discovered into `.agents/jira-fields.json` under their slug. Reference them from skills via `{{jira.<slug>}}` — never paste the raw `customfield_NNNNN` ID into a skill or doc (workspace-portability rule, AGENTS.md §1.12).
@@ -121,22 +126,11 @@ Steps:
 4. Add both fields to the Story's **View Screen** (Settings → Issues → Screens). Leave them off the Create screen (the skill populates them later, not the PM).
 5. Optionally add them to the Story's Edit Screen so PO/Dev can see them inline.
 
-Record the IDs in `.context/master-test-plan.md`:
-
-```markdown
-## TMS Modality: Jira-native
-
-| Artifact | Custom field ID |
-|----------|-----------------|
-| ATP      | {{jira.acceptance_test_plan}}
-| ATR      | {{jira.acceptance_test_results}}
-| Test Status (on Test) | {{jira.test_status}}
-| Automation Candidate (on Test) | {{jira.to_be_automated}}
-```
+Nothing to record by hand: `.agents/jira-fields.json` is the one place the IDs live, and the skills resolve `{{jira.<slug>}}` from it.
 
 ### 3.4 Bug custom fields (UPEX reference, both modalities)
 
-The `sprint-testing/references/reporting-templates.md` §1.10 table lists the UPEX Galaxy workspace defaults for bug custom fields (Severity, Root Cause, Error Type, etc.). Re-create the equivalent fields in the project, or accept the skill's graceful degradation (bugs land with missing fields and a warning).
+The `sprint-testing/references/reporting-templates.md` §1.10 table lists the shipped bug custom fields (`.agents/jira-required.yaml`) (Severity, Root Cause, Error Type, etc.). Re-create the equivalent fields in the project, or accept the skill's graceful degradation (bugs land with missing fields and a warning).
 
 ### 3.5 Issue links
 
@@ -164,23 +158,16 @@ Same state machine as Modality jira-xray (`tms-conventions.md` §5). Build a Jir
 
 ## 4. Per-project configuration output
 
-At the end of setup, `.context/master-test-plan.md` must contain a TMS section that answers these five questions unambiguously:
+At the end of setup, five questions must have an unambiguous answer. Each already has one owner, so setup fills those owners and writes no summary anywhere else (the Master Test Plan is strategy, not configuration):
 
-```markdown
-## TMS
+| Question | Owner |
+|----------|-------|
+| Modality (Xray on Jira or Jira-native) and TMS CLI | `.agents/project.yaml` → `testing.tms_cli` (`bun xray` = jira-xray; unset or `acli` = jira-native) |
+| Regression Epic | `.agents/project.yaml` → `qa.qa_epics.test_repository_epic` (name, key cached on first discovery) |
+| Custom field IDs (Modality jira-native only) | `.agents/jira-fields.json`, filled by `bun run jira:sync-fields` |
+| Link types available | `.agents/jira-link-types.json`, filled by `bun run jira:sync-link-types` |
 
-- Modality: Xray on Jira | Jira-native
-- TMS CLI: bun xray | acli (only)
-- Regression Epic: {KEY} — {title}
-- Custom field IDs (Modality jira-native only):
-    ATP: {{jira.acceptance_test_plan}}
-    ATR: {{jira.acceptance_test_results}}
-    Test Status: {{jira.test_status}}
-    Automation Candidate: {{jira.to_be_automated}}
-- Link types available: is tested by / tests, is blocked by / blocks
-```
-
-If any answer is missing, the skills fall back to the Phase 0 resolution probes (`AGENTS.md` → `master-test-plan.md` → list issue types → ask the user). Making the answers explicit here is what saves every future session from re-asking.
+If an owner is empty, the skills fall back to the Phase 0 resolution probes (`.agents/project.yaml` → list issue types → ask the user). Filling the owners is what saves every future session from re-asking.
 
 ---
 

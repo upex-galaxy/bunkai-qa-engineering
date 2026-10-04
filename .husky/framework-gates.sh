@@ -90,15 +90,16 @@ framework_gates_pre_commit() {
   fi
 
   # cross-harness compatibility gate — only runs when staged files affect it.
-  # Covers the generated Claude skills alias, the command wrappers, the three hook
-  # adapters and MCP parity across the three host configs. Everything it guards is
-  # generated or mirrored, so a hand-edit is invisible to every other check.
-  if echo "$_fg_staged" | grep -qE '^(\.agents/compatibility/|\.agents/hooks/|\.claude/commands/|\.opencode/commands/|\.opencode/plugins/|\.codex/|\.claude/settings\.json$|\.mcp\.json$|opencode\.jsonc$|cli/lib/agent-compatibility.*\.ts$|scripts/agent-compatibility.*\.ts$)'; then
+  # Covers the generated Claude skills alias, a harness command that shadows a
+  # skill, the three hook adapters and MCP parity across the three host configs.
+  # Everything it guards is generated or mirrored, so a hand-edit is invisible to
+  # every other check.
+  if echo "$_fg_staged" | grep -qE '^(\.agents/hooks/|\.claude/commands/|\.opencode/commands/|\.opencode/plugins/|\.codex/|\.claude/settings\.json$|\.mcp\.json$|opencode\.jsonc$|cli/lib/agent-compatibility.*\.ts$|scripts/agent-compatibility.*\.ts$)'; then
     bun run agents:compat:check || {
       echo ""
       echo "❌ Cross-harness compatibility is out of contract. Fix:"
-      echo "   bun run agents:compat   # regenerates wrappers + repairs the Claude skills alias"
-      echo "   then re-stage whatever it rewrote under .claude/commands/ and .opencode/commands/"
+      echo "   bun run agents:compat   # repairs the Claude skills alias, moves a command that shadows a skill to .backups/"
+      echo "   then stage the deletion of any command it moved"
       exit 1
     }
   fi
@@ -124,12 +125,12 @@ framework_gates_pre_commit() {
 #                                have changed the registry without pre-commit catching it.
 #   - kata:manifest:check        unconditional safety net — same rationale as the registry.
 #   - agents:compat:check        unconditional safety net for the cross-harness contract:
-#                                the generated `.claude/skills` alias, the command wrappers
-#                                against `.agents/compatibility/command-aliases.json`,
+#                                the generated `.claude/skills` alias, no harness command
+#                                named like a skill (it would hide the skill's instructions),
 #                                the three hook adapters, MCP parity for every server, and that eslint.config.js wires every block the synced base exports
 #                                declared in .mcp.json across `.mcp.json` / `opencode.jsonc`
 #                                / `.codex/config.toml`. All of it is generated or mirrored,
-#                                so nothing else notices when a wrapper is hand-edited or an
+#                                so nothing else notices when a command shadows a skill or an
 #                                MCP is added to one host only.
 #                                Fix is always `bun run agents:compat` (regenerates + repairs).
 #   - git:policy verify          declared git_strategy vs the host's enforced ruleset —
@@ -162,6 +163,20 @@ framework_gates_pre_push() {
     && bun run agents:compat:check \
     && bun run git:policy verify \
     && framework_gate_varlock_warn
+}
+
+# Gate that runs on the COMMIT MESSAGE (`.husky/commit-msg`, which passes the
+# message file git hands it as $1). WARN-ONLY by contract: the forensic-trailer
+# check (AGENTS.md Critical Rule #3, canon in git-flow-master §3.2) prints what
+# is missing or forbidden and never blocks, so a human commit, a merge or an
+# emergency fix always lands. The script ships in the `scripts` component, a
+# separate sync phase from this file, so a project that has this function but
+# not the script yet is skipped silently rather than broken.
+framework_gates_commit_msg() {
+  if [ -f scripts/check-commit-trailers.ts ]; then
+    bun scripts/check-commit-trailers.ts "$1" || true
+  fi
+  return 0
 }
 
 # The warn-only env-schema validation described above. A function so the

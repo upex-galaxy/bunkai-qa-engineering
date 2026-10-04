@@ -12,14 +12,14 @@ import type { ProtectedWatchEntry } from './lib/updater-drift';
 import type { HarnessMigrationResult } from './lib/updater-harness-migration.ts';
 import type { GateResult, HeldBackComponent, ParityFinding, ParityReport } from './lib/updater-parity';
 import type { PbiCacheFact } from './lib/updater-pbi';
-import type { Component, ReportSink, RunSummary, UpdaterConfig } from './lib/updater-types';
+import type { Component, DeprecatedFile, ReportSink, RunSummary, UpdaterConfig } from './lib/updater-types';
 import { execSync, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
 import pc from 'picocolors';
-import { checkAgentCompatibility, COMMAND_ALIAS_MANIFEST, repairAgentSurfaces, SKILLS_ALIAS_DEFERRED_MARKER } from './lib/agent-compatibility.ts';
+import { checkAgentCompatibility, repairAgentSurfaces, SHADOWING_COMMANDS_BACKUP_DIR, SKILLS_ALIAS_DEFERRED_MARKER } from './lib/agent-compatibility.ts';
 import { applyInsertions, planInsertions, projectDelta, SCHEMA_FILE, SCHEMA_SOURCE } from './lib/agents-schema.ts';
 import * as tui from './lib/tui';
 import {
@@ -48,6 +48,7 @@ import {
 } from './lib/updater-harness-migration.ts';
 import { groupIgnoreLines } from './lib/updater-ignore';
 import {
+  ABORTED_OUTRO,
   archivedSkillsToReport,
   collectParityFindings,
   PARITY_PROMPT_PATH,
@@ -60,11 +61,12 @@ import {
 import { makePbiCacheMigrationHook } from './lib/updater-pbi';
 import { CLAUDE_SETTINGS_FILE, mergeAllowList } from './lib/updater-settings';
 import { parseDotEnvExampleKeys, requiredNow, VAR_MANIFEST } from './lib/variables-manifest.ts';
+import { checkoutRoots } from './lib/worktree.ts';
 
 // --- CONFIGURATION ---
 // Not tied to the lock schema (`schemaVersion: 7` stays): it stamps the lock's
 // `cliVersion` and the ignore-file sentinel header, which is matched by prefix.
-const CLI_VERSION = '8.4';
+const CLI_VERSION = '8.5';
 // `UPEX_TEMPLATE_REPO` points the updater at another source: a fork, or a LOCAL
 // clone (absolute path / file:// URL, cloned with plain git, no gh session) to
 // exercise an unpublished boilerplate branch against a consumer repo.
@@ -97,6 +99,16 @@ const CONFIG_CORE_FILES = ['variables.core.ts'];
 // against a template frozen at scaffold time and reports nothing to do.
 const AGENTS_DOCS_FILES = ['README.md', 'project.schema.yaml'];
 const ENV_TEMPLATE_FILES = ['.env.example'];
+// The gitignored files a Claude Code or Codex-managed worktree copies in.
+const WORKTREE_INCLUDE_FILES = ['.worktreeinclude'];
+// Orca's committed repo hooks: provision a new worktree, audit it before removal.
+const ORCA_CONFIG_FILES = ['orca.yaml'];
+// The playwright-cli launch defaults (in memory, headless; ADR-0008). Delivered
+// ONCE when missing, then project-owned: a project may tune the viewport,
+// timeouts or test-id attribute. A copy that still carries the old shared
+// on-disk profile gets an informational parity row instead of an overwrite
+// (`legacyPlaywrightProfileKeys` in cli/lib/updater-parity.ts).
+const PLAYWRIGHT_CLI_CONFIG_FILES = ['cli.config.json'];
 // The varlock env schema, in two halves like `config/variables{.core,}.ts`:
 // `.env.core.schema` is GENERATED from cli/lib/variables-manifest.ts by
 // `bun run vars:schema` and plainly synced; `.env.schema` imports it, carries
@@ -116,6 +128,30 @@ const ENV_SCHEMA_FILES = ['.env.schema', '.env.core.schema'];
 const CODEX_FRAMEWORK_FILES = ['hooks.json'];
 const CLAUDE_ROOT_CONFIG_FILES = ['settings.json'];
 
+// `docs/` is the human documentation site. The boilerplate owns ONLY its
+// shipped half: `docs/core/**` (the pages), `docs/assets/**` (shared css/js and
+// diagrams), the portal `docs/index.html`, `docs/README.md` and the
+// `docs/.gitignore` that keeps the generated `manifest.json` out of git. Every
+// other path under `docs/` is project-owned: the sync never writes it, and an
+// uncommitted page there never trips the dirty-tree guard.
+//
+// DOCS_LEGACY_PATHS are the Markdown pages and folders the relaunch retired.
+// They stay in the component's paths only so their upstream DELETION still
+// reaches a project that synced them earlier (classified `deleted-upstream`,
+// offered, never forced). Nothing upstream lives there any more.
+const DOCS_SHIPPED_PATHS = ['docs/core', 'docs/assets', 'docs/index.html', 'docs/README.md', 'docs/.gitignore'];
+const DOCS_LEGACY_PATHS = [
+  'docs/onboarding.html',
+  'docs/agentic-quality-engineering.md',
+  'docs/ai-personality.md',
+  'docs/architectures',
+  'docs/methodology',
+  'docs/mcp',
+  'docs/setup',
+  'docs/testing',
+  'docs/workflows',
+];
+
 /** Canonical cross-harness skill source. Claude consumes it through an alias. */
 const SKILLS_CANONICAL_DIR = '.agents/skills';
 
@@ -127,33 +163,81 @@ const SKILLS_CANONICAL_DIR = '.agents/skills';
 //  - .agents/skills/REGISTRY.md: built by `bun run skills:registry` from the
 //    repo's own installed skill set, including local community skills.
 // `.claude/skills` (alias) is gitignored and never in upstream, so it needs no
-// entry; `.claude/commands` + `.opencode/commands` DO sync (component `commands`)
-// and are then re-rendered from `.agents/compatibility/command-aliases.json`.
+// entry. Upstream ships no command files: the retired alias wrappers are
+// removed through `deprecatedFiles` (RETIRED_COMMAND_WRAPPERS).
 const GENERATED_PATHS = ['CLAUDE.md', `${SKILLS_CANONICAL_DIR}/REGISTRY.md`];
+
+// The command-alias layer is retired: a skill is invoked by its own name plus a
+// mode (`/project-context data` on Claude Code, in prose on OpenCode and Codex).
+// These are the files upstream generated for it. `cleanupDeprecated` removes
+// them without a backup, which is right for wrappers that carried no workflow
+// (the compat contract rejected any body). A command the PROJECT
+// declared is not here and stays; one that carries a skill's name is moved
+// aside by the compat hook instead (`removeShadowingCommands`).
+const RETIRED_ALIAS_NAMES = [
+  'adapt-framework',
+  'break-down-tests',
+  'business-api-map',
+  'business-data-map',
+  'business-feature-map',
+  'fix-traceability',
+  'jira-components',
+  'jira-instance-migration',
+  'master-test-plan',
+  'sync-ai-memory',
+];
+const RETIRED_ALIAS_REASON = 'command aliases retired: invoke the skill by name plus its mode (AGENTS.md, section 5)';
+export const RETIRED_COMMAND_WRAPPERS: DeprecatedFile[] = [
+  { path: '.agents/compatibility/command-aliases.json', component: 'agent-compatibility', reason: RETIRED_ALIAS_REASON, deprecatedSince: '8.5' },
+  ...['.claude/commands', '.opencode/commands'].flatMap(dir => RETIRED_ALIAS_NAMES.map(name => ({
+    path: `${dir}/${name}.md`,
+    component: 'commands',
+    reason: RETIRED_ALIAS_REASON,
+    deprecatedSince: '8.5',
+  }))),
+];
+
+// Skills renamed or retired upstream: a renamed skill's new folder arrives
+// through the `skills` component, the old one leaves here. `cleanupDeprecated`
+// also removes the folders it empties, because a skill folder with no SKILL.md
+// fails skills:check.
+const RENAMED_SKILL_REASON = 'skill renamed to test-framework-adaptation (same workflow, new name)';
+const RETIRED_SYNC_REASON = 'skill retired: bun run docs:check gates the skill router and quoted scripts; framework-development and test-framework-adaptation close the docs';
+export const RETIRED_SKILL_FILES: DeprecatedFile[] = [
+  ...[
+    '.agents/skills/adapt-framework/SKILL.md',
+    '.agents/skills/adapt-framework/references/adaptation-workflow.md',
+  ].map(path => ({ path, component: 'skills', reason: RENAMED_SKILL_REASON, deprecatedSince: '8.5' })),
+  ...[
+    '.agents/skills/sync-ai-context/SKILL.md',
+    '.agents/skills/sync-ai-context/references/sync.md',
+  ].map(path => ({ path, component: 'skills', reason: RETIRED_SYNC_REASON, deprecatedSince: '8.5' })),
+];
+
+export const DEPRECATED_FILES: DeprecatedFile[] = [...RETIRED_COMMAND_WRAPPERS, ...RETIRED_SKILL_FILES];
 
 export const COMPONENTS: Component[] = [
   // `skills` stays its own component (not folded into `agent-compatibility` as
   // upstream dev does): `bun run up skills --skill a,b` narrows it by subdirectory.
   { name: 'skills', type: 'directory', paths: [SKILLS_CANONICAL_DIR] },
-  // Generated wrappers for both hosts. Synced so a consumer receives new aliases,
-  // then re-rendered from the manifest so a hand edit never survives a run.
-  { name: 'commands', type: 'directory', paths: ['.claude/commands', '.opencode/commands'] },
-  // One source, three harnesses: the hook emitter, the command-alias manifest
-  // and the OpenCode hook adapter. `.claude/skills` is NOT here: it is the
-  // generated alias, rebuilt by the afterApply compatibility hook.
-  { name: 'agent-compatibility', type: 'directory', paths: ['.agents/compatibility', '.agents/hooks', '.opencode/plugins'] },
+  // One source, three harnesses: the hook emitter and the OpenCode hook
+  // adapter. `.claude/skills` is NOT here: it is the generated alias, rebuilt
+  // by the afterApply compatibility hook. The `commands` component (the alias
+  // wrappers) is retired; a lock that still carries its cursor is harmless,
+  // because every walk iterates this list, never the lock's keys.
+  { name: 'agent-compatibility', type: 'directory', paths: ['.agents/hooks', '.opencode/plugins'] },
   { name: 'codex-config', type: 'directory', paths: ['.codex'], bootstrapOnly: true, frameworkFiles: CODEX_FRAMEWORK_FILES },
   // Delivered once when missing, then project-owned (watchlist). A file-list on
-  // the `.claude` root: `.claude/commands` belongs to `commands`, `.claude/skills`
-  // is the generated alias. `.mcp.json` and `opencode.jsonc` left this component
+  // the `.claude` root: `.claude/commands` is the project's own (never synced),
+  // `.claude/skills` is the generated alias. `.mcp.json` and `opencode.jsonc` left this component
   // in 8.2: they are project MCP registries, watchlisted and never synced.
   { name: 'agent-root-config', type: 'file-list', paths: ['.claude'], files: CLAUDE_ROOT_CONFIG_FILES, bootstrapOnly: true },
   { name: 'scripts', type: 'directory', paths: ['scripts'] },
-  { name: 'docs', type: 'directory', paths: ['docs'] },
+  { name: 'docs', type: 'directory', paths: [...DOCS_SHIPPED_PATHS, ...DOCS_LEGACY_PATHS] },
   { name: 'cli', type: 'directory', paths: ['cli'] },
   { name: 'vscode', type: 'directory', paths: ['.vscode'] },
-  // `.husky/pre-commit` and `.husky/pre-push` are on PROTECTED_WATCHLIST (the
-  // project's gates and their ordering live there): delivered once when missing,
+  // `.husky/pre-commit`, `.husky/pre-push` and `.husky/commit-msg` are on
+  // PROTECTED_WATCHLIST (the project's gates and their ordering live there): delivered once when missing,
   // never overwritten. Everything else under `.husky/` keeps syncing — which is
   // exactly how `framework-gates.sh` reaches a project scaffolded earlier: the
   // gates upstream owns sit in that synced file, and each hook sources it.
@@ -166,6 +250,13 @@ export const COMPONENTS: Component[] = [
   // afterApply hook can only diff against an `.env.example` we have shipped.
   { name: 'env-template', type: 'file-list', paths: ['.'], files: ENV_TEMPLATE_FILES },
   { name: 'env-schema', type: 'file-list', paths: ['.'], files: ENV_SCHEMA_FILES },
+  // Delivered once when missing, then project-owned: a project appends its own
+  // gitignored inputs, and a later sync must not drop them. Without it a
+  // Codex-managed worktree starts with no `.env`, and every MCP loader in
+  // `.codex/config.toml` with it.
+  { name: 'worktree-include', type: 'file-list', paths: ['.'], files: WORKTREE_INCLUDE_FILES, bootstrapOnly: true },
+  { name: 'orca-config', type: 'file-list', paths: ['.'], files: ORCA_CONFIG_FILES, bootstrapOnly: true },
+  { name: 'playwright-cli-config', type: 'file-list', paths: ['.playwright'], files: PLAYWRIGHT_CLI_CONFIG_FILES, bootstrapOnly: true },
 ];
 
 // --- ARG PARSE ---
@@ -260,14 +351,14 @@ PREFLIGHT CROSS-HARNESS (automatico, una sola vez, ANTES de sincronizar):
 
 SUPERFICIES GENERADAS (nunca se sincronizan ni se reportan como drift):
   CLAUDE.md (shim \`@AGENTS.md\`), .claude/skills (alias a .agents/skills),
-  .claude/commands/*.md y .opencode/commands/*.md (wrappers),
   .agents/skills/REGISTRY.md y kata-manifest.json. Tras cada sync se regeneran
   con la misma logica de \`bun run agents:compat\`, \`skills:registry\` y
   \`kata:manifest\`.
 
 REPORTE DE PARIDAD (al final de cada corrida, incluido --dry-run):
-  Una tabla "Estado por superficie" (10 filas: instrucciones y config, skills,
-  comandos, hooks, MCP, env, componentes, package.json, git, verificacion) y UN
+  Una tabla "Estado por superficie" (una fila por superficie: instrucciones y
+  config, skills, hooks, MCP, env, componentes, package.json, git,
+  verificacion) y UN
   prompt para tu IA con cada diferencia frente a upstream (archivo + evidencia:
   secciones, claves, servidores, hunks) para que decidas fila por fila: keep
   project | take upstream | merge. Se guarda en ${PARITY_PROMPT_PATH}
@@ -278,7 +369,7 @@ REPORTE DE PARIDAD (al final de cada corrida, incluido --dry-run):
   portar (lo que upstream agrego) y que conservar (lo que solo tiene el
   proyecto). Los archivos protegidos (AGENTS.md, .agents/project.yaml,
   .mcp.json, opencode.jsonc, .codex/config.toml, .claude/settings.json,
-  .husky/pre-commit, .husky/pre-push, allurerc.mjs, playwright.config.ts, las
+  .husky/pre-commit, .husky/pre-push, .husky/commit-msg, allurerc.mjs, playwright.config.ts, las
   bases KATA de tests/components/, los workflows de CI, …) nunca se
   sobrescriben: solo aparecen en ese reporte. .claude/settings.json, .codex/ y
   los hooks de .husky/ se entregan UNA vez si faltan. El proyecto suma sus
@@ -339,7 +430,7 @@ FLAGS:
                          prompt no se guarda)
   --strict               Sale con codigo 1 si el sync termina con un hallazgo
                          BLOQUEANTE de paridad (contrato de compatibilidad
-                         roto: alias, wrappers, hooks, MCP). Por defecto solo
+                         roto: alias, comandos, hooks, MCP). Por defecto solo
                          avisa y sale 0. El drift de archivos protegidos nunca
                          bloquea, salvo cuando su hunk upstream es requisito de
                          otro archivo de la misma release (la fila lo dice y
@@ -362,7 +453,7 @@ EJEMPLOS:
   bun up skills                          # Solo agent skills
   bun up skills --skill a,b,c            # Skills especificos
   bun up --list                          # Listar skills disponibles
-  bun up commands docs                   # Multiples componentes
+  bun up scripts docs                    # Multiples componentes
   bun up codex-config                    # Solo el adaptador de Codex
   bun up --auto                          # CI mode (seguro, preserva lo tuyo)
   bun up --force                         # Forzar todo del upstream (sin preguntar)
@@ -443,6 +534,8 @@ interface RunFacts {
   migrationPlanned: boolean
   /** The compat hook left `.claude/skills` for `bun run agents:compat` after the migration commit. */
   aliasDeferred: boolean
+  /** Project commands that shadowed a skill, moved aside by the compat hook this run. */
+  shadowingCommandsMoved: string[]
   /** Post-apply quality gates; empty when skipped. */
   gates: GateResult[]
   /** Why `gates` stayed empty this run: nothing to say when gates actually ran (even a fail leaves at least one `GateResult`). */
@@ -457,7 +550,7 @@ interface RunFacts {
   doctrineDebt: string | null
   parity: { findings: ParityFinding[], report: ParityReport } | null
 }
-const runFacts: RunFacts = { compat: null, envNewKeys: [], migration: null, migrationPlanned: false, aliasDeferred: false, gates: [], gatesSkippedReason: null, promptKept: false, pbiCache: null, allowListAdded: [], doctrineDebt: null, parity: null };
+const runFacts: RunFacts = { compat: null, envNewKeys: [], migration: null, migrationPlanned: false, aliasDeferred: false, shadowingCommandsMoved: [], gates: [], gatesSkippedReason: null, promptKept: false, pbiCache: null, allowListAdded: [], doctrineDebt: null, parity: null };
 
 // --- ENV-VAR DRIFT DETECTION (afterApply hook) ---
 //
@@ -507,18 +600,21 @@ async function detectEnvVarDrift(
   runFacts.envNewKeys = newKeys; // the parity report lists them as an `env` finding
   if (newKeys.length === 0) { return; }
 
-  // Flag which of the new keys the manifest marks required RIGHT NOW (given
-  // the target's current env), so the warning can lead with those.
+  // Tag each new key by SCOPE (ADR-0005): only a CORE var the manifest marks
+  // required right now earns `(requerida)`; a tooling or project var is
+  // `(opcional, <scope>)`, because the framework never requires those and the
+  // code that reads one fails by name at its point of use.
   const envSnapshot = process.env as Record<string, string>;
-  const requiredNew = newKeys.filter((k) => {
+  const tag = (k: string): string => {
     const spec = VAR_MANIFEST.find(s => s.name === k);
-    return spec ? requiredNow(spec, envSnapshot) : false;
-  });
+    if (!spec) { return ''; }
+    if (spec.scope === 'core' && requiredNow(spec, envSnapshot)) { return pc.yellow(' (requerida)'); }
+    return pc.dim(` (opcional, ${spec.scope})`);
+  };
 
   sink.warn(`El upstream agregó ${newKeys.length} variable(s) de entorno que tu .env no tiene:`);
   for (const k of newKeys) {
-    const isReq = requiredNew.includes(k);
-    sink.warn(`  - ${k}${isReq ? pc.yellow(' (requerida)') : ''}`);
+    sink.warn(`  - ${k}${tag(k)}`);
   }
 
   // CI / non-interactive: print only — never prompt, never touch remote (D3).
@@ -609,8 +705,9 @@ function makeSkillsRegistryHook(sink: ReportSink): (summary: RunSummary) => Prom
 //
 // Same engine as `bun run agents:compat`, imported from `cli/lib` so it travels
 // with the self-updating `cli` component. Runs after EVERY apply, not only when
-// skills changed: the alias is gitignored (a fresh clone has none), the
-// wrappers are re-rendered from the manifest, and the check reports anything
+// skills changed: the alias is gitignored (a fresh clone has none), a project
+// command that shadows a skill is moved to SHADOWING_COMMANDS_BACKUP_DIR, and
+// the check reports anything
 // the sync could not fix (a protected `.claude/settings.json` still pointing at
 // the old hook, an MCP server added to one host only). Reports, never throws:
 // the sync already landed, and a failed contract is something the user fixes
@@ -648,19 +745,20 @@ export function makeAgentCompatibilityHook(
   return async (): Promise<void> => {
     const deferSkillsAlias = runFacts.migration?.applied === true || migrationCommitPending(root);
     sink.step(deferSkillsAlias
-      ? 'Regenerando wrappers de comandos (el alias .claude/skills espera al commit de la migración)…'
-      : 'Regenerando superficies de Claude/OpenCode/Codex (alias .claude/skills, wrappers de comandos)…');
+      ? 'Revisando superficies de Claude/OpenCode/Codex (el alias .claude/skills espera al commit de la migración)…'
+      : 'Regenerando superficies de Claude/OpenCode/Codex (alias .claude/skills)…');
     const repair = repairAgentSurfaces(root, { deferSkillsAlias });
     runFacts.compat = repair.check;
     runFacts.aliasDeferred = repair.aliasDeferred;
-    if (repair.wrappersWritten === null) {
-      sink.warn(`Sin ${COMMAND_ALIAS_MANIFEST}: los wrappers de comandos no se regeneraron (llega con el componente agent-compatibility).`);
+    runFacts.shadowingCommandsMoved = repair.shadowingCommandsMoved;
+    for (const moved of repair.shadowingCommandsMoved) {
+      sink.warn(`${moved} tenía el nombre de una skill y la ocultaba: movido a ${SHADOWING_COMMANDS_BACKUP_DIR}/${moved}.`);
     }
     if (repair.aliasDeferred) {
       sink.step(ALIAS_DEFERRED_NEXT_STEP);
     }
     if (repair.check.ok) {
-      sink.step(`Compatibilidad lista: alias ${repair.alias?.status ?? 'pendiente'}; ${repair.wrappersWritten ?? 0} wrapper(s) actualizado(s).`);
+      sink.step(`Compatibilidad lista: alias ${repair.alias?.status ?? 'pendiente'}.`);
       return;
     }
     sink.warn(`La compatibilidad agéntica quedó incompleta: ${repair.check.errors.length} contrato(s) roto(s). Detalle en la tabla de paridad al final (filas BLOCKING).`);
@@ -1090,6 +1188,7 @@ const PROTECTED_WATCHLIST: ProtectedWatchEntry[] = [
   // stay watched for what is genuinely theirs: ordering, and their own gates.
   { path: '.husky/pre-commit', reason: 'project gates and their ordering live here; the gates upstream owns come from the synced .husky/framework-gates.sh, so a hook that does not source it never sees another one' },
   { path: '.husky/pre-push', reason: 'project gates and their ordering live here; the gates upstream owns come from the synced .husky/framework-gates.sh, so a hook that does not source it never sees another one' },
+  { path: '.husky/commit-msg', reason: 'project commit-message checks live here (commitlint, ...); the warn-only checks upstream owns (forensic trailers) come from the synced .husky/framework-gates.sh, so a hook that does not source it never sees another one' },
 ];
 
 /**
@@ -1133,8 +1232,8 @@ const PBI_MIGRATION_PROMPT_PATH = path.join('.agents', 'prompts', 'pbi-cache-mig
 //
 // Folds everything the run learned into ONE set of findings: watched files
 // that drifted (with sha markers so each upstream change nudges once), compat
-// errors (blocking), MCP set per host, skills the migration archived, wrappers
-// no manifest produced, components held back, env keys upstream added, the
+// errors (blocking), MCP set per host, skills the migration archived, the
+// retired alias overlay and any command moved aside, components held back, env keys upstream added, the
 // gates and the git_strategy provenance. Runs while the upstream clone is
 // still on disk. The rendered table + prompt are printed by main() AFTER
 // runUpdate returns, so they are the last thing on screen; the prompt (with
@@ -1305,13 +1404,25 @@ function makeParityHook(sink: ReportSink, priorLockSha: string, dryRun: boolean,
     // read-only check stands in, unless the preflight would migrate first
     // (then every contract is expectedly broken and the check says nothing).
     let compatErrors = runFacts.compat?.errors ?? [];
+    let compatWarnings = runFacts.compat?.warnings ?? [];
     if (dryRun && !runFacts.compat) {
       if (runFacts.migrationPlanned) {
         sink.step('[dry-run] Comprobación de compatibilidad omitida: la corrida real migra primero y la evalúa después.');
       }
       else {
-        try { compatErrors = checkAgentCompatibility(cwd).errors; }
+        try {
+          const check = checkAgentCompatibility(cwd);
+          compatErrors = check.errors;
+          compatWarnings = check.warnings;
+        }
         catch (err) { compatErrors = [err instanceof Error ? err.message : String(err)]; }
+        // The real run deletes the retired alias wrappers (deprecatedFiles)
+        // BEFORE this check; the preview still has them on disk, and the one
+        // named like a skill the project may still hold (`adapt-framework`,
+        // renamed in the same release) would read as a command shadowing it.
+        // It is not: it is already on the removal list.
+        const retired = RETIRED_COMMAND_WRAPPERS.map(d => d.path);
+        compatErrors = compatErrors.filter(error => !retired.some(p => error.includes(`: ${p};`)));
       }
     }
     const findings = collectParityFindings({
@@ -1319,6 +1430,7 @@ function makeParityHook(sink: ReportSink, priorLockSha: string, dryRun: boolean,
       upstreamDir: UPSTREAM_DIR,
       drift: drifted.map(d => ({ path: d.path, reason: d.reason, structural: d.structural === true, source: d.source })),
       compatErrors,
+      compatWarnings,
       archivedSkills,
       archivedSkillsDir,
       heldBack,
@@ -1333,6 +1445,7 @@ function makeParityHook(sink: ReportSink, priorLockSha: string, dryRun: boolean,
       packageJsonKept: summary.packageJsonKept ?? [],
       gates: runFacts.gates,
       pbiCache: runFacts.pbiCache,
+      shadowingCommandsMoved: runFacts.shadowingCommandsMoved,
     });
     const report = renderParityReport(findings, {
       templateRepo: TEMPLATE_REPO,
@@ -1674,10 +1787,34 @@ function buildSink(): ReportSink {
 }
 
 // --- MAIN ---
+/**
+ * Why the updater must not run from `cwd`, or null when it may.
+ *
+ * Everything the updater keeps between runs is gitignored and cwd-relative:
+ * the `.backups/` that `--rollback` restores, the `.template/` markers and the
+ * doctrine ledger, the single-use prompts under `.agents/prompts/`. Run from a
+ * linked worktree, all of it lands in the worktree and dies with it, and the
+ * next run in the primary sees none of it. So the updater runs in the primary
+ * checkout only.
+ */
+export function worktreeRefusal(cwd = process.cwd()): string | null {
+  const roots = checkoutRoots(cwd);
+  if (roots === null || !roots.linked) { return null; }
+  return 'Este checkout es un worktree. `bun run up` guarda backups (para --rollback), marcadores y prompts '
+    + 'dentro del checkout, y en un worktree se pierden al borrarlo. Ejecuta `bun run up` en el checkout '
+    + `principal: ${roots.primaryRoot}`;
+}
+
 async function main(): Promise<void> {
   const parsed = parseArgs(process.argv.slice(2));
 
   if (parsed.help) { process.stdout.write(HELP_TEXT); process.exit(0); }
+  const refusal = worktreeRefusal();
+  if (refusal !== null) {
+    tui.log.error(refusal);
+    tui.outro(ABORTED_OUTRO);
+    process.exit(1);
+  }
   if (parsed.rollback) { rollbackFromBackup(); process.exit(0); }
   if (parsed.listSkills) { await listAvailableSkills(); process.exit(0); }
 
@@ -1751,7 +1888,7 @@ async function main(): Promise<void> {
     packageJsonSpecs: [
       { path: 'package.json', sections: ['scripts', 'devDependencies', 'dependencies', 'lint-staged'] },
     ],
-    deprecatedFiles: [],
+    deprecatedFiles: DEPRECATED_FILES,
     // Every watched path is project-owned inside a synced component too:
     // delivered once when missing, never overwritten (`.husky/pre-push`, a
     // path from `updater.protected_paths`). Paths no component owns are
@@ -1762,14 +1899,19 @@ async function main(): Promise<void> {
       '.agents/jira-workflows.json',
       '.agents/jira-link-types.json',
       '.agents/jira-required.yaml',
-      '.agents/compatibility/command-aliases.project.json',
       // The auth ADAPTER (buildAuthPayload / extractTokenFromResponse /
-      // environments). Same deal as the command-alias overlay: delivered when
-      // missing, then owned by the project. Its two synced neighbours —
+      // environments). Delivered when missing, then owned by the project. Its two synced neighbours —
       // scripts/lib/api-login-core.ts (the CLI) and scripts/api-login.ts (the
       // entry) — carry every upstream improvement, so nothing forces a project
       // to re-adapt to get them.
       'scripts/api-login.project.ts',
+      // The project-owned overlay of the shipped `iql-context` skill: local
+      // rules and exceptions to the methodology index. The skill body and its
+      // other references keep syncing; this file is delivered once when
+      // missing, then never touched (D6 of the context-skills deck). A
+      // consumer's own `<aspect>-context/` skills need no entry: they are
+      // project-local by construction (`isProjectLocalSkillPath`).
+      '.agents/skills/iql-context/references/project-overrides.md',
       ...watchlist.map(e => e.path),
     ],
     // Files inside a synced component that must NEVER be delivered or
@@ -1797,7 +1939,7 @@ async function main(): Promise<void> {
     // `.context/ADR/` needs no entry here: `.context` is not a synced component,
     // so ADRs only ever travel through the scaffold tarball, which prunes them.
     repoOnlyPaths: [
-      'docs/qa-standard',
+      'docs/reports',
     ],
     // Watchlist files are NOT synced — included in the sparse clone only so
     // the protected-drift detection can read their upstream copies.
@@ -1823,7 +1965,7 @@ async function main(): Promise<void> {
           )
         : composeHooks(
             sink,
-            // Alias + wrappers first: a Claude Code session opened right after
+            // Alias first: a Claude Code session opened right after
             // the sync must already resolve skills through `.claude/skills`.
             makeAgentCompatibilityHook(sink),
             makeKataManifestHook(sink),

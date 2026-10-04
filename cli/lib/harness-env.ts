@@ -26,9 +26,11 @@
  *      substitutes a file's CONTENTS and needs no environment at all.
  *
  * Codex is deliberately NOT emitted. `.codex/config.toml` is project-level and
- * overrides user config, but it is COMMITTED, so a secret cannot go in it, and
- * where its gitignored half should live is an open question. Codex stays on the
- * wrapper and is scanned here for the allowlist only.
+ * overrides user config, but it is COMMITTED, so a secret cannot go in it.
+ * Instead every Codex stdio server starts through a `.env` loader
+ * (`CODEX_ENV_LOADER_*` in `agent-compatibility-contracts.ts`), which reads
+ * `.env` itself at launch. Codex is scanned here for the allowlist, and for
+ * any server that still lacks the loader.
  *
  * ALLOWLIST, NEVER THE WHOLE FILE. `.env.example` declares 24 variables and 10
  * are referenced by an MCP config. Emitting all 24 would copy a project's Jira
@@ -54,7 +56,7 @@ import { dirname, join, resolve } from 'node:path';
 // ever consumed through `String.prototype.matchAll`, which constructs its own
 // matcher and therefore never shares `lastIndex` across callers.
 import { MCP_SERVER_SECRETS, MCP_VAR_PATTERN, OPENCODE_VAR_PATTERN, parseEnvFile } from '../install.ts';
-import { stripJsonComments } from './agent-compatibility-contracts.ts';
+import { stripJsonComments, unwrapCodexEnvLoader } from './agent-compatibility-contracts.ts';
 import { parsePackageJson, stringifyPackageJson } from './updater-package.ts';
 
 const REPO_ROOT = resolve(import.meta.dir, '..', '..');
@@ -293,6 +295,32 @@ function collectCodexNames(value: unknown, seen: Set<string>): void {
     }
     else if (key !== 'env') { collectCodexNames(entry, seen); }
   }
+}
+
+/**
+ * Variables a Codex stdio server needs while it does NOT start through the
+ * `.env` loader. Empty when the file is absent or unparseable (the allowlist
+ * scan already reports that).
+ */
+export function codexNamesWithoutLoader(root = REPO_ROOT): string[] {
+  const path = join(root, CODEX_CONFIG);
+  if (!existsSync(path)) { return []; }
+  let parsed: unknown;
+  try { parsed = Bun.TOML.parse(readFileSync(path, 'utf8')); }
+  catch { return []; }
+  const servers = (parsed as { mcp_servers?: unknown }).mcp_servers;
+  if (servers === null || typeof servers !== 'object') { return []; }
+  const seen = new Set<string>();
+  for (const server of Object.values(servers as Record<string, unknown>)) {
+    if (server === null || typeof server !== 'object') { continue; }
+    // An HTTP server (`url` + `bearer_token_env_var`) has no launch to wrap:
+    // its token always comes from the process environment.
+    const { command, args } = server as { command?: unknown, args?: unknown };
+    const argv = Array.isArray(args) ? args.filter((a): a is string => typeof a === 'string') : [];
+    if (typeof command === 'string' && unwrapCodexEnvLoader(command, argv).envLoader) { continue; }
+    collectCodexNames(server, seen);
+  }
+  return [...seen].sort();
 }
 
 export interface ConfigScan {
@@ -707,17 +735,55 @@ export interface GenerateResult {
   declared: string[]
   /** true when anything was written. */
   changed: boolean
+  /**
+   * Set when the run REFUSED to write anything: a worktree whose `.env` is
+   * missing, or would remove credentials from the main checkout's env block.
+   * Names the reason and the fix; never a value.
+   */
+  refused?: string
+}
+
+/**
+ * Why a run from a worktree must not write, or null when it may.
+ *
+ * In a worktree emitter A writes the MAIN checkout's env block, the one every
+ * Claude session on the machine reads. A worktree with no `.env`, or one
+ * copied from `.env.example` (exactly what an unprovisioned worktree invites),
+ * would plan to REMOVE every credential that block holds: measured in the
+ * worktree audit, a dry run listed them. Refusing is cheap; the removal is
+ * silent and hits every session on the machine.
+ */
+export function primaryRemovalRefusal(claude: ClaudePlan, env: Pick<EnvSnapshot, 'exists'>): string | null {
+  if (!claude.redirectedToMainCheckout) { return null; }
+  if (!env.exists) {
+    return 'this worktree has no .env, and in a worktree this command writes the MAIN checkout\'s '
+      + `${CLAUDE_LOCAL_SETTINGS}, which every Claude session on this machine reads. `
+      + 'Provision the worktree first: bun run worktree:provision';
+  }
+  if (claude.removed.length > 0) {
+    return `this worktree's .env has no value for ${claude.removed.join(', ')}, and running here would `
+      + `REMOVE them from the MAIN checkout's ${CLAUDE_LOCAL_SETTINGS}, which every Claude session on this `
+      + 'machine reads. Copy the real .env with bun run worktree:provision, or pass --allow-primary-removal '
+      + 'if removing them is what you want';
+  }
+  return null;
 }
 
 /** Read `.env`, build the allowlist, and write both surfaces. */
-export function generate(root = REPO_ROOT, opts: { dryRun?: boolean } = {}): GenerateResult {
+export function generate(
+  root = REPO_ROOT,
+  opts: { dryRun?: boolean, allowPrimaryRemoval?: boolean } = {},
+): GenerateResult {
   const allowlist = buildAllowlist(root);
   const env = readEnvSnapshot(root);
   const template = readTemplateDeclarations(root);
   const { plan: claude, content: claudeContent } = planClaudeSettings(root, allowlist, env);
   const { plan: opencode, configContent } = planOpencode(root, allowlist, env, template);
+  // A missing `.env` is never overridable: there is nothing to generate from.
+  const refusal = primaryRemovalRefusal(claude, env);
+  const refused = refusal !== null && (!env.exists || opts.allowPrimaryRemoval !== true) ? refusal : undefined;
 
-  if (opts.dryRun !== true) {
+  if (opts.dryRun !== true && refused === undefined) {
     if (claudeContent !== null) { secureFile(claude.path, claudeContent); }
     const dir = join(root, OPENCODE_SECRET_DIR);
     for (const name of opencode.write) { secureFile(join(dir, name), env.values[name] ?? ''); }
@@ -741,10 +807,57 @@ export function generate(root = REPO_ROOT, opts: { dryRun?: boolean } = {}): Gen
     emitted,
     excluded: template.filter(n => !referenced.has(n)),
     declared: template,
-    changed: claude.dirty || opencode.configDirty
+    changed: refused === undefined && (claude.dirty || opencode.configDirty
       || opencode.write.length > 0
-      || opencode.removed.length > 0,
+      || opencode.removed.length > 0),
+    ...(refused === undefined ? {} : { refused }),
   };
+}
+
+// ----------------------------------------------------------------------------
+// Placeholders — the fresh-clone guarantee, before any `.env` exists
+// ----------------------------------------------------------------------------
+
+export interface PlaceholderResult {
+  /** Variable names whose value file was created EMPTY, because it was missing. */
+  created: string[]
+  /** Variable names whose value file already existed and was left untouched. */
+  kept: string[]
+  /** Set when `opencode.jsonc` exists but could not be parsed. Names the file, never its contents. */
+  error?: string
+}
+
+/**
+ * Make sure every `{file:.auth/opencode/<VAR>}` target `opencode.jsonc` points
+ * at EXISTS, creating an empty one where it does not.
+ *
+ * WHY. The committed config carries `{file:}` references, so a fresh clone has a
+ * config that points at files nothing has written yet. Measured on OpenCode
+ * 1.18.30: a MISSING `{file:}` target throws `bad file reference … does not
+ * exist` and invalidates the WHOLE config, not just that server, while an
+ * EXISTING EMPTY file substitutes silently to "" (exit 0). So an empty file is
+ * the safe degraded state, exactly as degraded as `{env:}` was, and its absence
+ * is a hard break. `bun install` runs this through the `prepare` script, which is
+ * the one step every path to a working clone (scaffolder, manual clone, updater)
+ * already runs; `scripts/provision-worktree.ts` runs it too, for a primary that
+ * never ran setup.
+ *
+ * WHAT IT NEVER DOES. It never reads `.env` (that is `generate()`'s job, once a
+ * `.env` exists) and it never overwrites a file: a file that exists may hold a
+ * real credential, and this runs on every `bun install`.
+ */
+export function ensureOpencodePlaceholders(root = REPO_ROOT): PlaceholderResult {
+  const scan = scanJson(root, OPENCODE_CONFIG, [OPENCODE_FILE_REF_PATTERN]);
+  const result: PlaceholderResult = { created: [], kept: [] };
+  if (scan.error !== undefined) { result.error = `${OPENCODE_CONFIG}: ${scan.error}`; }
+  const dir = join(root, OPENCODE_SECRET_DIR);
+  for (const name of scan.vars) {
+    const target = join(dir, name);
+    if (existsSync(target)) { result.kept.push(name); continue; }
+    secureFile(target, '');
+    result.created.push(name);
+  }
+  return result;
 }
 
 // ----------------------------------------------------------------------------
@@ -898,23 +1011,24 @@ export function check(root = REPO_ROOT): CheckResult {
   //
   // `.codex/config.toml` IS project-level and overrides the user layer, so the
   // obvious move is to put values in it. It is also COMMITTED, which makes that
-  // the one thing we must not do. Codex reads `bearer_token_env_var` and
-  // forwards `env_vars` from its OWN process environment at connect time, so a
-  // committed file can name a credential but never carry one.
+  // the one thing we must not do. Codex forwards `env_vars` from its OWN
+  // process environment, which a desktop launch does not have, so each server
+  // starts through a `.env` loader instead. A server WITHOUT the loader (a
+  // project-added one, a config from before the loader) still depends on the
+  // process environment, and only those are reported.
   //
   // NOT blocking: a Codex user launching through `bun run codex`, or with direnv
-  // in the shell, is fully working today. Blocking would report a broken setup
-  // for a setup that is merely unimproved. But staying SILENT is worse: a Codex
-  // desktop launch has no process environment, so those servers start with
-  // nothing and fail later as an auth error that reads like a broken tool. This
-  // finding exists so that hour is never spent.
-  const codexNames = allowlist.scans.find(s => s.file === CODEX_CONFIG)?.vars ?? [];
+  // in the shell, is fully working. But staying SILENT is worse: a desktop
+  // launch starts those servers with nothing, and they fail later as an auth
+  // error that reads like a broken tool. This finding exists so that hour is
+  // never spent. `bun run agents:compat:check` names the server itself.
+  const codexNames = codexNamesWithoutLoader(root);
   if (codexNames.length > 0) {
     findings.push({
       surface: 'codex',
       kind: 'codex-process-env-only',
       names: codexNames,
-      detail: `${CODEX_CONFIG} NAMES these and reads them from Codex's own process environment; a committed file cannot carry their values. Launch with \`bun run codex\` (or direnv in the shell). A GUI/desktop launch has no process environment and these will be empty.`,
+      detail: `${CODEX_CONFIG} starts a server that needs these WITHOUT the .env loader, so they come from Codex's own process environment only. \`bun run codex\` (or direnv) covers a terminal launch; a GUI/desktop launch has no process environment and these will be empty. Wrap the server the way the shipped ones are.`,
       blocking: false,
     });
   }

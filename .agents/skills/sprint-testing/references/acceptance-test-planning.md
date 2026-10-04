@@ -7,9 +7,9 @@ Stage 1 Planning for a single ticket inside a sprint. The ATP is authored in-ses
 - **Modality jira-native**: ATP = the Story's `{{jira.acceptance_test_plan}}` field (or `fallback:` comment), written via `[ISSUE_TRACKER_TOOL]`, then materialized to the read-only cache `.../stories/STORY-<KEY>-<slug>/acceptance-test-plan.md` by `bun run jira:sync-issues get <STORY_KEY> --include-comments`.
 - **Modality jira-xray**: ATP = the **Test Plan** issue's `description`, written via `[ISSUE_TRACKER_TOOL]`, then materialized to `.../test-plans/ATP-<ATP_KEY>-<slug>.md` by `bun run jira:sync-issues get <ATP_KEY>`. Filename note: the acronym prefix comes from a conforming ladder title; a Plan or Execution whose title does not follow the grammar keeps the legacy `TESTPLAN-` / `TESTEXEC-` / `RETESTEXEC-` prefix.
 
-The old local `test-analysis.md` mirror is **retired** — read the synced ATP file for the active modality instead. Jira is source of truth; never hand-write the synced file.
+Read the synced ATP file for the active modality. Jira is source of truth; never hand-write the synced file.
 
-This reference is for **manual / exploratory in-sprint testing per ticket RIGHT NOW**. Its planning output is **TC outlines** (names + 1-line precond/expected), not the persistent regression TC set. Per the modality-aware TC-creation-timing rule (`sprint-testing/SKILL.md` §"TC creation timing"): **jira-native** creates no `Test` work items here (regression TCs are created in Stage 4, regression-worthy only); **jira-xray** **creates + executes** `Test` issues for the planned outlines this sprint (the `Test` is Xray's execution unit), which Stage 4 then selects + promotes into the Regression Test Plan. Either way this reference does **not** compute ROI scores or decide Candidate/Manual/Deferred (see `test-documentation` for Stage 4), nor produce automation `spec.md` (see `test-automation/references/planning-playbook.md`). Bug reports are covered in `reporting-templates.md` (pass 5c).
+This reference is for **manual / exploratory in-sprint testing per ticket (Stage 1 planning)**. Its planning output is **TC outlines** (names + 1-line precond/expected), not the persistent regression TC set. Per the modality-aware TC-creation-timing rule (`sprint-testing/SKILL.md` §"TC creation timing"): **jira-native** creates no `Test` work items here (regression TCs are created in Stage 4, regression-worthy only); **jira-xray** **creates + executes** `Test` issues for the planned outlines this sprint (the `Test` is Xray's execution unit), which Stage 4 then selects + promotes into the Regression Test Plan. Either way this reference does **not** compute ROI scores or decide Candidate/Manual/Deferred (see `test-documentation` for Stage 4), nor produce automation `spec.md` (see `test-automation/references/planning-playbook.md`). Bug reports are covered in `reporting-templates.md` (pass 5c).
 
 For feature / multi-story scope see `feature-test-planning.md`.
 
@@ -103,11 +103,11 @@ Read every item before planning. Fail fast if any project-wide context file is m
 | Ticket (title, description, ACs, priority, comments) | `bun run jira:sync-issues get <KEY> --include-comments` then read the synced `story.md` / `acceptance-criteria.md` / `comments.md` (Jira Key from `{STORY_PATH}/context.md`). NEVER `acli workitem view` for custom fields. |
 | Team Discussion | Synced `comments.md` — extract decisions, tech notes, edge cases (see `session-entry-points.md`) |
 | Parent epic + feature plan | `.context/PBI/epics/EPIC-<KEY>-<slug>/feature-test-plan.md` if it exists (synced from the epic) |
-| Project-wide context | `.context/business/business-data-map.md`, `.context/business/business-feature-map.md`, `.context/business/business-api-map.md`, `.context/master-test-plan.md` |
+| Project-wide context | `bun run context:map business-data-context` / `business-e2e-context` / `business-api-context` (per touched level; `--section <id>` for one entity, journey or endpoint group), `.context/PBI/qa-artifacts/master-test-plan.md` |
 | Module context | `.context/PBI/epics/EPIC-<KEY>-<slug>/module-context.md` |
 | Code | `{{BACKEND_REPO}}/{{BACKEND_ENTRY}}` + `{{FRONTEND_REPO}}/{{FRONTEND_ENTRY}}` (targeted reads only) |
 | Test data candidates | `[DB_TOOL]` on `{{DB_MCP}}` |
-| Architecture + API contracts (if present) | `.context/SRS/architecture.md`, `.context/SRS/functional-specs.md`, `.context/SRS/non-functional-specs.md`; API contract from `api/openapi-types.ts` (types) + `.context/business/business-api-map.md` (business) |
+| Architecture + API contracts (if generated) | `bun run context:map infra-context --section architecture` + its `nfr-*` sections; functional specs from the `business-e2e-context` `feature-*` sections; API contract from `api/openapi-types.ts` (types) + the `business-api-context` map (business) |
 
 ---
 
@@ -135,26 +135,31 @@ Triage decides whether the ticket deserves a full ATP. **Vetoes beat risk score.
 
 ### 0.0 Shift-Left short-circuit (check FIRST)
 
-Before running the veto + risk score, check whether the Story already passed through `/shift-left-testing`:
+Before running the veto + risk score, check whether the Story already passed through `/shift-left-testing`.
 
-1. Read the Story labels from the synced `story.md` (or a trivial `[ISSUE_TRACKER_TOOL]` lookup for labels only).
-2. Look for label `shift-left-reviewed` AND a dated label `shift-left-{YYYY-MM-DD}`.
-3. Parse the date. If `today - date < 30 days` AND the Story's description has not changed since that date → **short-circuit mode**.
+This gate is **fail-closed** (`agentic-qa-core/references/orchestration-doctrine.md`, FAIL-CLOSED GATES). The labels only SAY a pre-sprint pass happened; the ATP body it published is the pass. So the default is the full flow, and short-circuit mode opens only when every row below holds, each with its evidence noted in the session:
+
+| Condition | Evidence to cite | When it is missing or doubtful |
+|---|---|---|
+| The Story carries `shift-left-reviewed` AND a dated `shift-left-{YYYY-MM-DD}` | the labels in the synced `story.md` | no Shift-Left pass: normal in-sprint flow, go to §0.1 |
+| The dated label is less than 30 days old | the date parsed from that label against the run date | full flow |
+| A pre-sprint ATP body exists in Jira | after `bun run jira:sync-issues get <STORY_KEY> --include-comments`: the synced `acceptance-test-plan.md` carries an ATP body (refined ACs, outline names). When that file is the "field not configured" stub, the body is the `## Acceptance Test Plan (ATP)` comment in the synced `comments.md` | full flow. A label with no body is a marker, not evidence |
+| The refined ACs still match the current Story description | the comparison done in the validation step below | full flow |
+
+Only `/shift-left-testing` produces this evidence. Stage 1 never adds the Shift-Left labels and never writes the ATP field before this check, so it cannot open its own gate.
 
 Short-circuit mode action:
 
-- SYNC then READ `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/acceptance-test-plan.md` — run `bun run jira:sync-issues get <STORY_KEY>` first so the file reflects Jira.
+- READ the ATP body cited above: `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/acceptance-test-plan.md` (or the fallback comment), from the sync just run, so it reflects Jira.
 
-  > **Read the synced ATP, never a local scratch file.** Shift-Left wrote its refinement into the Jira `acceptance_test_plan` field (field-first — pre-sprint the ATP lives ONLY in that field; the Test Plan ITEM is born in THIS stage, find-or-created from the field), so `acceptance-test-plan.md` IS the pre-sprint refinement at this point in the flow. The old instruction pointed at `shift-left-refinement.md`, a local staging file under a gitignored path: it does not exist on a teammate's machine or in a fresh session, so the short-circuit silently degraded to a full re-run and the pre-sprint savings evaporated with no error. Jira is the only copy every session can reach.
+  > **Read the synced ATP, never a local scratch file.** Shift-Left wrote its refinement into the Jira `acceptance_test_plan` field (field-first — pre-sprint the ATP lives ONLY in that field; the Test Plan ITEM is born in THIS stage, find-or-created from the field), so `acceptance-test-plan.md` IS the pre-sprint refinement at this point in the flow. A local staging file under a gitignored path (such as `shift-left-refinement.md`) does not exist on a teammate's machine or in a fresh session, so a short-circuit that reads it silently degrades to a full re-run and the pre-sprint savings evaporate with no error. Jira is the only copy every session can reach.
 
 - VALIDATE: do the refined ACs still match the current Story description? If yes, **SKIP Phases 1, 2, 3** of this reference — they were done pre-sprint.
 - Continue from Phase 4 (Test Design — outlines), this time WITH parametrization tables + per-outline test-data JSON + numbered test steps. The pre-sprint draft outlined the NAMES only; this Phase 4 fills in the executable detail.
 - ALSO continue with Phase 5 (test-data generation strategy + Faker recipes) — also skipped pre-sprint.
 - The ATP authored here is a SUPERSET of the pre-sprint body, written back to the SAME `acceptance_test_plan` field AND into the Test Plan item this stage finds-or-creates FROM that field (pre-sprint there is no item — shift-left is field-first by design). One ATP per Story: the in-sprint version supersedes the pre-sprint one by design, and the `shift-left-{YYYY-MM-DD}` label records when the early pass happened.
 
-If validation fails (refined ACs no longer match the current Story OR the dated label is >30 days old OR `acceptance-test-plan.md` is empty after the sync), fall through to the standard Phase 0 below — run veto + risk + Phases 1-3 again. Re-running is cheaper than acting on stale refinement.
-
-If the Story has NO `shift-left-reviewed` label, this is normal in-sprint flow — proceed to §0.1.
+If any row of the table fails, or its evidence cannot be cited (refined ACs no longer match the current Story, the dated label is 30 days old or more, no ATP body after the sync), fall through to the standard Phase 0 below: run veto + risk + Phases 1-3 again. Re-running is cheaper than acting on stale or missing refinement.
 
 ### 0.1 Veto table
 
@@ -207,7 +212,7 @@ Anchor the ticket to business + technical context.
 
 ### Technical context
 - Frontend: components, pages/routes, state management (if any)
-- Backend: endpoints from `business-api-map.md` / `api/schemas/` / `api-contracts.yaml`, services, DB tables
+- Backend: endpoints from the `business-api-context` map / `api/schemas/` / `api-contracts.yaml`, services, DB tables
 - External services (if any)
 - Integration points specific to this ticket
 
@@ -310,7 +315,7 @@ Examples:
 
 Anti-patterns: `Login test`, `Login - error`, `Test the form`, `Negative case`. Always describe behavior AND condition.
 
-**Note:** In Stage 4 `test-documentation` prepends `{US_ID}: TC#:` (always the User Story key, never the Test Set ID) to formalize these in Xray; Test Set membership is expressed via an issue link, not in the title. Do not add the prefix here — this is manual / shift-left, not formal TC.
+**Note:** In Stage 4 `test-documentation` prepends `{US_ID}: TC#:` (always the User Story key, never the Test Set ID) to formalize these in Xray; Test Set membership is a `TC→ATS` issue link in both modalities (plus the Xray-internal membership in jira-xray, `agentic-qa-core/references/traceability-linking.md` §9), never the title. Do not add the prefix here — this is manual / shift-left, not formal TC.
 
 ### Outline structure (per scenario)
 
@@ -379,7 +384,7 @@ The modality was resolved in Session Start (§0) and persisted into `test-sessio
 > - **ATS** (Acceptance Test Set, the Story's coverage backbone): `ATS: {US_ID}: {story title}` (`{US_ID}` = the Story key) — MANDATORY per Story, even with a single TC — e.g. `ATS: PROJ-123: Apply discount at checkout`. Components inherited from the Story (mandatory). Feature/suite-altitude grouping keeps the optional `TS: {EPIC|module}: Validate {feature}` form (components optional — it crosses modules).
 > - **ATR** (Story Test Execution): `ATR: {STORY-KEY}: Story Testing` — the Story-level run is named **Story Testing** and runs ONCE per sprint per Story — e.g. `ATR: PROJ-123: Story Testing`. ALWAYS created with the Test Environment (`active_env`).
 > - **FTP** (Feature Test Plan, feature/Epic altitude — see `feature-test-planning.md`): `FTP: {EPIC-KEY}: {feature}` — e.g. `FTP: PROJ-42: Checkout & Payments`. Item-first; find-or-created/updated when this skill loads the Epic's context, consumed thereafter.
-> Bug-fix verification keeps `ReTest: {BUG_KEY}: {summary}` (a Test Execution). Sprint altitude: `STP: Sprint#{N}: {objective}` is find-or-created at Session Start of the sprint's FIRST ticket (SKILL.md §Session Start 0.7) and updated per tested ticket; `STR: Sprint#{N}: Regression Testing` is created at sprint close (batch-close recap or `/regression-testing`, whichever arrives first). FTR and PRC are RETIRED from the ladder (FTR duplicated the STR; Precondition is already an Xray entity without a ladder acronym).
+> Bug-fix verification keeps `ReTest: {BUG_KEY}: {summary}` (a Test Execution). Sprint altitude: `STP: Sprint#{N}: {objective}` is find-or-created at Session Start of the sprint's FIRST ticket (SKILL.md §Session Start 0.7) and updated per tested ticket; `STR: Sprint#{N}: Regression Testing` is created at sprint close (batch-close recap or `/regression-testing`, whichever arrives first). The ladder has no FTR or PRC rung (an FTR would duplicate the STR; Precondition is already an Xray entity without a ladder acronym).
 
 > **Items over fields (excellence default, both modalities)** — by excellence ATP is a **Test Plan** issue, ATR is a **Test Execution** issue and ATS is a **Test Set** issue; parent every Test Plan (ATP / FTP / STP) to the **QA Master Test Plan** epic and every Test Execution (ATR / STR) and Test Set (ATS) to the **QA Test Artifacts** epic. The Story custom field (`{{jira.acceptance_test_plan}}` / `{{jira.acceptance_test_results}}`) is a **fallback ONLY** when the Test Plan / Test Execution work types are unavailable in the instance.
 
@@ -388,7 +393,29 @@ The modality was resolved in Session Start (§0) and persisted into `test-sessio
 ATP = `Test Plan` issue. ATR = `Test Execution` issue. ATS = `Test Set` issue — the Story's coverage backbone (MANDATORY per Story, even with a single TC). Execute in THIS order; the ATP's and the ATR's test lists are DERIVED from the ATS membership — never maintained as three independent id lists.
 
 ```
-# ① ATP item FROM the field (find-or-create)
+# ① ATS — create/update the Story's Test Set holding ALL its TCs
+#    (the sprint `Test` issues were created per SKILL.md §"TC creation timing")
+[TMS_TOOL] Find-or-create TestSet:
+  project: {{PROJECT_KEY}}
+  title: ATS: {US_ID}: {story title}
+  parentEpic: QA Test Artifacts
+  components: {inherited from the Story — MANDATORY}
+
+[TMS_TOOL] Add Tests to TestSet:            # Xray-internal membership (GraphQL) — creates NO Jira link
+  set: {ATS_KEY}
+  tests: [ALL of the Story's TCs]
+
+[ISSUE_TRACKER_TOOL] Link Issues:           # ONE per member TC — the membership link, required in BOTH
+  linkType: {{jira.link_types.test.name}}   # modalities (`traceability-linking.md` §9): ATS is tested by TC
+  outward: {TC_KEY}
+  inward:  {ATS_KEY}
+
+[ISSUE_TRACKER_TOOL] Link Issues:
+  linkType: {{jira.link_types.test.name}}   # Story is tested by ATS — THE coverage link: this is what
+  outward: {ATS_KEY}                        # fills the Xray coverage panel (`xray-cli/SKILL.md` §Direction)
+  inward:  {STORY_KEY}
+
+# ② ATP item FROM the field (find-or-create)
 #    Pre-sprint the ATP lives ONLY in {{jira.acceptance_test_plan}} (shift-left is field-first).
 #    Search for an existing `ATP: {STORY-KEY}:` Test Plan first; create only if absent.
 [TMS_TOOL] Find-or-create TestPlan:
@@ -403,25 +430,8 @@ ATP = `Test Plan` issue. ATR = `Test Execution` issue. ATS = `Test Set` issue �
 
 [ISSUE_TRACKER_TOOL] Link Issues:
   linkType: {{jira.link_types.test.name}}   # Story is tested by Test Plan — ADMINISTRATIVE traceability
-  outward: {ATP_KEY}                        # (contributes ZERO coverage — live-verified; the ATS link
-  inward:  {STORY_KEY}                      #  below is the coverage edge)
-
-# ② ATS — create/update the Story's Test Set holding ALL its TCs
-#    (the sprint `Test` issues were created per SKILL.md §"TC creation timing")
-[TMS_TOOL] Find-or-create TestSet:
-  project: {{PROJECT_KEY}}
-  title: ATS: {US_ID}: {story title}
-  parentEpic: QA Test Artifacts
-  components: {inherited from the Story — MANDATORY}
-
-[TMS_TOOL] Add Tests to TestSet:            # Xray-internal membership (GraphQL) — NEVER issue links
-  set: {ATS_KEY}                            # in this modality
-  tests: [ALL of the Story's TCs]
-
-[ISSUE_TRACKER_TOOL] Link Issues:
-  linkType: {{jira.link_types.test.name}}   # Story is tested by ATS — THE coverage link: this is what
-  outward: {ATS_KEY}                        # fills the Xray coverage panel (live-verified)
-  inward:  {STORY_KEY}
+  outward: {ATP_KEY}                        # (contributes ZERO coverage, see `xray-cli/SKILL.md` §Direction; the ATS link
+  inward:  {STORY_KEY}                      #  above is the coverage edge)
 
 # ③ + ④ ATR — created WITH the Test Environment; test list derived from the ATS
 [TMS_TOOL] Create Execution:
@@ -449,7 +459,7 @@ Load `/xray-cli` skill for the concrete CLI syntax.
 
 #### Modality jira-native (no Xray) — first-class: same containers, no run engine
 
-This branch is the **degraded fallback** (Test Plan / Test Execution work types unavailable). ATP/ATR live on the Story itself — no separate issues. Use the custom field IDs from `test-documentation/references/jira-setup.md`: `{{jira.acceptance_test_plan}}` for ATP and `{{jira.acceptance_test_results}}` for ATR. Each field is the source of truth; a `## <label>` comment is posted ONLY as a fallback when the field is absent on the instance. `fix-traceability` checks the field, or the fallback comment when the field is absent.
+This branch is the **degraded fallback** (Test Plan / Test Execution work types unavailable). ATP/ATR live on the Story itself — no separate issues. Use the custom field IDs from `test-documentation/references/jira-setup.md`: `{{jira.acceptance_test_plan}}` for ATP and `{{jira.acceptance_test_results}}` for ATR. Each field is the source of truth; a `## <label>` comment is posted ONLY as a fallback when the field is absent on the instance. `test-documentation` mode `repair-traceability` checks the field, or the fallback comment when the field is absent.
 
 ```
 [ISSUE_TRACKER_TOOL] Update Issue:
@@ -478,14 +488,14 @@ Load `/acli` skill for the concrete Jira CLI syntax.
 
 Post the full ATP body as a notification comment with mentions for @PO, @Dev, @QA per project convention. Include an Action Required checklist (review ambiguities, answer critical questions, confirm edge-case behavior, validate parametrization strategy).
 
-In Modality jira-native, when `{{jira.acceptance_test_plan}}` is absent the structured `## Acceptance Test Plan (ATP)` fallback comment carries the ATP content — that is what `fix-traceability` checks later.
+In Modality jira-native, when `{{jira.acceptance_test_plan}}` is absent the structured `## Acceptance Test Plan (ATP)` fallback comment carries the ATP content — that is what `test-documentation` mode `repair-traceability` checks later.
 
 ### Materialize the local cache (from sync, never hand-written)
 
 After the ATP content is in Jira, materialize the read-only cache per modality, then read it back to confirm:
 
 - **Modality jira-native**: `bun run jira:sync-issues get <STORY_KEY> --include-comments` → `acceptance-test-plan.md` in the STORY folder.
-- **Modality jira-xray**: `bun run jira:sync-issues get <ATP_KEY>` → `test-plans/ATP-<ATP_KEY>-<slug>.md` (the sync supports the Test Plan issue type).
+- **Modality jira-xray**: `bun run jira:sync-issues get <ATP_KEY>` → `test-plans/ATP-<ATP_KEY>-<slug>.md` (per `work_types.test_plan.sync` in `.agents/jira-required.yaml`).
 
 Jira is source of truth; the synced file is a read-only cache — NEVER hand-write it.
 
@@ -509,7 +519,7 @@ id on yes, recommend `bun run jira:sync-workflows`. Never skip silently, never g
 
 ### Traceability check
 
-After materializing, run the **three-edge check** (`agentic-qa-core/references/traceability-linking.md` §Traceability verification: Link List on Story + ATP + ATR, or `bun xray trace {TICKET}` once available) (Modality jira-xray) or verify the Story's `{{jira.acceptance_test_plan}}` is populated (or the `## Acceptance Test Plan (ATP)` fallback comment exists) (Modality jira-native). Traceability reads stay on `[TMS_TOOL]` / `/acli` — not the sync. In Modality jira-xray verify the Set-first model: **Story↔ATS via the `test` slug (the coverage link) + ATS membership complete + ATP/ATR test lists matching the ATS + Story↔ATP / Story↔ATR (administrative)**. Bugs produce ATP + ATR with the repro Test arriving at fix-verification time (jira-xray) or no TCs at all (jira-native); "missing TC" warnings on bugs before fix-verification are expected.
+After materializing, run the **three-edge check** (`agentic-qa-core/references/traceability-linking.md` §Traceability verification: Link List on Story + ATP + ATR, or `bun xray trace {TICKET}`) (Modality jira-xray) or verify the Story's `{{jira.acceptance_test_plan}}` is populated (or the `## Acceptance Test Plan (ATP)` fallback comment exists) (Modality jira-native). Traceability reads stay on `[TMS_TOOL]` / `/acli` — not the sync. In Modality jira-xray verify the Set-first model: **Story↔ATS via the `test` slug (the coverage link) + ATS membership complete + ATP/ATR test lists matching the ATS + Story↔ATP / Story↔ATR (administrative)**. Bugs produce ATP + ATR with the repro Test arriving at fix-verification time (jira-xray) or no TCs at all (jira-native); "missing TC" warnings on bugs before fix-verification are expected.
 
 ---
 

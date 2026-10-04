@@ -28,7 +28,7 @@ Every TMS artifact becomes one of these:
 | Issue type | Purpose | Notes |
 |------------|---------|-------|
 | **Test** | Individual test case (Manual / Cucumber / Generic) | Child of Regression Epic; member of its Story's ATS (coverage reaches the Story via the ATS→Story link; a direct Test↔Story link is the cascade's last resort). |
-| **Test Set** | Two altitudes: **ATS** (per-Story, MANDATORY — holds ALL the Story's TCs, even one; its `is tested by` link to the Story fills the coverage panel) and **TS** (feature-level, OPTIONAL grouping: smoke / regression / domain) | Membership is Xray-internal (manage via `/xray-cli`, read via `bun xray test enrich`) — NEVER a Jira issue link, NEVER the TC prefix (the TC prefix is always `{US_ID}`); the ATS→Story `is tested by` edge IS a Jira link and is mandatory. Titles: `ATS: {US_ID}: {story title}` / `TS: {EPIC-KEY\|module}: Validate {feature}`. Components: inherited from the Story on the ATS (mandatory); optional on the feature-level `TS:` only (a feature Set spans modules by design). Both parented to **QA Test Artifacts**. |
+| **Test Set** | Two altitudes: **ATS** (per-Story, MANDATORY — holds ALL the Story's TCs, even one; its `is tested by` link to the Story fills the coverage panel) and **TS** (feature-level, OPTIONAL grouping: smoke / regression / domain) | Membership is Xray-internal (manage via `/xray-cli`, read via `bun xray test enrich`); for the ATS it is ALSO a TC→ATS issue link (`../../agentic-qa-core/references/traceability-linking.md` §9). NEVER the TC prefix (the TC prefix is always `{US_ID}`); the ATS→Story `is tested by` edge IS a Jira link and is mandatory. Titles: `ATS: {US_ID}: {story title}` / `TS: {EPIC-KEY\|module}: Validate {feature}`. Components: inherited from the Story on the ATS (mandatory); optional on the feature-level `TS:` only (a feature Set spans modules by design). Both parented to **QA Test Artifacts**. |
 | **Test Plan** | Strategic planning for a release / sprint | Planning-level container. Holds **FTP / STP / ATP / RTP** Plans (titles `FTP: …` / `STP: Sprint#{N}: {objective}` / `ATP: {STORY-KEY}: {story title}` / `RTP: {PROJECT_KEY\|module}: Regression Test Plan` — the `Regression Testing` suffix belongs to the STR, not the STP; the RTP is the long-lived product-altitude regression plan). Parented to **QA Master Test Plan**. |
 | **Test Execution** | One execution cycle; holds Test Runs | Holds **STR / ATR** Runs (titles `STR: Sprint#{N}: Regression Testing` / `ATR: {STORY-KEY}: Story Testing`; FTR retired — feature results are read from the per-Story ATRs; the STR is a sibling sprint recap, not an aggregate of them). Carries Environment, Begin/End Date. Target of CI result import. Parented to **QA Test Artifacts**. |
 | **Pre-Condition** | Reusable prerequisites | Associated to Tests that share setup — an Xray-internal association (manage via `/xray-cli`, read via `bun xray test enrich`), NEVER a Jira issue link. Title: `{COMPONENT}: {required state}` (no ladder acronym) — the **title states the required state**, the **content holds the setup steps** (kept distinct), e.g. `Auth: User logged in as Admin`. Parented to **QA Test Artifacts**. |
@@ -77,11 +77,11 @@ See `tms-conventions.md` §IQL for the full treatment. One-liner here:
 - **Test Status** (Workflow on the Test issue): `Draft` / `In Design` / `READY` / `MANUAL` / `In Review` / `Candidate` / `In Automation` / `Pull Request` / `AUTOMATED` / `DEPRECATED` — exact names from `.agents/jira-workflows.json` (`work_types.test_case`), the authoritative source. Long-lived lifecycle.
 - **Execution Status** (per Test Run inside a Test Execution): `TODO` / `EXECUTING` / `PASS` / `FAIL` / `ABORTED` / `BLOCKED`. Per-run, resets each execution.
 
-These are different fields. `AUTOMATED` (Test Status) + `FAIL` (Execution Status of last run) is a valid, common combination — the TC is live in CI, and it failed today.
+These are different fields. `AUTOMATED` (Test Status) + `FAIL` (Execution Status of last run) is a valid, common combination — the TC is live in CI, and its last run failed.
 
 ### Test Plan roll-up: latest status wins
 
-A **Test Plan aggregates the LATEST status of each of its Tests, across every Execution.** `PROJ-101` passing in yesterday's ATR and failing in today's STR reads **FAIL** on the Plan; a re-run flips it back. The Plan owns no Test Run of its own.
+A **Test Plan aggregates the LATEST status of each of its Tests, across every Execution.** `PROJ-101` passing in an earlier ATR and failing in a later STR reads **FAIL** on the Plan; a re-run flips it back. The Plan owns no Test Run of its own.
 
 The consequence is the load-bearing part: **results are never written INTO a Test Plan** — its status is *derived*, not stored. So the plan-altitude items (**FTP / STP / ATP / RTP**) carry the **plan** (description) plus **human observations** (comments), and the Execution-altitude items (**ATR / STR**) carry the **results**: the per-Story ATRs as the sprint runs, then the closing regression days before sprint close, which adds ONE more Execution over the plan's Tests — that Execution is the **STR**. The STP's roll-up updates itself as they accumulate; nobody maintains it.
 
@@ -114,7 +114,7 @@ Backward: "Which requirement does this test verify?"
 | Covered & Not Executed | Tests exist but no runs yet (TODO) |
 | Not Covered | No tests linked to this requirement |
 
-**Which link fills this panel (live-verified 2026-08-21, `.session/artifact-ladder-refactor/scoping.md` §Verificación)**: only an `is tested by` edge from a **Test Set** (the Story's ATS) or a **direct Test↔Story link** counts as coverage. A Story linked `is tested by` to a Test Plan and a Test Execution — even ones holding all its Tests — shows **UNCOVERED, 0 tests**: ATP/ATR links are administrative traceability, not coverage. This is why the per-Story ATS is mandatory: its ATS→Story link is the coverage anchor.
+**Which link fills this panel (`xray-cli/SKILL.md` §Direction)**: only an `is tested by` edge from a **Test Set** (the Story's ATS) or a **direct Test↔Story link** counts as coverage. A Story linked `is tested by` to a Test Plan and a Test Execution — even ones holding all its Tests — shows **UNCOVERED, 0 tests**: ATP/ATR links are administrative traceability, not coverage. This is why the per-Story ATS is mandatory: its ATS→Story link is the coverage anchor.
 
 The QA completeness checklist in `tms-architecture.md` §Completeness criteria is the application of this view at the User Story level.
 
@@ -172,13 +172,11 @@ The KATA convention `@atc('PROJ-101')` + `test('PROJ-101: should ...', ...)` ens
 |----------|---------|----------|
 | `XRAY_CLIENT_ID` | API client ID (Cloud) | Cloud only |
 | `XRAY_CLIENT_SECRET` | API client secret (Cloud) | Cloud only |
-| `XRAY_TOKEN` | Personal Access Token (Server/DC) | Server only |
 | _(site host)_ | `.agents/project.yaml` -> `issue_tracker.atlassian_url` — NOT an env var; read with `bun run --silent jira:url` | Always |
 | `ATLASSIAN_EMAIL` | Atlassian account email | Always |
 | `ATLASSIAN_API_TOKEN` | Atlassian API token | Always |
 | `JIRA_PROJECT_KEY` | Default project key | Optional (fallback to `{{PROJECT_KEY}}`) |
-| `XRAY_TEST_PLAN_KEY` | Default Test Plan for imports | Optional |
-| `XRAY_ENVIRONMENT` | Default test environment label | Optional |
+| `XRAY_PROJECT_KEY` | Xray project key for local sync; referenced by no workflow | Optional (local only) |
 | `STP_EXECUTION_KEY` | Target of the automated write-back: the **STR** Test Execution linked to the sprint STP — **never the STP's own key** (`tests/utils/jiraSync.ts` reads the issue type and refuses a Test Plan; see §4). Unset → each run mints a new, unparented Execution. | Xray only; required for write-back |
 
 Never hardcode these — always from `.env`. The `/xray-cli` skill reads them from the environment automatically.
@@ -203,36 +201,14 @@ Cloud rate limit: ~10 req/s per user (plan-dependent). Batch imports > 100 tests
 
 ## 9. CI/CD integration (reference pattern)
 
-GitHub Actions snippet — adapt the secret names to the project. The `/regression-testing` skill handles the full CI lifecycle.
+The live pattern is the `XrayImport` job in `.github/workflows/regression.yml`; the `/regression-testing` skill owns the CI lifecycle. What it does, in order:
 
-```yaml
-- name: Run tests
-  run: bun run test
-  env:
-    CI: true
+1. Skips with a notice when `AUTO_SYNC` is not `true` or `XRAY_CLIENT_ID` / `XRAY_CLIENT_SECRET` are not set.
+2. Skips with a warning when there is no target Test Execution: the `execution_key` dispatch input (the RTR) or the `STP_EXECUTION_KEY` secret. It never imports with only a project key, because that mints a new Execution that Xray's import API cannot parent to the QA Test Artifacts epic.
+3. Authenticates, then imports each `junit.xml` INTO that execution: `[TMS_TOOL] import junit: file=<report>, execution=<STP_EXECUTION_KEY>` (load `/xray-cli` for the literal command; `--plan` without `--execution` mints a new Execution, see that skill).
+4. Runs `continue-on-error`, so an Xray outage never turns a green suite red.
 
-- name: Get Xray token
-  if: always()
-  id: xray-auth
-  run: |
-    TOKEN=$(curl -s -X POST \
-      https://xray.cloud.getxray.app/api/v2/authenticate \
-      -H "Content-Type: application/json" \
-      -d "{\"client_id\":\"${XRAY_CLIENT_ID}\",\"client_secret\":\"${XRAY_CLIENT_SECRET}\"}" \
-      | tr -d '"')
-    echo "token=$TOKEN" >> $GITHUB_OUTPUT
-
-- name: Import results to Xray
-  if: always()
-  run: |
-    curl -X POST \
-      "https://xray.cloud.getxray.app/api/v2/import/execution/junit?projectKey=${{ vars.JIRA_PROJECT_KEY }}&testPlanKey=${{ vars.XRAY_TEST_PLAN_KEY }}" \
-      -H "Authorization: Bearer ${{ steps.xray-auth.outputs.token }}" \
-      -H "Content-Type: application/xml" \
-      --data-binary @test-results/junit.xml
-```
-
-Alternative: Playwright reporter `playwright-xray` posts results directly, no curl step. Use whichever the project already has configured.
+There is no `XRAY_TEST_PLAN_KEY` / `XRAY_ENVIRONMENT` variable: the target Execution already carries its Test Plan link and its Test Environment.
 
 ---
 

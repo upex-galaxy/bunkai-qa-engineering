@@ -184,3 +184,17 @@ dbhub.local.toml
 env.d.ts
 .template/doctrine-ledger.json
  is GITIGNORED (per-dev record of what the last
+
+# ----- 2026-10-03 (sync) -----
+.playwright/profiles/
+.playwright-cli/
+storage-state-*.json
+.context/*
+!.context/README.md
+!.context/project-config.md
+!.context/ADR/
+!.context/regression-history/
+!.context/reports/
+!.context/PBI/
+.agents/skills/skill-creator/
+.agents/skills/diagram-design/

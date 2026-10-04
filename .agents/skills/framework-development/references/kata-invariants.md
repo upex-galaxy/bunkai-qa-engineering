@@ -1,6 +1,6 @@
 # KATA Invariants — Framework Evolution Reference
 
-Canonical knowledge source for `framework-development`. Distinguishes what is INVARIANT (cannot break without major version bump) from what is EXTENSIBLE (safe evolution surface). Derived from the test-automation skill references and `docs/methodology/kata-fundamentals.md`. Use this file to gate framework changes: reject violations, approve safe extensions.
+Canonical knowledge source for `framework-development`. Distinguishes what is INVARIANT (cannot break without major version bump) from what is EXTENSIBLE (safe evolution surface). Derived from the test-automation skill references, chiefly `test-automation/references/kata-architecture.md`. Use this file to gate framework changes: reject violations, approve safe extensions.
 
 Terminology preserved verbatim: ATC, fixture, locator, Component, Steps, Helper, Page, Api, TestContext, ApiBase, UiBase, TestFixture.
 
@@ -98,7 +98,7 @@ scoped to `cli/**` and guards the updater's import closure); the two file sets a
 
 Three things a reader should know before citing it:
 
-- There is still **no `eslint-plugin-import`** in this repo. The rule is core ESLint. Do not
+- The rule is core ESLint (`no-restricted-imports`), not `eslint-plugin-import`. Do not
   attribute it to a plugin nobody installed — that was the previous version of this paragraph's
   mistake, in reverse.
 - **Dynamic `await import('./x')` is not caught.** The rule matches static import and export
@@ -111,26 +111,9 @@ Three things a reader should know before citing it:
 Review (`/pr-review-lead`) is no longer the only enforcement point, but it still owns the half a
 lint rule cannot judge: whether the alias chosen is the RIGHT one for the layer.
 
-The alias set actually declared in `tsconfig.base.json` `paths` (the authority — read it, do not
-trust a copy; `tsconfig.json` extends the base and declares no `paths` of its own):
-
-```
-"@/*"           -> ./*
-"@ui/*"         -> ./tests/components/ui/*
-"@api/*"        -> ./tests/components/api/*
-"@steps/*"      -> ./tests/components/steps/*
-"@utils/*"      -> ./tests/utils/*
-"@data/*"       -> ./tests/data/*
-"@variables"    -> ./config/variables.ts
-"@TestContext"  -> ./tests/components/TestContext.ts
-"@UiFixture"    -> ./tests/components/UiFixture.ts
-"@ApiFixture"   -> ./tests/components/ApiFixture.ts
-"@TestFixture"  -> ./tests/components/TestFixture.ts
-"@DataFactory"  -> ./tests/data/DataFactory.ts
-"@openapi"      -> ./api/openapi-types.ts (FACADE-ONLY consumer)
-"@schemas/*"    -> ./api/schemas/*
-"@schemas"      -> ./api/schemas/index.ts
-```
+The alias set is whatever `tsconfig.base.json` `paths` declares (the authority — read it, do not
+trust a copy; `tsconfig.json` extends the base and declares no `paths` of its own). `@openapi` is a
+FACADE-ONLY consumer.
 
 There is no `@config/*` and no `@components/*`: config is reached through `@variables`, and the
 component tree through the per-layer aliases (`@ui/*`, `@api/*`, `@steps/*`) or the named fixture /
@@ -176,7 +159,7 @@ Where new code CAN safely land WITHOUT a major-version bump. Anything not on thi
 | New static fixture data | `tests/data/fixtures/*.json` | Only for reference data (roles, permission matrices, mock responses, configuration trees). Transactional data goes to DataFactory. |
 | New script | `scripts/<name>.ts` | Add the matching `bun run` entry to `package.json`. |
 | New CLI command | `cli/<command>/` | Project-level installer concern; standalone binaries do not affect the runtime test architecture. |
-| New TS path alias | `tsconfig.json` `paths` | Allowed for new layers/folders — but never collapses an existing alias. |
+| New TS path alias | `tsconfig.base.json` `paths` (the alias authority, §5) | Allowed for new layers/folders — but never collapses an existing alias. |
 | New Playwright tag | usage in `test()`/`describe()` | Must be documented in `automation-standards.md` §4 tag table. |
 
 ---
@@ -192,7 +175,7 @@ Mandatory verification matrix when modifying load-bearing surface area. Each row
 | `UiBase.interceptResponse` / `waitForApiResponse` signature | Re-run ALL UI ATCs that use interception; confirm Allure attachments still produce. |
 | `TestContext` constructor or option shape (`TestContextOptions`) | Audit every Layer 2/3/3.5 constructor that calls `super(options)`. Re-run full suite. |
 | Fixture signature in `TestFixture`/`ApiFixture`/`UiFixture` | Grep all consumers (`tests/**/*.test.ts`); update destructures; re-run full suite. |
-| Import alias in `tsconfig.json` paths | Update tsconfig + every import in repo + ESLint config. Run `bun run types:check` + `bun run lint:check`. |
+| Import alias in `tsconfig.base.json` paths | Update `tsconfig.base.json` + every import in repo + ESLint config. Run `bun run types:check` + `bun run lint:check`. |
 | `@atc` / `@step` decorator API or `SENSITIVE_KEYS` set | Re-run full suite; manually inspect Allure step titles for unmasked sensitive values; verify NDJSON line schema unchanged. |
 | `KataReporter` NDJSON line schema or `atc_results.json` aggregation logic | Verify teardown summary still parses; verify TMS sync (`syncToXray`, `syncToJiraDirect`) still consumes correct fields. |
 | `tests/utils/decorators.ts` `storeResult` writer | Confirm NDJSON file is still atomic-append safe; confirm reporter `onEnd` deletes the partial file. |
@@ -210,11 +193,11 @@ Out-of-scope surfaces. Modifying these from a framework-development task is FORB
 - **Generated artifacts**: `api/openapi-types.ts` is generated by `bun run api:sync` from `api/openapi.json`. Never hand-edit. `api/openapi.json` and `api/.openapi-config.json` are gitignored local cache. `kata-manifest.json` is generated by `bun run kata:manifest`. `reports/atc_results.json` and `reports/.atc_partial.ndjson` are runtime artifacts.
 - **Per-ticket test specs** (consumers, not framework): `tests/e2e/**/*.test.ts`, `tests/integration/**/*.test.ts`, and ticket-specific subclasses under `tests/components/{module}/` (the BASE classes `ApiBase`/`UiBase`/`TestContext` are framework; concrete `*Api`/`*Page` for a ticket are consumer code owned by `test-automation`).
 - **Per-ticket QA context**: `.context/PBI/**` (PBI folders, ATPs, ATRs, evidence). Owned by `sprint-testing` / `test-documentation`.
-- **Project-wide context**: `.context/business/**`, `.context/master-test-plan.md`. Owned by `/business-*-map`, `/master-test-plan`. (TMS modality + Regression Epic are resolved live by `/test-documentation` from `.agents/project.yaml` and Jira itself — no `.context/` file.)
+- **Project-wide context**: the context maps inside the context map skills (`CONTEXT_MAP_SKILLS` in `cli/lib/context-maps.ts`, each `references/*-map.html`) and the Master Test Plan (the `QA Master Test Plan` Epic description in Jira, cached at `.context/PBI/qa-artifacts/master-test-plan.md`). Each map is owned by the generator its entry names (a `project-context` mode or a `project-discovery` phase), the MTP by `project-context` mode `test-plan`; the skill folders themselves are framework surface, their maps are the project's. (TMS modality + Regression Epic are resolved live by `/test-documentation` from `.agents/project.yaml` and Jira itself — no `.context/` file.)
 - **Credentials and env**: `.env`, `.env.example` (only the variable list may be appended when adding a new framework env var; never values).
 - **Playwright artifacts (gitignored)**: `test-results/`, `tests/data/downloads/`, `playwright/.auth/`.
 - **Test results / TMS sync state**: outputs of CI runs, not framework code.
-- **Skills / Commands / AGENTS.md**: owned by `/agentic-qa-core`, `/sync-ai-memory`, and the SDD orchestrator. A framework change that needs to surface in AI memory must coordinate via `/sync-ai-memory`, not direct edit.
+- **Skills / AGENTS.md**: a framework change that needs to surface in AI memory patches `AGENTS.md` and the docs in the same PR (the docs follow-through in `SKILL.md` Phase 3), and `bun run docs:check` proves the router and the quoted scripts.
 
 ---
 
@@ -238,7 +221,6 @@ These are POLICY tables, not INVARIANT rules. They can be amended additively wit
 | `package.json` deps + scripts                         | Dependency upgrades, script registry, engines. Not test specs in `tests/`.                                       |
 | `.agents/skills/agentic-qa-core/references/`          | Briefing template, dispatch patterns, orchestration doctrine, skill-composition-strategy.                        |
 | `.agents/skills/framework-development/`               | This skill itself — references, scripts, agents/.                                                                |
-| `.claude/commands/`                                   | Slash-command source (`/sync-ai-memory`, `/business-*-map`, `/master-test-plan`, etc.).                          |
 
 ### 10.2 FORBIDDEN paths (redirect map)
 
@@ -248,8 +230,8 @@ These are POLICY tables, not INVARIANT rules. They can be amended additively wit
 | `tests/integration/`                                | `/test-automation` — per-ticket API/integration specs                                           |
 | `tests/components/{module}/` (Page/Api/Steps)       | `/test-automation` — module-specific Domain components and Steps                                |
 | `.context/PBI/`                                     | `/sprint-testing` — per-ticket QA context                                                       |
-| `.context/master-test-plan.md`                      | `/master-test-plan` command — regenerative                                                      |
-| `.context/business/`                                | `/business-data-map`, `/business-feature-map`, `/business-api-map` commands — regenerative      |
+| `.context/PBI/qa-artifacts/master-test-plan.md`     | sync cache of the MTP Epic; `project-context` mode `test-plan` writes the Epic                  |
+| `.agents/skills/<context map skill>/references/*-map.html` | the generator named in `CONTEXT_MAP_SKILLS` (and each skill's own refresh) — regenerative |
 | `api/openapi-types.ts`                              | Generated artifact — regenerated by `bun run api:sync`                                          |
 | `kata-manifest.json`, `reports/atc_results.json`    | Generated artifacts — runtime / build outputs                                                   |
 | `.env`, credentials                                 | Manual edit only — no skill, no AI rewrite                                                      |
@@ -262,4 +244,4 @@ These are POLICY tables, not INVARIANT rules. They can be amended additively wit
 
 ---
 
-*Reference compiled from `kata-architecture.md`, `typescript-patterns.md`, `api-patterns.md`, `e2e-patterns.md`, `atc-tracing.md`, `automation-standards.md`, `data-testid-strategy.md`, `test-data-management.md`, `review-checklists.md`, `test-automation/SKILL.md`, and `docs/methodology/kata-fundamentals.md`. Update only when a source doc changes a load-bearing rule.*
+*Reference compiled from `kata-architecture.md`, `typescript-patterns.md`, `api-patterns.md`, `e2e-patterns.md`, `atc-tracing.md`, `automation-standards.md`, `data-testid-strategy.md`, `test-data-management.md`, `review-checklists.md`, and `test-automation/SKILL.md`. Update only when a source doc changes a load-bearing rule.*

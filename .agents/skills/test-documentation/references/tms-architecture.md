@@ -1,6 +1,6 @@
 # TMS Architecture — Entity Model and Traceability
 
-Definitive reference for the four TMS entities, their fields, their links, and the order in which to create them. Read this when creating any artifact, validating traceability, or fixing broken links.
+Definitive reference for the TMS entities, their fields, their links, and the order in which to create them. Read this when creating any artifact, validating traceability, or fixing broken links.
 
 > **Before publishing any TMS entity body (Test / TestPlan / TestExecution / TestRun) to Jira rich-text fields**, read `../../agentic-qa-core/references/jira-publishing-gotchas.md` — covers the two ADF conversion gotchas (`md-to-adf` mark collision + MCP batched custom-field rejection) that silently fail HTTP 400.
 
@@ -55,7 +55,7 @@ Key consequences:
 | ID | Yes | `{{PROJECT_KEY}}-{n}` auto-assigned |
 | Title | Yes | |
 | Acceptance Criteria | Yes | Testable conditions |
-| Test Set link (ATS) | Yes (mandatory) | `is tested by` ATS — **the coverage-panel link** (live-verified: ATP/ATR links contribute zero coverage) |
+| Test Set link (ATS) | Yes (mandatory) | `is tested by` ATS — **the coverage-panel link** (ATP/ATR links contribute zero coverage; `xray-cli/SKILL.md` §Direction) |
 | Test Plan link (ATP) | Yes (once ATP exists) | `is tested by` ATP (administrative traceability, no coverage) |
 | Test Results link (ATR) | Yes (once ATR exists) | `is tested by` ATR (administrative traceability, no coverage) |
 | Test Cases links | Last resort only | TCs reach the Story THROUGH the ATS (primary) or ATP (secondary, placement-only); a direct Story↔TC link is the cascade's last resort when no ATS exists — the defect is a TC with NO path, not the direct link |
@@ -87,7 +87,7 @@ Key consequences:
 |-------|----------|--------------|
 | Name | Yes | `ATS: {US_ID}: {story title}` |
 | User Story link | Yes | `is tested by` — the coverage-panel link |
-| Tests (membership) | Yes | ALL the Story's TCs (even one). Xray-internal under jira-xray; TC→ATS issue links under jira-native |
+| Tests (membership) | Yes | ALL the Story's TCs (even one). TC→ATS issue links in both modalities, plus the Xray-internal membership under jira-xray |
 | Components | Yes | Inherited from the Story (mandatory — the exemption is feature-level `TS:` only) |
 | Parent | Yes | QA Test Artifacts epic |
 
@@ -98,7 +98,7 @@ Key consequences:
 | ID | Yes | Auto-generated (e.g., `{{PROJECT_KEY}}-456`) |
 | Name | Yes | `{US_ID}: TC#: should <expected outcome> [<connector> <condition>] [given <precondition>]` |
 | Acceptance Criterion | Yes | Which AC this TC covers (1:N from TC side) |
-| ATS membership | Yes | Member of the Story's ATS (Xray-internal under jira-xray; TC→ATS issue link under jira-native) |
+| ATS membership | Yes | Member of the Story's ATS (TC→ATS issue link in both modalities; plus Xray-internal under jira-xray) |
 | User Story link | Last resort only | TC reaches the US through the ATS (primary) / ATP (secondary); a direct link is used only when no ATS exists (cascade step 3) |
 | Test Plan link (ATP) | Yes | `is designed by` ATP (`test_design`) |
 | Test Results link (ATR) | Yes | `is executed by` ATR (`test_execute`) |
@@ -133,7 +133,7 @@ Key consequences:
 |                   v                        v                         |
 |                  [ TC-1, TC-2, TC-3, ... TC-N ]  <- all members of the ATS |
 |                                                                      |
-|   Coverage truth (live-verified): the ATS->Story `is tested by` link |
+|   Coverage truth (see xray-cli) : the ATS->Story `is tested by` link |
 |   is what fills the Xray coverage panel; the ATP->Story and          |
 |   ATR->Story links contribute ZERO coverage (administrative          |
 |   traceability only). TCs aggregate to the Story through the ATS.    |
@@ -156,7 +156,7 @@ Key consequences:
 | US | ATP | 1:1 | `is tested by` (`test`) — administrative, no coverage |
 | US | ATR | 1:1 | `is tested by` (`test`) — administrative, no coverage |
 | US | TC | 1:N | **via the ATS by default** (membership + ATS→Story link); direct `is tested by` only as the cascade's last resort (no ATS) |
-| ATS | TC | 1:N | Membership — Xray-internal (jira-xray) or TC→ATS issue link (jira-native) |
+| ATS | TC | 1:N | Membership — TC→ATS issue link (both modalities) + Xray-internal (jira-xray) |
 | ATP | ATR | 1:1 | Bidirectional (plan / results) |
 | ATP | TC | 1:N | ATP `designs` TC / TC `is designed by` ATP (`test_design`) |
 | ATR | TC | 1:N | ATR `executes` TC / TC `is executed by` ATR (`test_execute`) |
@@ -173,7 +173,7 @@ Given any one of the five, you must be able to navigate to the other four. That 
 | Entity | Required link | Type / direction | When to set |
 |--------|---------------|------------------|-------------|
 | **ATS** | User Story | `is tested by` (`test`) — **the coverage-panel link** | At creation (Set-first: before the first TC) |
-| **ATS** | each TC | Membership — Xray-internal (jira-xray) / TC→ATS issue link (jira-native) | At TC creation |
+| **ATS** | each TC | Membership — TC→ATS issue link (both modalities) + Xray-internal (jira-xray) | At TC creation |
 | **ATP** | User Story | `is tested by` (`test`) — administrative, no coverage | At creation |
 | **ATP** | Test Results (ATR) | Bidirectional (plan / results) | After ATR is created |
 | **ATP** | each TC | ATP `designs` TC (`test_design`) | At TC creation |
@@ -184,9 +184,9 @@ Given any one of the five, you must be able to navigate to the other four. That 
 | **TC** | Test Result (ATR) | `is executed by` ATR (`test_execute`) | At creation |
 | **TC** | Acceptance Criterion | AC reference | At creation |
 
-**Coverage truth (live-verified 2026-08-21, `.session/artifact-ladder-refactor/scoping.md` §Verificación)**: the Xray coverage panel is filled ONLY by an `is tested by` link from a Test Set (the ATS) or a direct Test↔Story link — the ATP→Story and ATR→Story links contribute ZERO coverage. That is why the ATS is mandatory: it is the coverage backbone, while ATP/ATR links are administrative traceability.
+**Coverage truth (`xray-cli/SKILL.md` §Direction)**: the Xray coverage panel is filled ONLY by an `is tested by` link from a Test Set (the ATS) or a direct Test↔Story link — the ATP→Story and ATR→Story links contribute ZERO coverage. That is why the ATS is mandatory: it is the coverage backbone, while ATP/ATR links are administrative traceability.
 
-A TC is **NOT** linked to the User Story directly while an ATS exists — it reaches the Story through the ATS (membership + the ATS→Story link). The direct TC→Story link is the cascade's **last resort** (no ATS available — e.g. jira-native without the Test Set work type), not a defect; the defect is a TC with **no path at all**. A TC missing its ATS membership or its ATP/ATR links is broken — use `fix-traceability` to repair. **Under jira-xray, the Xray-internal attach (`plan add-tests` / `exec add-tests` / `set add-tests`) creates NO Jira links** — the `designs`/`executes` Jira edges MUST be created explicitly via `[ISSUE_TRACKER_TOOL]` (`/acli`). Jira-native carve-out: with a Test Set work type present, ATS membership IS expressed as TC→ATS issue links. (Slug-layer mechanics live in `agentic-qa-core/references/traceability-linking.md` §3/§9.)
+A TC is **NOT** linked to the User Story directly while an ATS exists — it reaches the Story through the ATS (membership + the ATS→Story link). The direct TC→Story link is the cascade's **last resort** (no ATS available — e.g. jira-native without the Test Set work type), not a defect; the defect is a TC with **no path at all**. A TC missing its ATS membership or its ATP/ATR links is broken — use `test-documentation` mode `repair-traceability` to repair. **Under jira-xray, the Xray-internal attach (`plan add-tests` / `exec add-tests` / `set add-tests`) creates NO Jira links** — the `designs`/`executes` Jira edges MUST be created explicitly via `[ISSUE_TRACKER_TOOL]` (`/acli`). Jira-native carve-out: with a Test Set work type present, ATS membership IS expressed as TC→ATS issue links. (Slug-layer mechanics live in `agentic-qa-core/references/traceability-linking.md` §3/§9.)
 
 ### Validation checklist (before marking Complete)
 
@@ -226,7 +226,7 @@ Step 4. Update ATP
 
 Step 5. For each TC (as Stage 4 progresses):
         Create TC
-        -> add TC to the ATS (jira-xray: Xray-internal membership; jira-native: TC→ATS issue link)
+        -> add TC to the ATS (TC→ATS issue link, both modalities; jira-xray also Xray-internal membership)
         -> link TC to ATP (ATP `designs` TC / TC `is designed by` ATP, `test_design`)
         -> link TC to ATR (ATR `executes` TC / TC `is executed by` ATR, `test_execute`)
         -> link TC to AC
@@ -460,6 +460,7 @@ Exact instructions:
      b. Capture the returned issue key as <TEST_KEY>.
      c. [ISSUE_TRACKER_TOOL] Update Issue: issue=<TEST_KEY>, description={full Description template per jira-test-management.md §7}.
      d. [TMS_TOOL] AddTests: testSet=<ATS_KEY>, tests=[<TEST_KEY>].    # Set-first — ATS membership; Xray-internal, creates NO Jira link
+     d2. [ISSUE_TRACKER_TOOL] Link Issues: from=<TEST_KEY>, to=<ATS_KEY>, linkType={{jira.link_types.test.name}} (ATS `is tested by` TC — the membership link required in both modalities, traceability-linking.md §9), then verify direction per §4.
      e. [TMS_TOOL] AddTests: testPlan=<ATP_KEY>, tests=[<TEST_KEY>].   # Xray-internal membership only — creates NO Jira link
      f. [TMS_TOOL] AddTests: execution=<ATR_KEY>, tests=[<TEST_KEY>].  # Xray-internal membership only — creates NO Jira link
      g. Jira-layer design/execute edges (SEPARATE from steps d/e/f): the Xray attach creates NO Jira links (confirmed, traceability-linking.md §9), so create them explicitly via [ISSUE_TRACKER_TOOL] (/acli): [ISSUE_TRACKER_TOOL] Link Issues linkType={{jira.link_types.test_design.name}} (ATP `designs` TC) and linkType={{jira.link_types.test_execute.name}} (ATR `executes` TC), then verify direction per traceability-linking.md §2/§4.
@@ -497,7 +498,7 @@ Rules:
 Briefing (7 components per `agentic-qa-core/references/briefing-template.md`):
 
 ```
-Goal: Create <K> Jira Test issues in project <PROJECT_KEY> for chunk <I>/<TOTAL>, link each to the Story's ATS <ATS_KEY> via "is tested by" (TC→ATS membership link — jira-native carve-out), and return their issue keys. Only when NO ATS exists (Test Set work type absent from the instance): link each Test to the parent Story <STORY_KEY> directly via "is tested by" (the cascade's last resort).
+Goal: Create <K> Jira Test issues in project <PROJECT_KEY> for chunk <I>/<TOTAL>, link each to the Story's ATS <ATS_KEY> via "is tested by" (the TC→ATS membership link, the same one jira-xray carries — traceability-linking.md §9), and return their issue keys. Only when NO ATS exists (Test Set work type absent from the instance): link each Test to the parent Story <STORY_KEY> directly via "is tested by" (the cascade's last resort).
 
 Context docs:
   - .session/test-documentation/<scope>/ (session contract artifact — the TC designs Phase 1-2 wrote; the definitions for this chunk live here, NOT in test-specs/, which holds keys only)
@@ -606,6 +607,10 @@ For N <= 10 TCs, classify inline — the dispatch overhead is not justified. The
 [TMS_TOOL] AddTests:                          # Set-first — ATS membership (Xray-internal, NO Jira link)
   testSet: {ATS_KEY}
   tests: [{TEST_KEY}]
+[ISSUE_TRACKER_TOOL] Link Issues:             # the TC->ATS membership link — both modalities
+  from: {TEST_KEY}                            # (traceability-linking.md §9)
+  to:   {ATS_KEY}
+  linkType: {{jira.link_types.test.name}}     # ATS is tested by TC
 [TMS_TOOL] AddTests:                          # Xray-internal membership only — creates NO Jira link
   testPlan: {ATP_KEY}                         # test list derived from the ATS membership
   tests: [{TEST_KEY}]
@@ -741,7 +746,7 @@ Common failure modes and their fixes:
 |-------|-----|
 | TC has NO path to its Story (not in an ATS, not in an ATP, no direct link) | **This is the actual defect** — it is an ORPHAN. Resolve by the cascade: add it to the Story's ATS (create the ATS if missing); else no ATS possible → link TC→Story directly (`is tested by`, last resort) |
 | Story has no ATS | Create `ATS: {US_ID}: {story title}` (parent QA Test Artifacts, components from the Story), link it to the Story (`is tested by`), add ALL the Story's TCs |
-| TC not a member of the Story's ATS | Add it (jira-xray: Xray-internal via `/xray-cli`; jira-native: TC→ATS issue link) |
+| TC not a member of the Story's ATS | Add it (TC→ATS issue link in both modalities; jira-xray also Xray-internal via `/xray-cli`) |
 | TC linked directly to Story WHILE an ATS covers it | Redundant, not fatal — prefer moving the TC into the ATS and dropping the direct link. A direct TC→Story link on its own is the cascade's documented last resort (no ATS), NOT a defect to remove |
 | TC not designed-by ATP | Link ATP `designs` TC (`test_design`) |
 | TC not executed-by ATR | Link ATR `executes` TC (`test_execute`) |

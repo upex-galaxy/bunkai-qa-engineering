@@ -5,6 +5,13 @@
   // mode 0600. Those files are GENERATED from .env by `bun run harness:env`, and
   // `bun run setup:doctor` fails when they and .env disagree.
   //
+  // Only LOCAL (stdio) servers live here: the ones that read .env values
+  // (dbhub, openapi) plus context7, which needs no key. Browser
+  // automation is the playwright-cli, not an MCP. Remote servers whose only
+  // project-side content was an API key (web search, Postman) are connected at
+  // harness level instead: ~/.config/opencode/opencode.json for OpenCode. Skills
+  // resolve them by capability, whatever the prefix (AGENTS.md §6).
+  //
   // WHY {file:} AND NOT {env:}. {env:VAR} resolves from the OpenCode PROCESS
   // environment, which only exists when OpenCode was launched from a shell that
   // had it — so `bun run opencode` works and a desktop or natively-launched
@@ -12,7 +19,9 @@
   // spawned before any hook runs. {file:path} substitutes the file's CONTENTS and
   // needs no environment at all, so it works however OpenCode was started.
   //
-  // MEASURED on OpenCode 1.18.30, and worth knowing before editing this file:
+  // MEASURED on OpenCode 1 and re-measured on OpenCode 2 (versions and dates:
+  // the upstream boilerplate's ADR-0006 forensic measurements ledger), and worth
+  // knowing before editing this file:
   //   - a MISSING {file:} target invalidates the WHOLE config (exit 1, "bad file
   //     reference"), not just the one server. Never point at a file the generator
   //     does not create.
@@ -22,6 +31,11 @@
   //     declares, with or without a value.
   //   - a trailing newline is trimmed. The generator writes none anyway, so a
   //     value never depends on that.
+  //
+  // V1 SYNTAX ON PURPOSE ("mcp", "enabled", "permission"). OpenCode 2 migrates
+  // these keys on load ("mcp" -> "mcp.servers", "enabled" -> "disabled",
+  // "permission" -> "permissions"), and OpenCode 1 rejects the V2 spelling, so
+  // the V1 file is the one both generations read. Revisit when V1 support ends.
   //
   // Syntax notes (OpenCode-specific, different from Claude Code's .mcp.json):
   //   - File substitution uses {file:path}, env expansion {env:VAR_NAME} (NOT ${VAR})
@@ -48,36 +62,12 @@
       "command": ["bunx", "-y", "@upstash/context7-mcp@4.0.3"],
       "enabled": true
     },
-    "tavily": {
-      "type": "remote",
-      "url": "https://mcp.tavily.com/mcp/",
-      "enabled": true,
-      "headers": {
-        "Authorization": "Bearer {file:.auth/opencode/TAVILY_API_KEY}"
-      }
-    },
-    "playwright": {
-      "type": "local",
-      "command": [
-        "bunx",
-        "@playwright/mcp@0.0.79",
-        "--caps",
-        "vision,pdf,testing,tracing,tabs",
-        "--timeout-action",
-        "10000",
-        "--timeout-navigation",
-        "30000",
-        "--viewport-size",
-        "1920x1080"
-      ],
-      "enabled": true
-    },
     // dbhub.toml reads these six through ${VAR} interpolation, but only from the
     // environment the server is LAUNCHED with. Declaring them here is what puts
     // them there on every host — Codex forwards nothing it was not told to.
     // An EMPTY value file leaves the variable empty and dbhub then fails on
     // connect rather than at startup, which reads like a database problem: check
-    // the DBHUB_* values in .env first. See docs/mcp/.
+    // the DBHUB_* values in .env first. See .agents/skills/agentic-qa-core/references/db-testing-doctrine.md.
     "dbhub": {
       "type": "local",
       "command": ["bunx", "-y", "@bytebase/dbhub@1.2.1", "--config", "dbhub.toml"],
@@ -104,14 +94,6 @@
       "environment": {
         "API_BASE_URL": "{file:.auth/opencode/API_BASE_URL}",
         "OPENAPI_SPEC_PATH": "{file:.auth/opencode/OPENAPI_SPEC_PATH}"
-      }
-    },
-    "postman": {
-      "type": "remote",
-      "url": "https://mcp.postman.com/mcp",
-      "enabled": true,
-      "headers": {
-        "Authorization": "Bearer {file:.auth/opencode/POSTMAN_API_KEY}"
       }
     }
   },

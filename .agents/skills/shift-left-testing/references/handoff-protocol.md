@@ -88,7 +88,7 @@ The Handoff subagent must read the current description FIRST (from the synced `.
 >
 > **Why field-first pre-sprint**: PO has not estimated yet and scope may shrink — creating the item this early wastes an artifact and leaves a second copy for Stage 1 to reconcile. The field IS the only pre-sprint ATP write, in BOTH modalities; modality only decides which engine Stage 1 uses later.
 >
-> What marks this ATP as pre-sprint is the Story's `shift-left-reviewed` + `shift-left-{YYYY-MM-DD}` labels, not the title. Those labels are what Stage 1 reads to decide whether to short-circuit.
+> What marks this ATP as pre-sprint is the Story's `shift-left-reviewed` + `shift-left-{YYYY-MM-DD}` labels, not the title. Stage 1 reads those labels first, but they only CLAIM a pass: the short-circuit opens only when the synced ATP body published here is present too (`sprint-testing/references/acceptance-test-planning.md` §0.0, fail-closed).
 
 The write is identical in Modality jira-xray and Modality jira-native:
 
@@ -123,7 +123,7 @@ Jira is the source of truth: the ATP lives in the `{{jira.acceptance_test_plan}}
     Test Plan issue from this field and refines it into the executable superset.
 ```
 
-`fix-traceability` checks the `{{jira.acceptance_test_plan}}` field, or this `## Acceptance Test Plan (ATP)` fallback comment when the field is absent.
+`test-documentation` mode `repair-traceability` checks the `{{jira.acceptance_test_plan}}` field, or this `## Acceptance Test Plan (ATP)` fallback comment when the field is absent.
 
 Mention rule: include `@PO_HANDLE` and `@DEV_LEAD_HANDLE` in the comment IF those handles are available in `.agents/project.yaml`. Otherwise omit — mention-spam is worse than no mention.
 
@@ -135,7 +135,7 @@ Mention rule: include `@PO_HANDLE` and `@DEV_LEAD_HANDLE` in the comment IF thos
   labels: +shift-left-reviewed, +shift-left-{{YYYY-MM-DD}}
 ```
 
-- `shift-left-reviewed` is the SOFT MARKER — `/sprint-testing` Stage 1 reads it.
+- `shift-left-reviewed` is the SOFT MARKER — `/sprint-testing` Stage 1 reads it, but a marker is not evidence: the short-circuit also needs the published ATP body (`sprint-testing/references/acceptance-test-planning.md` §0.0).
 - `shift-left-{{YYYY-MM-DD}}` is the FRESHNESS MARKER — `/sprint-testing` uses the date to decide whether refinement is still <30 days old and can be short-circuited.
 
 Both labels are appended (never replaced). If the Story already carries an older `shift-left-{date}`, leave it — it documents the refinement timeline.
@@ -148,10 +148,10 @@ Read current status, then transition along the shortest valid path to `estimatio
 
 | Current status | Transitions to apply | Resolved IDs |
 |----------------|----------------------|--------------|
-| `{{jira.status.story.backlog}}` | `{{jira.transition.story.analyze}}` → `{{jira.transition.story.estimate}}` | id 2 (Analyze), then id 3 (Estimate) |
-| `{{jira.status.story.shift_left_qa}}` | `{{jira.transition.story.estimate}}` | id 3 (Estimate) |
+| `{{jira.status.story.backlog}}` | `{{jira.transition.story.analyze}}` → `{{jira.transition.story.estimate}}` | ids resolved from `.agents/jira-workflows.json` at run time, never hardcoded |
+| `{{jira.status.story.shift_left_qa}}` | `{{jira.transition.story.estimate}}` | id resolved from `.agents/jira-workflows.json` at run time, never hardcoded |
 | `{{jira.status.story.estimation}}` | (none — already there) | — |
-| `{{jira.status.story.ready_for_dev}}`, `{{jira.status.story.in_progress}}`, `{{jira.status.story.in_review}}`, `{{jira.status.story.ready_for_qa}}`, ... | SKIP transition — log warning | refinement still lands; workflow untouched |
+| any other non-terminal status past `{{jira.status.story.estimation}}` (per `.agents/jira-workflows.json`) | SKIP transition — log warning | refinement still lands; workflow untouched |
 | `{{jira.status.story.aborted}}`, `{{jira.status.story.deployed_to_production}}` | SKIP transition + WARN user — terminal | refinement is informational only |
 
 Pseudocode:
@@ -165,7 +165,7 @@ elif status == shift_left_qa:
     [ISSUE_TRACKER_TOOL] Transition: {{jira.transition.story.estimate}}   # -> estimation
 elif status == estimation:
     # noop — already at target
-elif status in (ready_for_dev, in_progress, in_review, ready_for_qa, qa_approved, in_test, ready_for_release, deployed_to_production, blocked, aborted):
+elif status is past estimation (any later status in .agents/jira-workflows.json):
     log warning "Story past estimation — refinement landed; workflow untouched"
 else:
     log warning "Unknown status {status}; SKIP transition"
@@ -213,7 +213,7 @@ bun run jira:sync-issues get {STORY_KEY} --include-comments
 
 ### Step 6b — Light stage verifier (closes the Shift-Left stage)
 
-Run the eight-line template in `agentic-qa-core/references/artifact-lifecycle.md` §5.
+Run the light stage verifier template in `agentic-qa-core/references/artifact-lifecycle.md` §5.
 The stage-specific status lines are:
 
 ```
@@ -330,7 +330,7 @@ Sorted by risk + dependency:
 
 - [ ] PO answers Aggregated Critical Questions before sprint planning
 - [ ] Dev lead answers Aggregated Tech Questions before estimation
-- [ ] When each Story reaches `Ready For QA`, run `/sprint-testing` — Stage 1 will detect `shift-left-reviewed` label and short-circuit Phases 1-3 of `acceptance-test-planning.md`
+- [ ] When each Story reaches `Ready For QA`, run `/sprint-testing` — Stage 1 short-circuits Phases 1-3 of `acceptance-test-planning.md` when the fresh `shift-left-*` labels AND the published ATP body are both there (§0.0)
 - [ ] If any Story still carries a data-feasibility blocker at sprint-planning time, consider moving it to a later sprint
 ```
 
@@ -360,7 +360,7 @@ Each step is idempotent:
 | Step 3 comment | If a comment headed `## Acceptance Test Plan (ATP)` already exists → skip |
 | Step 4 labels | acli labels operation is set-based; re-running adds nothing |
 | Step 5 transition | Read current status before transitioning; skip if already at target |
-| Step 5b subtask | Find by exact title (created in Phase 1); skip transition if already Done; append annotations as a new comment, never overwrite |
+| Step 5b subtask | Find by exact title (created in Phase 1); skip transition if already `{{jira.status.subtask.close}}`; append annotations as a new comment, never overwrite |
 | Step 6 trace | Always re-verify |
 
 ---
@@ -368,7 +368,7 @@ Each step is idempotent:
 ## Gotchas
 
 1. **Description append, never overwrite.** Read first, append second.
-2. **The comment is a pointer, not a mirror.** When `{{jira.acceptance_test_plan}}` exists, the handoff comment only points to the field — never paste the full body. The full body goes in the comment ONLY in fallback mode (field absent). `fix-traceability` checks the field, or the fallback comment when the field is absent.
+2. **The comment is a pointer, not a mirror.** When `{{jira.acceptance_test_plan}}` exists, the handoff comment only points to the field — never paste the full body. The full body goes in the comment ONLY in fallback mode (field absent). `test-documentation` mode `repair-traceability` checks the field, or the fallback comment when the field is absent.
 3. **Transition guardrail.** STOP at `estimation`. Stories past that point keep the refinement (description + field + comment + labels) but skip transition.
 4. **No TMS items pre-sprint.** This protocol never creates the Test Plan issue — `/sprint-testing` Stage 1 creates it from the `{{jira.acceptance_test_plan}}` field content. If an older session already left a pre-sprint Test Plan on the Story, leave it, note it in the per-Story log, and let Stage 1 reconcile.
 5. **Mention discipline.** Only mention PO/Dev-lead handles that are explicitly listed in `.agents/project.yaml`. No guessing.
@@ -387,8 +387,8 @@ Each step is idempotent:
 - [ ] Each per-Story log captured in the session's `progress.md`
 - [ ] No transition advanced beyond `{{jira.status.story.estimation}}`
 - [ ] No Test Plan item created (field-first — the item is `/sprint-testing` Stage 1's job)
-- [ ] `[QA] Shift-Left Review` subtask per Story: annotations posted + transitioned to Done (or skipped with warning)
+- [ ] `[QA] Shift-Left Review` subtask per Story: annotations posted + transitioned to `{{jira.status.subtask.close}}` (or skipped with warning)
 - [ ] Batch report written to `.session/shift-left-testing/<YYYY-MM-DD>-<descriptor>/batch-report.md`
 - [ ] Batch report posted to parent epic (if all Stories share one) OR delivered inline
-- [ ] User informed: when each Story reaches `Ready For QA`, run `/sprint-testing` (short-circuit thanks to `shift-left-reviewed`)
+- [ ] User informed: when each Story reaches `Ready For QA`, run `/sprint-testing` (it short-circuits on the published ATP body, not on the label alone)
 - [ ] Warnings + errors surfaced explicitly in the user-facing session-close message

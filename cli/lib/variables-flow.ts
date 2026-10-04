@@ -421,6 +421,43 @@ function printReport(rows: Map<string, VarReportRow>): void {
 }
 
 // ----------------------------------------------------------------------------
+// Harness surfaces — regenerate after `.env` changed
+// ----------------------------------------------------------------------------
+
+/**
+ * Regenerate `.claude/settings.local.json` + `.auth/opencode/*` from `.env`.
+ *
+ * A credential written to `.env` reaches an MCP server only through those
+ * generated files (a harness spawns its servers at startup, before any hook or
+ * wrapper can help), so a `--variables` run that stops at `.env` leaves the
+ * agent exactly as broken as before it ran. Never fatal: `bun run setup:doctor`
+ * reports the same drift and `bun run harness:env` fixes it. Prints variable
+ * NAMES only.
+ *
+ * DYNAMIC import: `harness-env.ts` imports from `../install.ts`, which imports
+ * this file; a static import here would close that cycle. Same pattern
+ * `cli/install.ts` uses for the same module.
+ */
+async function regenerateHarnessSurfaces(): Promise<void> {
+  try {
+    const { generate } = await import('./harness-env.ts');
+    const result = generate();
+    if (result.refused !== undefined) {
+      tui.log.warn(`Harness credential surfaces NOT written: ${result.refused}`);
+      return;
+    }
+    tui.log.info(
+      `Harness credential surfaces ${result.changed ? 'regenerated' : 'already in sync'}: `
+      + `${result.emitted.length === 0 ? '(none emitted)' : result.emitted.join(', ')}`,
+    );
+    process.stdout.write('  Restart the agent session: MCP servers read credentials at startup, not later.\n');
+  }
+  catch (err) {
+    tui.log.warn(`Could not regenerate the harness credential surfaces: ${(err as Error).message}. Run \`bun run harness:env\`.`);
+  }
+}
+
+// ----------------------------------------------------------------------------
 // D6 — Xray / Atlassian CI wiring notice
 // ----------------------------------------------------------------------------
 
@@ -510,7 +547,7 @@ async function promptVarsInto(
 }
 
 /**
- * Prompt the CRITICAL set (manifest `critical: true`) into `.env`. Thin wrapper
+ * Prompt the OFFERED set (manifest `critical: true`) into `.env`. Thin wrapper
  * over {@link promptVarsInto}.
  */
 async function runCriticalSet(
@@ -531,7 +568,7 @@ type MenuChoice = 'walk' | 'critical' | 'remote' | 'everything' | 'leave';
  *   (a) Walk — set EVERY local var one by one (Enter skips; overwrite-confirm on
  *       already-set). The flag-free human path; `--variables-local` is now purely
  *       a scripting alias.
- *   (b) Set / reset the CRITICAL variables (the 5 project-independent creds).
+ *   (b) Set / reset the OFFERED variables (manifest `critical: true`; skip is fine).
  *   (c) Push local .env → GitHub Actions secrets.
  *   (d) Everything (critical then push) / leave as-is.
  * Returns the rows map to print, plus the remote outcome for the closing notice.
@@ -543,7 +580,7 @@ async function runMenu(opts: VariablesFlowOptions): Promise<void> {
     message: 'What do you want to do?',
     options: [
       { label: 'Set variables one by one (walk all local vars)', value: 'walk' as const },
-      { label: 'Set / reset the critical variables (Atlassian, Resend, Tavily)', value: 'critical' as const },
+      { label: `Set / reset the offered variables (${criticalVars().map(s => s.name).join(', ')})`, value: 'critical' as const },
       { label: 'Push local .env → GitHub Actions secrets', value: 'remote' as const },
       { label: 'Everything (set critical, then push remote)', value: 'everything' as const },
       { label: 'Leave as-is (exit)', value: 'leave' as const },
@@ -586,6 +623,11 @@ async function runMenu(opts: VariablesFlowOptions): Promise<void> {
 
   if ((choice === 'remote' || choice === 'everything') && !remoteOutcome.blocked) {
     maybeNoticeXrayAtlassian(remoteOutcome.setNames);
+  }
+
+  // The menu never runs dry: every branch that reached here may have written `.env`.
+  if (choice !== 'remote') {
+    await regenerateHarnessSurfaces();
   }
 }
 
@@ -659,5 +701,11 @@ export async function runVariablesFlow(opts: VariablesFlowOptions): Promise<void
 
   if (doRemote && !remoteOutcome.blocked) {
     maybeNoticeXrayAtlassian(remoteOutcome.setNames);
+  }
+
+  // Only after a real local write: a dry run touched nothing, so there is
+  // nothing to derive, and a remote-only run never opened `.env` for writing.
+  if (doLocal && !opts.dryRun) {
+    await regenerateHarnessSurfaces();
   }
 }

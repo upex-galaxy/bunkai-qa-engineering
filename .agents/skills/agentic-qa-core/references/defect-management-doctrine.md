@@ -22,7 +22,7 @@ decisions: what type, what fields, who owns it, where it hangs.**
 ## Part 1 — Issue-type classification (Bug vs Defect vs Improvement)
 
 Choosing the issue type is **mandatory and happens BEFORE filing**. The three
-types share one Jira workflow (`UPEX BUG/DEFECT LIFE CYCLE`) but mean different
+types share one workflow (see `.agents/jira-workflows.json`) but mean different
 things. Misclassification corrupts every downstream metric (defect-escape rate,
 pre-release containment, enhancement backlog).
 
@@ -136,7 +136,7 @@ issue has its own QA owner; clobbering it destroys accountability and metrics.
 The never-overwrite rule protects `qa_assignee` from the harness. It does not
 protect the native `assignee` from **Jira itself**: a workflow transition may
 carry an *assign* post-function that the transition catalog does not show.
-Measured 2026-09-17 on a live project: `start_testing` and `qa_sign_off` each
+Measured on a live project (see ADR-0006): `start_testing` and `qa_sign_off` each
 silently moved a Story's `assignee` from the developer to the QA engineer who
 fired the transition. On a project whose doctrine keeps the two owners distinct
 — this one — QA sign-off quietly took delivery ownership off the dev on every
@@ -188,7 +188,7 @@ JQL filters, and dashboards.
   *Components* admin module, not from the issue dropdown; Jira rejects unknown
   names. `acli` cannot create or edit them (`acli/SKILL.md` §Hard limits), so
   populating them is either an admin task or a REST operation — driven by
-  `scripts/sync-jira-components.ts` through the `/jira-components` command,
+  `scripts/sync-jira-components.ts` through `jira-administration` mode `components`,
   which is plan-based on purpose: the AI proposes the module map, a human
   approves it, and only the approved plan is written. Renaming (which preserves
   issue assignments) is a separate operation from creating.
@@ -252,8 +252,10 @@ components          ->  PRODUCT module/epic  ("what part of the product it affec
 | **Defect epic** | every **bug/defect/improvement** | `qa.qa_epics.defect_epic.name` — **"QA Defect Management"** |
 
 - The **Master Test Plan epic has a special role**: it is an **Epic** (not a Test
-  Plan work type), is the **parent of all Test Plans** (FTP/STP/ATP/RTP), mirrors
-  `.context/master-test-plan.md` + points to the official QA team repository, and is
+  Plan work type), is the **parent of all Test Plans** (FTP/STP/ATP/RTP), carries
+  the Master Test Plan itself in its description (source of truth; cached by the
+  sync at `.context/PBI/qa-artifacts/master-test-plan.md`) + points to the official
+  QA team repository, and is
   cross-linked (`relates to`) to its three sibling QA epics (Test Repository, Test
   Artifacts, Defect Management) — so the four form a navigable QA-governance cluster.
 - **Test Sets split by altitude.** The per-Story **ATS** (Acceptance Test Set,
@@ -304,7 +306,7 @@ the relevant process epic by the configured name:
 1. **Exists** → parent the new issue to it **and cache its key** into
    `.agents/project.yaml` `qa.qa_epics.<epic>.key` when that leaf is still
    `null` (or holds a stale key). Discovery without cache-back is the measured
-   failure: 2026-09-17, all four Epics existed in Jira while every `key` was
+   failure (see ADR-0006): all four Epics existed in Jira while every `key` was
    `null`, so each session re-discovered them — or read the `null` as "absent"
    and proposed creating duplicates of Epics that were already there. The cache
    is the whole point of the leaf; leaving it `null` after a successful lookup
@@ -323,7 +325,12 @@ the relevant process epic by the configured name:
 
 Filling the report richly is not optional polish — these fields *are* the
 defect-management metrics (JQL filters, dashboards, escape/containment rates).
-A report that skips them is incomplete.
+A report that skips them is incomplete. This table is the per-work-type
+obligation, and the only place it is stated. `.agents/jira-required.yaml`
+`required:` is a different thing: one catalog of which fields must exist on the
+instance and what each falls back to when absent. A field this table requires
+that the instance lacks follows its `fallback:` there; it never stops being
+required here.
 
 | Field | Slug / native | Required | Source |
 |---|---|---|---|
@@ -354,13 +361,13 @@ field.
 one-line justification when business urgency diverges from technical severity
 (e.g. a `trivial`-severity typo in the landing hero may warrant `High` priority).
 
-| Severity (`{{jira.severity}}`) | Priority (native) |
+| Severity (`{{jira.severity}}`, option slugs declared in `.agents/jira-required.yaml`) | Priority (native) |
 |---|---|
-| `critica` | Highest |
-| `mayor` | High |
-| `moderada` | Medium |
-| `menor` | Low |
-| `trivial` | Lowest |
+| `{{jira.severity.critica}}` | Highest |
+| `{{jira.severity.mayor}}` | High |
+| `{{jira.severity.moderada}}` | Medium |
+| `{{jira.severity.menor}}` | Low |
+| `{{jira.severity.trivial}}` | Lowest |
 
 ---
 

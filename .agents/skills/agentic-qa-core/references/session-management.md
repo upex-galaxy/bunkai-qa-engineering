@@ -29,7 +29,7 @@ When in doubt, the sibling doctrine doc is canonical for its concern. This file 
 
 ## 3. Storage layout
 
-Every retrofitted skill writes its session state under a single tree at the repo root:
+Every retrofitted skill writes its session state under a single tree at `<<PRIMARY_ROOT>>`, the PRIMARY checkout (`.agents/README.md` §"Checkout roots"). In the primary it is the repo root; in a linked worktree it is NOT the worktree's root, because everything git ignores inside a worktree is deleted with it. Every `.session/...` path in this document, and in every skill that cites it, resolves under `<<PRIMARY_ROOT>>` and is passed to a subagent as an absolute path:
 
 ```
 .session/
@@ -59,7 +59,7 @@ Fleet coordination (one conductor, several launched workers) is shared vocabular
 
 `plan.md` and `progress.md` are the contract and the only two files this doctrine governs. A scope MAY hold additional **companion files** when the skill genuinely needs state that is neither the plan nor the append-only log — as long as they sit INSIDE that scope directory (the rule above still binds: nothing is written elsewhere under `.session/`) and nothing outside the machine depends on one existing. They are disposable by construction: `.session/` is gitignored and local.
 
-Registered companions today, all owned by `sprint-testing`:
+Registered companions, all owned by `sprint-testing`:
 
 | File | Altitude | What it is |
 |---|---|---|
@@ -101,7 +101,7 @@ Rules:
 Every retrofitted skill runs Phase 0 as the **first** thing it does, before any subagent dispatch, before any user prompt beyond the initial trigger. The decision tree is:
 
 1. Resolve `<scope>` for this invocation (see §9 for the skill's rule).
-2. Check whether `.session/<skill-slug>/<scope>/progress.md` exists.
+2. Check whether `<<PRIMARY_ROOT>>/.session/<skill-slug>/<scope>/progress.md` exists. When the session runs in a linked worktree (`<<REPO_ROOT>>` differs from `<<PRIMARY_ROOT>>`), say so in one line and look in the primary; a check against the worktree's own `.session/` finds nothing and silently restarts work that was already done.
 3. If it does NOT exist → proceed to Phase 1 (write a new `plan.md`).
 4. If it DOES exist:
    1. Read `.session/<skill-slug>/<scope>/plan.md` in full.
@@ -122,15 +122,9 @@ The Phase 0 check is NOT optional — even on first invocation the orchestrator 
 
 ### Skills that opt out
 
-A small set of short skills bypass Phase 0 because they have no meaningful interruption point. These are explicitly excluded:
+A small set of short skills bypass Phase 0 because they have no meaningful interruption point: utility, core and single-turn skills (CLI cookbooks, atomic operators, informational walkthroughs, within-session-only operators, reference-only hosts) opt out and say so in their SKILL.md; `SESSION_RETROFITTED_SKILLS` in `scripts/lint-skills.ts` names the ones that do NOT.
 
-- Command-driven CLI cookbooks: `acli`, `xray-cli`
-- Atomic operators: `git-flow-master`
-- Informational walkthroughs: `agentic-qa-onboard`
-- Within-session-only operators: `judgment-day`
-- Meta / reference-only: `agentic-qa-core`
-
-A skill in this list MUST state its opt-out explicitly in its SKILL.md so future readers don't expect a `.session/` directory.
+A skill that opts out MUST state its opt-out explicitly in its SKILL.md so future readers don't expect a `.session/` directory.
 
 ## 5. Phase 1 — Plan-first contract
 
@@ -307,7 +301,7 @@ A skill MUST validate its `<scope>` matches its declared shape before writing th
 
 ### Nested scopes
 
-A scope MAY itself contain sub-scopes when the skill genuinely runs at two altitudes. Today only `sprint-testing` does: `sprint-<N>` is a scope AND the parent of one `<JIRA-KEY>/` sub-scope per issue in the sprint.
+A scope MAY itself contain sub-scopes when the skill genuinely runs at two altitudes. `sprint-testing` is the registered nested-scope skill: `sprint-<N>` is a scope AND the parent of one `<JIRA-KEY>/` sub-scope per issue in the sprint.
 
 ```
 .session/sprint-testing/
@@ -388,8 +382,8 @@ Goal: <one sentence>
 Context docs:
   - /abs/path/file1.md
   - /abs/path/file2.ts
-  - .session/<skill-slug>/<scope>/plan.md           ← session artifact path
-  - .session/<skill-slug>/<scope>/progress.md       ← session artifact path
+  - <<PRIMARY_ROOT>>/.session/<skill-slug>/<scope>/plan.md       ← session artifact path
+  - <<PRIMARY_ROOT>>/.session/<skill-slug>/<scope>/progress.md   ← session artifact path
 
 ... (remaining 5 components per briefing-template.md)
 ```
@@ -400,7 +394,7 @@ The subagent treats `plan.md` and `progress.md` as read-only context. Only the o
 
 ### Skills retrofitted with the full pattern (plan.md + progress.md)
 
-`test-automation`, `sprint-testing`, `project-discovery`, `regression-testing`, `test-documentation`, `shift-left-testing`.
+The ones `SESSION_RETROFITTED_SKILLS` in `scripts/lint-skills.ts` names (the constant the lint reads).
 
 ### Skill that pioneered the pattern
 
@@ -412,7 +406,7 @@ See §4 "Skills that opt out".
 
 ## 14. Lint checks
 
-`scripts/lint-skills.ts` enforces three checks on top of the existing skill-registry lints:
+`scripts/lint-skills.ts` enforces the session checks below on top of the existing skill-registry lints:
 
 1. **Banner present.** Every retrofitted SKILL.md (per §13) contains the §10 banner verbatim. Missing banner → ERROR.
 2. **Phase 0 present.** Every retrofitted SKILL.md has a section titled `## Phase 0` (or `## Phase -1` for skills with a pre-existing `## Phase 0` like `test-documentation`) that mentions `.session/` path read. Missing Phase 0 → ERROR.

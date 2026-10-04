@@ -1,11 +1,14 @@
 ---
 name: test-automation
-description: "Plan, write, and review automated tests following KATA (Komponent Action Test Architecture) on Playwright + TypeScript, or explain existing automated tests in a sealed read-only mode. Use when writing E2E or API/integration tests, creating Page or Api components, designing ATCs, parameterizing test data, registering fixtures, reviewing test code for KATA compliance, or requesting break-down-tests / a plain-English test breakdown. The explain mode reads source and reports assertions without entering Plan-Code-Review or editing tests. Do NOT use for running suites (regression-testing), documenting TCs in Jira/Xray (test-documentation), onboarding a repo (project-discovery), or orchestrating sprint-wide testing (sprint-testing)."
+description: "Plan, write, and review automated tests following KATA (Komponent Action Test Architecture) on Playwright + TypeScript, or explain existing automated tests in a sealed read-only mode. Use when writing E2E or API/integration tests, creating Page or Api components, designing ATCs, parameterizing test data, registering fixtures, reviewing test code for KATA compliance, or requesting break-down-tests / a plain-English test breakdown. The explain mode reads source and renders an HTML breakdown of assertions without entering Plan-Code-Review or editing tests. Do NOT use for running suites (regression-testing), documenting TCs in Jira/Xray (test-documentation), onboarding a repo (project-discovery), or orchestrating sprint-wide testing (sprint-testing)."
 license: MIT
 compatibility: [claude-code, copilot, cursor, codex, opencode]
 complementary_categories: [testing-e2e, testing-api, testing-component, automation-cli, accessibility]
 metadata:
   kind: workflow
+  requires_capabilities: [db, api-schema]
+  stage_owner: true
+
 ---
 
 ## Forbidden invocations
@@ -54,6 +57,8 @@ Requires `agentic-qa-core`. Loads on demand:
 - ATC = atomic mini-flow; NEVER calls another ATC. Reusable chains → a Steps module.
 - Max 2 positional params (3+ → object param). Locators inline (extract only at 2+ uses). Imports via aliases (`@api/`, `@schemas/`, `@utils/`) — no relative imports.
 - Public methods fail fast; utilities silent-fail (return null). Validate against `kata-manifest.json` before adding components/ATCs (anti-duplication gate).
+- Mode from `$ARGUMENTS`: a first token matching a mode in Mode routing (`explain`, `automate`) IS the mode and the rest is forwarded; otherwise `automate` for plain automation work, ASK when it could be either.
+- Before any step that uses a declared MCP capability (`metadata.requires_capabilities`: `db`, `api-schema`), run the point-of-use check in `agentic-qa-core/references/preflight-gate.md` §8: resolve by tool-name suffix, and when no available tool provides it STOP and name the capability + how to enable it, never a silent fallback.
 
 **Read full SKILL.md when**: writing KATA component code, choosing fixtures for a hybrid flow, or applying the Phase 3 review checklist.
 
@@ -61,9 +66,9 @@ Requires `agentic-qa-core`. Loads on demand:
 
 ## Mode routing
 
-Resolve mode before any readiness preflight or session workflow.
+Resolve mode before any readiness preflight or session workflow. When the first token of `$ARGUMENTS` matches a mode below, that token IS the mode and the rest is forwarded to it unchanged (`/test-automation explain tests/e2e/login.spec.ts`). Otherwise the rules below apply: the default mode for plain automation work, ASK when the request is ambiguous.
 
-- `explain`: selected by the legacy `break-down-tests` alias or an explicit request to explain existing automated tests. Forward `$ARGUMENTS` unchanged, load only `references/explain-tests.md`, produce its read-only report, then stop. Do not create session state, run Plan -> Code -> Review, edit tests, regenerate `kata-manifest.json`, or call Jira/TMS.
+- `explain`: selected by a first token `explain`, by the `break-down-tests` trigger phrase, or by an explicit request to explain existing automated tests. Forward the remaining `$ARGUMENTS` unchanged, load only `references/explain-tests.md`, produce its HTML breakdown, then stop. Its ONLY writes are the two report files `.context/reports/test-breakdown/<scope>.json` and `<scope>.html` (gitignored, rendered by `bun run tests:explain:render`). Do not create session state, run Plan -> Code -> Review, edit tests or product code, regenerate `kata-manifest.json`, or call Jira/TMS.
 - `automate` (default): all normal KATA planning, coding, and review triggers. Continue with the workflow below.
 
 If the invocation could mean either explanation or implementation, ask which outcome is wanted. Never infer implementation from a read-only explanation request.
@@ -118,13 +123,14 @@ Canonical reading order for any AI starting cold on a test-automation workflow. 
 
 | Capability | Need | Why here |
 |---|---|---|
-| Framework adapted (artifacts present) | REQUIRED | Cannot write project ATCs against the generic `Example*` scaffolds the boilerplate ships. Probe the reference §4 ADAPTED signals; still generic → STOP and tell the user to run `/project-discovery` → `/adapt-framework` themselves. The gate NEVER auto-runs them. |
+| Framework adapted (artifacts present) | REQUIRED | Cannot write project ATCs against the generic `Example*` scaffolds the boilerplate ships. Probe the reference §4 ADAPTED signals; still generic → STOP and tell the user to run `/project-discovery` → `/test-framework-adaptation` themselves. The gate NEVER auto-runs them. |
 | Dev toolchain | REQUIRED | The Review gate runs `bun run test` / `bun run types:check` / `bun run lint:check`. Resolve them at t=0, not at Phase 3. `bun install` if a dep is missing. |
 | `kata-manifest.json` clean | REQUIRED | Anti-duplication source of truth (Critical Rule #12). `bun run kata:manifest:check` clean before proposing components/ATCs; `bun run kata:manifest` if stale. |
 | Active env + test-user creds | REQUIRED | Authored tests run live against `<<ACTIVE_ENV>>`. Env reachable + `.env` creds for the env (per role if multi-role). |
 | Playwright browsers | REQUIRED | `bunx playwright` resolves + chromium installed (`bun run pw:install`). |
-| OpenAPI MCP (schema read-only) + `api/schemas/` synced | SCOPE — API/integration tests; needed at **Phase 1 Plan** too | Phase 1 explores endpoints (via the `openapi` MCP, schema-read-only) to design ATCs + classify test-data — plan-time, not just run-time. Api components consume OpenAPI-derived types (`api/schemas/`; refresh `bun run api:sync`); authenticated test-code calls use the Playwright API fixture (`.auth/api-state.json` from `bun run api:login`) — no `API_TOKEN`/MCP injection, no restart. |
+| OpenAPI MCP (schema read-only) + `api/schemas/` synced | SCOPE — API/integration tests; needed at **Phase 1 Plan** too | Phase 1 explores endpoints (via the `openapi` MCP, schema-read-only) to design ATCs + classify test-data — plan-time, not just run-time. Api components consume OpenAPI-derived types (`api/schemas/`; refresh `bun run api:sync`); authenticated test-code calls use the Playwright API fixture (`.auth/api-state.json` from `bun run api:login`) — no token / MCP injection, no restart. |
 | DBHub MCP | SCOPE — data setup/validation; needed at **Phase 1 Plan** too | Phase 1 explores the schema (via the `dbhub` MCP) to design data fixtures (Discover / Modify / Generate) — plan-time, not just run-time. `dbhub` answers a schema probe; `DBHUB_*` in `.env`. Unset → fill `.env` + RESTART. |
+| Business context map per touched level | REQUIRED — per level in scope, needed at **Phase 1 Plan** | E2E/UI → `business-e2e-context`, API → `business-api-context`, DB/data setup → `business-data-context`: the skill exists AND `bun run context:map <slug> --list` prints sections, not the placeholder notice. RED → STOP and hand the user `project-context` mode `e2e` / `api` / `data`; a missing skill → `bun run up`. |
 | Issue-tracker (`[ISSUE_TRACKER_TOOL]`) | SCOPE — ticket/regression-driven | ATP + AC reads via `bun run jira:sync-issues`; TMS modality for the ATP source. Pure module-driven from an existing spec may not need it. |
 
 Surfaces (UI vs API vs both) follow the chosen planning scope + the ATCs Phase 1 designs — NEVER a user question (reference §5). After the gate clears (generic baseline + the surface tools the scope needs GREEN), continue to Phase 0 below.
@@ -144,7 +150,7 @@ Before picking the planning scope, run the session resume contract from `agentic
    - Surface to the user: last completed phase (Plan / Code / Review) + next phase + open Review findings if any.
    - Offer **resume / restart / abort**. On `restart`, archive to `.session/.archive/<YYYY-MM-DD>-test-automation-<scope>-aborted/` before proceeding.
 
-Phase 0 is inline (no subagent). It runs in <1 minute on a cold cache.
+Phase 0 is inline (no subagent).
 
 ---
 
@@ -198,7 +204,7 @@ Each phase has a gate. Do not start Code before the Plan is written and approved
 
 ### Phase 1 — Plan
 
-**MUST-load before any planning**: `kata-manifest.json` (root). It lists every Component and every ATC currently in the codebase. Use it to identify reuse, avoid duplicate `Page`/`Api` classes, and avoid minting an `@atc('PROJ-XXX')` ID that is already taken. This is enforced by Critical Rule #12 in `AGENTS.md` and by the husky pre-commit gate.
+**MUST-load before any planning**: `kata-manifest.json` (root). It lists every Component and every ATC in the codebase. Use it to identify reuse, avoid duplicate `Page`/`Api` classes, and avoid minting an `@atc('PROJ-XXX')` ID that is already taken. This is enforced by Critical Rule #12 in `AGENTS.md` and by the husky pre-commit gate.
 
 **Pre-flight checklist** (anti-duplication — run before writing the plan):
 
@@ -262,13 +268,13 @@ If any step fails, fix before moving to Review.
 
 #### AI-readable verification (optional, recommended)
 
-For the test you just wrote, run Allure 3 in **agent mode** to get a markdown report you can read directly without parsing HTML:
+For the test you just wrote, run Allure (`bunx allure`, version pinned in `package.json`) in **agent mode** to get a markdown report you can read directly without parsing HTML:
 
 ```bash
 bun allure:agent           # runs `bunx allure agent -- bun test`
 ```
 
-Allure 3 lives as a devDep — `bunx allure` resolves to the local `node_modules/.bin/allure`, no global install required. Use this when:
+Allure lives as a devDep — `bunx allure` resolves to the local `node_modules/.bin/allure`, no global install required. Use this when:
 
 - The Code subagent needs to confirm the test actually exercised the expected ATC (the markdown summary lists each `@atc('TICKET-ID')` block + its status).
 - You want a quick scope check before opening Phase 3 — Review.
@@ -491,7 +497,7 @@ Not every invocation needs every reference. Load the specific file when the task
 - **Configuring Playwright, CI integration, projects, sharding** → `references/ci-integration.md`
 - **Session resume contract, plan.md/progress.md schemas, archive policy, Engram per-phase checkpoint** → `../agentic-qa-core/references/session-management.md` (Phase 0 + Phase 1 + Archive of this skill)
 
-Tool resolution: use `[AUTOMATION_TOOL]` for browser work (Playwright CLI or MCP — load `/playwright-cli` when available), `[API_TOOL]` for OpenAPI exploration, `[DB_TOOL]` for verifying test data in the database, `[TMS_TOOL]` for TMS sync (load `/xray-cli` when available), `[ISSUE_TRACKER_TOOL]` for ticket work. Split the issue-tracker access by operation: **detailed reads** of a Story (ACs, ATP, dev implementation-plan, custom fields) → `bun run jira:sync-issues get <KEY> --include-comments` (or `jql "<query>"`) then read the synced `.md` — NEVER `acli workitem view` for custom fields; **writes** (comment automated-test status back to the Story, transitions) → `/acli`; **trivial summary/status/key-list lookups** → `/acli` `workitem view`/`search` is fine. See `agentic-qa-core/references/acli-integration.md` §"Reads vs writes". Resolve tags via the project's AGENTS.md Tool Resolution table.
+Tool resolution: use `[AUTOMATION_TOOL]` for browser work (`/playwright-cli`, the only browser path), `[API_TOOL]` for OpenAPI exploration, `[DB_TOOL]` for verifying test data in the database, `[TMS_TOOL]` for TMS sync (load `/xray-cli` when available), `[ISSUE_TRACKER_TOOL]` for ticket work. Split the issue-tracker access by operation: **detailed reads** of a Story (ACs, ATP, dev implementation-plan, custom fields) → `bun run jira:sync-issues get <KEY> --include-comments` (or `jql "<query>"`) then read the synced `.md` — NEVER `acli workitem view` for custom fields; **writes** (comment automated-test status back to the Story, transitions) → `/acli`; **trivial summary/status/key-list lookups** → `/acli` `workitem view`/`search` is fine. See `agentic-qa-core/references/acli-integration.md` §"Reads vs writes". Resolve tags via the project's AGENTS.md Tool Resolution table.
 
 ---
 

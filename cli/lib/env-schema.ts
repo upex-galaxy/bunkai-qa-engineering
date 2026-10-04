@@ -36,13 +36,13 @@
  * the argv wrapper that imports FROM here.
  */
 
-import type { VarSpec } from './variables-manifest.ts';
+import type { VarScope, VarSpec } from './variables-manifest.ts';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { validateVarManifest, valueSourceOf, VAR_MANIFEST } from './variables-manifest.ts';
+import { validateVarManifest, valueSourceOf, VAR_MANIFEST, VAR_SCOPES } from './variables-manifest.ts';
 
 // ----------------------------------------------------------------------------
 // Constants
@@ -103,6 +103,91 @@ export const RUNTIME_KNOBS: readonly RuntimeKnob[] = [
 ];
 
 // ----------------------------------------------------------------------------
+// Retired keys: cleaned from .env, never declared
+// ----------------------------------------------------------------------------
+
+/**
+ * Keys the manifest no longer knows but an adopting repo's `.env` may still
+ * carry, copied from an older template. The schema does NOT declare them:
+ * nothing reads them, and a declared name reads as a live one.
+ *
+ * That has a price, measured with the pinned varlock: an UNDECLARED key that
+ * is present and EMPTY in `.env` fails `varlock load` ("Value is required but
+ * is currently empty"); one with a value passes. So the cleanup runs BEFORE
+ * any validation: `bun run setup` and `bun run setup:doctor` find the lines
+ * (`retiredEnvKeysIn`) and offer to delete them with one confirmation
+ * (`removeRetiredEnvLines`), and the doctor's own validation neutralizes the
+ * ones still there (`neutralizeRetiredKeys`) so a declined cleanup or a
+ * non-interactive run reports them instead of failing on them.
+ *
+ * `since` is the date the key left the manifest; `reason` is one sentence a
+ * human reads in the cleanup prompt.
+ */
+export interface RetiredKey {
+  name: string
+  since: string
+  reason: string
+}
+
+export const RETIRED_KEYS: readonly RetiredKey[] = [
+  { name: 'TAVILY_API_KEY', since: '2026-09-24', reason: 'web search runs at harness level now (a connector or a user-scope MCP); nothing in the repo reads it.' },
+  { name: 'POSTMAN_API_KEY', since: '2026-09-24', reason: 'the Postman MCP runs at harness level now; nothing in the repo reads it.' },
+  { name: 'RESEND_API_KEY', since: '2026-09-24', reason: 'the resend CLI logs in on its own (resend login); nothing in the repo reads it.' },
+  { name: 'API_TOKEN', since: '2026-09-24', reason: 'legacy; bun run api:login writes the curl token to .auth/tokens.env.' },
+];
+
+/** An ACTIVE assignment line (`KEY=` or `export KEY=`); a commented line is inert and stays. */
+const ENV_ASSIGNMENT = /^\s*(?:export\s+)?([A-Za-z_]\w*)\s*=/;
+
+/**
+ * The retired keys that `.env` text still assigns, in `RETIRED_KEYS` order.
+ * Names only: a caller never needs, and never gets, a value.
+ */
+export function retiredEnvKeysIn(envText: string, retired: readonly RetiredKey[] = RETIRED_KEYS): string[] {
+  const assigned = new Set<string>();
+  for (const line of envText.split(/\r?\n/)) {
+    const match = ENV_ASSIGNMENT.exec(line);
+    if (match) { assigned.add(match[1]); }
+  }
+  return retired.filter(k => assigned.has(k.name)).map(k => k.name);
+}
+
+/**
+ * `.env` text without the active lines that assign a retired key. Every other
+ * line, comment and line ending is kept byte for byte; a duplicate assignment
+ * of the same key goes too.
+ */
+export function removeRetiredEnvLines(envText: string, retired: readonly RetiredKey[] = RETIRED_KEYS): { text: string, removed: string[] } {
+  const names = new Set(retired.map(k => k.name));
+  const removed = new Set<string>();
+  const kept: string[] = [];
+  // Split keeping each line's own terminator, so a CRLF file stays CRLF.
+  for (const line of envText.split(/(?<=\n)/)) {
+    const match = ENV_ASSIGNMENT.exec(line);
+    if (match && names.has(match[1])) {
+      removed.add(match[1]);
+      continue;
+    }
+    kept.push(line);
+  }
+  return { text: kept.join(''), removed: retired.filter(k => removed.has(k.name)).map(k => k.name) };
+}
+
+/**
+ * A child environment in which every retired key `.env` still assigns has a
+ * non-empty placeholder, so `varlock load` judges the declared items only. A
+ * process value wins over the `.env` line (measured), and an undeclared key
+ * fails only when EMPTY. The placeholder is a constant, never the real value.
+ */
+export function neutralizeRetiredKeys<T extends Record<string, string | undefined>>(env: T, retiredInFile: readonly string[]): T {
+  // Generic, never `NodeJS.ProcessEnv`: `cli/**` must compile under a host
+  // whose `ProcessEnv` requires `NODE_ENV` (cli/updater-host-types.test.ts).
+  const out: Record<string, string | undefined> = { ...env };
+  for (const name of retiredInFile) { out[name] = 'retired'; }
+  return out as T;
+}
+
+// ----------------------------------------------------------------------------
 // Generation
 // ----------------------------------------------------------------------------
 
@@ -127,8 +212,13 @@ function quoteArg(value: string): string {
  * ONLY when its key is `TEST_ENV`, which is what `@currentEnv=$TEST_ENV`
  * in `.env.schema` switches on; any other key has no env-spec equivalent and
  * the item is emitted optional with the clause kept in its description.
+ *
+ * Only a CORE item can be required (ADR-0005). A project or tooling item is
+ * always emitted optional, whatever its `required` says: the manifest
+ * validator rejects the combination anyway, and this is the second lock.
  */
 export function schemaRequiredDecorator(spec: VarSpec): string | null {
+  if (spec.scope !== 'core') { return null; }
   const required = spec.schema?.required ?? spec.required;
   if (required === true) { return '@required'; }
   if (required === false) { return null; }
@@ -148,6 +238,7 @@ function decoratorLine(parts: Array<string | null>): string | null {
 function renderManifestItem(spec: VarSpec): string[] {
   const lines: string[] = [];
   lines.push(`# ${safeText(spec.note)}`);
+  lines.push(`# Used by: ${safeText(spec.usedBy)}${spec.featureGate !== undefined ? ` (only when the ${spec.featureGate} switch is on)` : ''}`);
   if (spec.obtainHint !== undefined && spec.obtainHint.trim() !== '') {
     lines.push(`# Obtain: ${safeText(spec.obtainHint)}`);
   }
@@ -225,13 +316,37 @@ export function generateCoreSchema(
   ];
 
   const body: string[] = [];
-  body.push('# ----------------------------------------------------------------------------');
-  body.push(`# Variables routed by the installer (${SCHEMA_SOURCE}). Order = manifest order.`);
-  body.push('# ----------------------------------------------------------------------------');
-  body.push('');
-  for (const spec of envFileSpecs(manifest)) {
-    body.push(...renderManifestItem(spec));
+  const banner: Record<VarScope, string[]> = {
+    core: [
+      '# FRAMEWORK (scope: core). What the boilerplate itself reads. The only item',
+      '# varlock refuses to run without is TEST_ENV, and it has a default; the rest',
+      '# sit behind a feature switch and are validated by the code path behind it.',
+    ],
+    tooling: [
+      '# TOOLING (scope: tooling, optional). Tools that can get their credential',
+      '# elsewhere: a CI-only notifier, the private report portal. Never a blocker.',
+    ],
+    project: [
+      '# PROJECT-UNDER-TEST (scope: project, optional). Typed EXAMPLES: the login,',
+      '# the database and the API of the app you test. Rename or delete them when',
+      '# you adapt the framework; the consumer that reads one fails by name. To',
+      '# require one in YOUR project, re-declare it in .env.schema with @required:',
+      '# an importing file may strengthen any item except TEST_ENV.',
+    ],
+  };
+  const specs = envFileSpecs(manifest);
+  for (const scope of VAR_SCOPES) {
+    const inScope = specs.filter(s => s.scope === scope);
+    if (inScope.length === 0) { continue; }
+    body.push('# ----------------------------------------------------------------------------');
+    body.push(...banner[scope]);
+    body.push(`# Source: ${SCHEMA_SOURCE}. Order = manifest order.`);
+    body.push('# ----------------------------------------------------------------------------');
     body.push('');
+    for (const spec of inScope) {
+      body.push(...renderManifestItem(spec));
+      body.push('');
+    }
   }
   body.push('# ----------------------------------------------------------------------------');
   body.push('# Optional runtime knobs. Never collected by the installer; the runtime reads');
@@ -284,6 +399,11 @@ export function projectSchemaTemplate(): string {
     '#   # Admin user for the back-office flows',
     '#   # @required=forEnv(staging) @type=email',
     '#   STAGING_ADMIN_EMAIL=',
+    '#',
+    '# An item the core file declares OPTIONAL can be re-declared here with a',
+    '# stronger decorator (e.g. STAGING_USER_EMAIL with @required=forEnv(staging));',
+    '# the project declaration wins. The one exception is TEST_ENV: @currentEnv',
+    '# resolves it early and varlock refuses a second declaration of it.',
     '# ----------------------------------------------------------------------------',
     '',
   ].join('\n');
@@ -419,6 +539,7 @@ export function loadSchemaPairThroughVarlock(root: string, currentEnv: string = 
     const env: NodeJS.ProcessEnv = { ...process.env };
     for (const spec of VAR_MANIFEST) { delete env[spec.name]; }
     for (const knob of RUNTIME_KNOBS) { delete env[knob.name]; }
+    for (const key of RETIRED_KEYS) { delete env[key.name]; }
 
     // `bunx` resolves the project's pinned devDependency from the CWD's
     // node_modules; the scratch dir has none, so point it at the repo root by

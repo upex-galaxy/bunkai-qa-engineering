@@ -73,18 +73,21 @@ import { dirname, join, resolve } from 'node:path';
 import { checkbox, password } from '@inquirer/prompts';
 import {
   checkAgentCompatibility,
+  removeShadowingCommands,
   repairClaudeSkillsAlias,
-  repairCommandWrappers,
+  SHADOWING_COMMANDS_BACKUP_DIR,
 } from './lib/agent-compatibility.ts';
 import {
   resolveAtlassianInstance,
   toSiteSlug,
   writeAtlassianUrlToYaml,
 } from './lib/atlassian-instance.ts';
+import { removeRetiredEnvLines, retiredEnvKeysIn } from './lib/env-schema.ts';
+import { CLI_LOGINS, HARNESS_LEVEL_HOWTO, HARNESS_LEVEL_MCPS } from './lib/harness-level-mcps.ts';
 import { playwrightBrowsersInstalled } from './lib/playwright-cache.ts';
 import * as tui from './lib/tui.ts';
 import { runVariablesFlow } from './lib/variables-flow.ts';
-import { criticalVars, nonCriticalVars, valueSourceOf, varsFor } from './lib/variables-manifest.ts';
+import { criticalVars, nonCriticalVars, valueSourceOf, VAR_MANIFEST, varsFor } from './lib/variables-manifest.ts';
 
 // ============================================================================
 // Types
@@ -218,13 +221,16 @@ const ENGRAM_COMPONENT = 'engram';
  *   gentle-ai install --agent <a> --components engram,sdd
  */
 
+// The servers the three project MCP files declare. Remote servers whose only
+// project-side content was an API key (web search, Postman) are not here any
+// more: they run at harness level, connected once per machine, and the skills
+// resolve them by capability (ADR-0005, D3; the list of moved servers lives in
+// cli/lib/harness-level-mcps.ts).
 const CANONICAL_MCPS = [
   'context7',
-  'tavily',
-  'playwright',
+  'slack-aurora',
   'dbhub',
   'openapi',
-  'postman',
 ] as const;
 
 // External CLIs are NEVER installed by this script — install commands depend on
@@ -255,7 +261,7 @@ const EXTERNAL_CLIS: ReadonlyArray<{ name: string, install?: string, docs: strin
   },
   {
     // Promoted to the sole default tool for Jira/Confluence/TMS work
-    // (Atlassian MCP is opt-in via docs/mcp/).
+    // (Atlassian MCP is opt-in via .agents/skills/agentic-qa-core/references/mcp-atlassian-optin.md).
     name: 'acli',
     docs: 'https://developer.atlassian.com/cloud/acli/guides/install-acli/',
     purpose: 'Atlassian (Jira/Confluence) CLI — used by /acli skill',
@@ -379,6 +385,19 @@ export const PROJECT_LEVEL_SKILLS: ReadonlyArray<CommunitySkill> = [
   // external CLI verified in step 11 — see AGENTS.md §6.5 CLI→Skill auto-load.
   // Project-level because email provider choice varies per project.
   { package: 'https://github.com/resend/resend-skills', skill: 'resend-cli' },
+  // skill-creator (Anthropic): the builder of every skill this repo scaffolds.
+  // Project-level since the context-skills layer: `/framework-development`
+  // (when the change IS a skill) and `project-context` mode `context-skill`
+  // (a consumer's `<aspect>-context`) both scaffold through it, so a clone
+  // without it would silently skip the description pass and the test prompts.
+  { package: 'https://github.com/anthropics/skills', skill: 'skill-creator' },
+  // diagram-design (Cathryn Lavery): the diagrams inside the business context
+  // maps (`project-context` modes data / api / e2e and each business
+  // `*-context` refresh). Capability `diagrams`, resolved by skill presence
+  // with a point-of-use STOP (agentic-qa-core/references/business-context-maps.md
+  // §7). Project-level because one workflow depends on it and must not hinge on
+  // a user's global plugin list; a user-level install satisfies it too.
+  { package: 'https://github.com/cathrynlavery/diagram-design', skill: 'diagram-design' },
 ];
 
 /**
@@ -390,7 +409,6 @@ export const PROJECT_LEVEL_SKILLS: ReadonlyArray<CommunitySkill> = [
  * generation. bun is the runtime used across all projects.
  */
 const USER_LEVEL_SKILLS: ReadonlyArray<CommunitySkill> = [
-  { package: 'https://github.com/anthropics/skills', skill: 'skill-creator' },
   { package: 'https://github.com/vercel-labs/skills', skill: 'find-skills' },
   { package: 'https://github.com/xixu-me/skills', skill: 'github-actions-docs' },
   { package: 'https://github.com/lewislulu/html-ppt-skill', skill: 'html-ppt' },
@@ -414,38 +432,31 @@ const SECRET_NAME_HINTS = ['TOKEN', 'KEY', 'SECRET', 'PASSWORD'];
 // must edit `dbhub.toml` manually based on the target project's database
 // (sqlserver/postgres/mysql/sqlite/mariadb). Marked as `placeholder` always.
 export const MCP_SERVER_SECRETS: Record<string, readonly string[]> = {
-  context7: [],
-  tavily: ['TAVILY_API_KEY'],
-  playwright: [],
+  'context7': [],
+  // The Slack bot MCP. SLACK_MCP_REACTION_TOOL is a channel allowlist, not a
+  // secret, but the configs reference it, so it is declared here too; empty is
+  // a valid value (reactions off).
+  'slack-aurora': ['SLACK_MCP_XOXP_TOKEN', 'SLACK_MCP_REACTION_TOOL'],
   // All six that `dbhub.toml` interpolates. PORT and TYPE were missing until
   // 2026-09-20: the configs referenced them, this hand-written map did not, so
   // the installer never prompted for them and a fresh project hit a dbhub that
   // would not connect. Found by the generator's scan-vs-declared cross-check,
   // which is the whole reason that cross-check exists.
-  dbhub: ['DBHUB_TYPE', 'DBHUB_HOST', 'DBHUB_PORT', 'DBHUB_DATABASE', 'DBHUB_USER', 'DBHUB_PASSWORD'],
-  openapi: ['API_BASE_URL', 'OPENAPI_SPEC_PATH'],
-  postman: ['POSTMAN_API_KEY'],
+  'dbhub': ['DBHUB_TYPE', 'DBHUB_HOST', 'DBHUB_PORT', 'DBHUB_DATABASE', 'DBHUB_USER', 'DBHUB_PASSWORD'],
+  'openapi': ['API_BASE_URL', 'OPENAPI_SPEC_PATH'],
 };
 
 // Vars discovered from committed MCP configs that the installer should NOT
-// prompt for at install time — they are project-bound (require an existing
-// backend / Postman workspace / DB connection) and are surfaced later by
-// `bun run doctor` once the user has the necessary external resources.
-const INSTALLER_DEFERRED_VARS = new Set<string>([
-  'API_BASE_URL',
-  'OPENAPI_SPEC_PATH',
-  'POSTMAN_API_KEY',
-  'DBHUB_TYPE',
-  'DBHUB_HOST',
-  'DBHUB_PORT',
-  'DBHUB_DATABASE',
-  'DBHUB_USER',
-  'DBHUB_PASSWORD',
-]);
+// prompt for at install time: everything that is not CORE. A project var
+// needs a backend or a database the installer cannot know about, and a
+// tooling var is a tool's own business; both are surfaced by
+// `bun run setup:doctor` with their scope. Derived from the manifest so a new
+// project var never needs a hand-list entry to be deferred.
+const INSTALLER_DEFERRED_VARS = new Set<string>(VAR_MANIFEST.filter(s => s.scope !== 'core').map(s => s.name));
 
-// The CRITICAL set (project-independent tool credentials) is owned by the day-0
-// credentials step. configureMcps skips any of these it encounters (e.g.
-// TAVILY_API_KEY surfaced from .mcp.json) so the user is asked exactly once.
+// The OFFERED set (manifest `critical: true`) is owned by the day-0 credentials
+// step. configureMcps skips any of these it encounters so the user is asked
+// exactly once.
 const CRITICAL_VAR_NAMES = new Set<string>(criticalVars().map(s => s.name));
 
 // ============================================================================
@@ -1149,6 +1160,31 @@ export async function ensureEnvFileExists(): Promise<void> {
   log.warn('.env.example missing; created empty .env.');
 }
 
+/**
+ * Delete the `.env` lines that assign a retired key (`RETIRED_KEYS`), after one
+ * confirmation. The schema no longer declares them, and an undeclared EMPTY
+ * key fails `varlock load`, so this runs before anything validates `.env`.
+ * Non-interactive: report the names and edit nothing. Values are never printed.
+ */
+export async function cleanRetiredEnvKeys(): Promise<void> {
+  if (!existsSync(ENV_PATH)) { return; }
+  const text = await readFile(ENV_PATH, 'utf8');
+  const present = retiredEnvKeysIn(text);
+  if (present.length === 0) { return; }
+  if (NON_INTERACTIVE) {
+    log.warn(`.env still sets retired key(s) nothing reads any more: ${present.join(', ')}. Delete those lines (or run \`bun run setup:doctor\` in a terminal and accept the cleanup).`);
+    return;
+  }
+  const remove = await maybeConfirm(`.env still sets ${present.length} retired key(s) nothing reads any more (${present.join(', ')}). Delete those lines?`, true);
+  if (!remove) {
+    log.dim('  Kept. `bun run setup:doctor` keeps listing them until they are gone.');
+    return;
+  }
+  const { text: next, removed } = removeRetiredEnvLines(text);
+  await writeFile(ENV_PATH, next, { mode: 0o600 });
+  log.success(`Deleted from .env: ${removed.join(', ')}`);
+}
+
 export async function appendVarsToEnv(vars: Record<string, string>): Promise<void> {
   if (Object.keys(vars).length === 0) { return; }
   const existing = await readFile(ENV_PATH, 'utf8');
@@ -1238,15 +1274,16 @@ async function configureMcps(agents: AgentId[], state: InstallState): Promise<vo
       continue;
     }
     if (CRITICAL_VAR_NAMES.has(name)) {
-      // CRITICAL tool credentials (e.g. TAVILY_API_KEY) are owned by the day-0
-      // step, which prompts the whole critical set with the right context. Skip
-      // here to avoid double-asking; do NOT mark pending (day-0 collects it).
-      log.dim(`  ${name}: collected in the day-0 credentials step.`);
+      // OFFERED credentials are owned by the day-0 step, which prompts the
+      // whole set with the right context. Skip here to avoid double-asking; do
+      // NOT mark pending (day-0 offers it).
+      log.dim(`  ${name}: offered in the day-0 credentials step.`);
       continue;
     }
     if (INSTALLER_DEFERRED_VARS.has(name)) {
       stillPending.push(name);
-      log.dim(`  ${name}: deferred to \`bun run doctor\` (project-bound — needs backend / DB / workspace).`);
+      const scope = VAR_MANIFEST.find(s => s.name === name)?.scope ?? 'project';
+      log.dim(`  ${name}: deferred to \`bun run setup:doctor\` (${scope}-scoped: ${scope === 'project' ? 'needs your backend / DB' : 'a tool credential, optional'}).`);
       continue;
     }
     if (NON_INTERACTIVE) {
@@ -1286,25 +1323,27 @@ async function configureMcps(agents: AgentId[], state: InstallState): Promise<vo
 }
 
 // ----------------------------------------------------------------------------
-// Day-0 credentials (the CRITICAL set — project-INDEPENDENT tool credentials)
+// Day-0 credentials: the OFFERED set (manifest `critical: true`)
 // ----------------------------------------------------------------------------
 //
-// The installer prompts ONLY for the CRITICAL set (manifest `critical: true`),
-// identical across both boilerplates:
-//   - ATLASSIAN_EMAIL / ATLASSIAN_API_TOKEN — Jira/acli credentials (.env)
-//   - ATLASSIAN_URL — the Jira/acli SITE HOST, persisted to .agents/project.yaml
-//   - RESEND_API_KEY — email-testing tool (also authenticates the resend CLI)
-//   - TAVILY_API_KEY — the pre-configured Tavily web-search MCP
-// These exist independent of any project-under-test, so a fresh clone can
-// provide them on day-0.
+// The installer OFFERS the credentials the manifest marks `critical` and never
+// requires one: skip is a first-class answer, and nothing later blocks on it
+// (ADR-0005). Which vars those are is the manifest's call (`criticalVars()`);
+// today it is the Atlassian pair plus the site host, which goes to
+// .agents/project.yaml rather than .env. A human is at the keyboard at day-0,
+// so it is the cheapest moment to paste a credential the Jira scripts will
+// need; that is the whole reason the offer exists.
 //
-// Everything else is NON-critical and is NEVER asked here (nor warned about):
+// Everything else is NEVER asked here (nor warned about):
 //   - TEST_ENV — written to its manifest default ("local") WITHOUT prompting.
-//   - LOCAL_USER_* / STAGING_USER_*, XRAY_*, DBHUB_*, API_*, POSTMAN_*, … —
-//     project-dependent; surfaced in the closing "Next steps" list, settable
+//   - every project-scoped var (your app's login, database, API) and every
+//     tooling var — listed by scope in the closing "Next steps", settable
 //     later via `bun run setup --variables`.
+//   - MCP servers that run at harness level (web search, Postman) and CLI
+//     logins (acli, resend) — printed as guidance at the close; nothing to
+//     type into .env.
 
-// Per-critical-var prompt context (grouped note shown before the prompt block).
+// Per-offered-var prompt context (grouped note shown before the prompt block).
 // Vars without an entry are prompted with just their name.
 const CRITICAL_VAR_NOTES: Record<string, { title: string, body: string }> = {
   ATLASSIAN_URL: {
@@ -1319,14 +1358,6 @@ const CRITICAL_VAR_NOTES: Record<string, { title: string, body: string }> = {
     title: 'Atlassian credentials (Jira / acli)',
     body: 'Used by acli + scripts/sync-jira-*.ts. Get a token at: https://id.atlassian.com/manage-profile/security/api-tokens',
   },
-  RESEND_API_KEY: {
-    title: 'Resend API key (email testing)',
-    body: 'Used for email-flow tests (signup, password reset, magic links). Get a key: https://resend.com/api-keys — Docs: https://resend.com/docs/api-reference/introduction',
-  },
-  TAVILY_API_KEY: {
-    title: 'Tavily API key (web-search MCP)',
-    body: 'Powers the pre-configured Tavily MCP for community-fix / troubleshooting research. Get a key: https://app.tavily.com',
-  },
 };
 
 async function configureDayZeroCredentials(state: InstallState): Promise<void> {
@@ -1335,20 +1366,20 @@ async function configureDayZeroCredentials(state: InstallState): Promise<void> {
   const newValues: Record<string, string> = {};
 
   // ── TEST_ENV default (NO prompt) ─────────────────────────────────────────
-  // Project-dependent; the user reconfigures it manually or via /adapt-framework
+  // Project-dependent; the user reconfigures it manually or via /test-framework-adaptation
   // when wiring the framework to their project-under-test. Write the manifest
   // default only when absent — never clobber an existing value.
   const currentTestEnv = (envValues.TEST_ENV ?? process.env.TEST_ENV ?? '').trim();
   if (currentTestEnv.length === 0) {
     const defaultEnv = nonCriticalVars().find(s => s.name === 'TEST_ENV')?.defaultValue ?? 'local';
     newValues.TEST_ENV = defaultEnv;
-    log.dim(`  TEST_ENV: defaulting to "${defaultEnv}" (reconfigure later via /adapt-framework).`);
+    log.dim(`  TEST_ENV: defaulting to "${defaultEnv}" (reconfigure later via /test-framework-adaptation).`);
   }
   else {
     log.dim(`  TEST_ENV: already set to "${currentTestEnv}".`);
   }
 
-  // ── CRITICAL tool credentials (idempotent, project-independent) ──────────
+  // ── OFFERED credentials (idempotent; skip is a first-class answer) ────────
   for (const spec of criticalVars()) {
     const name = spec.name;
 
@@ -1418,36 +1449,16 @@ async function configureDayZeroCredentials(state: InstallState): Promise<void> {
     log.success(`Wrote ${Object.keys(newValues).length} day-0 var(s) to .env: ${Object.keys(newValues).join(', ')}`);
   }
 
-  // Refresh MCP per-server status for any server whose secrets include a
-  // critical var we just collected (e.g. tavily ← TAVILY_API_KEY), since
-  // configureMcps deferred those to this step.
+  // Refresh MCP per-server status for any server whose secrets include an
+  // offered var we just collected, since configureMcps deferred those to this
+  // step. (No committed server depends on one today; kept so a project that
+  // adds such a server keeps an accurate status line.)
   const merged = { ...envValues, ...newValues };
   for (const [server, secrets] of Object.entries(MCP_SERVER_SECRETS)) {
     if (secrets.length === 0) { continue; }
     if (!secrets.some(s => CRITICAL_VAR_NAMES.has(s))) { continue; }
     const anyMissing = secrets.some(s => !merged[s] || merged[s].trim().length === 0);
     state.mcps[server] = anyMissing ? 'placeholder' : 'configured-with-key';
-  }
-
-  // ── Resend CLI authentication attempt ────────────────────────────────────
-  const resendToken = (process.env.RESEND_API_KEY ?? '').trim();
-  if (resendToken.length > 0 && !NON_INTERACTIVE) {
-    const resendBin = tryRun('resend', ['--version']);
-    if (!resendBin.ok) {
-      log.dim('  resend CLI not installed — skipping auto-login. Install: npm i -g resend-cli');
-    }
-    else {
-      const loginRes = spawnSync('resend', ['login', '--key', resendToken], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        timeout: 10000,
-      });
-      if (loginRes.status === 0) {
-        process.stdout.write(`${tui.statusIcon('ok')} resend CLI authenticated.\n`);
-      }
-      else {
-        process.stdout.write(`${tui.statusIcon('warn')} resend CLI auto-login failed (exit ${loginRes.status}). Run manually: resend login\n`);
-      }
-    }
   }
 }
 
@@ -1524,6 +1535,14 @@ async function offerDirenvAutoload(): Promise<void> {
   log.info(`direnv ${info.version} detected.`);
   if (info.platform === 'win32') {
     log.dim('  Tip: direnv on Windows works best in Git Bash. PowerShell support is experimental and requires direnv 2.37+.');
+  }
+
+  // `direnv allow` approves a file that EXECUTES on every `cd`. An unattended
+  // run (an AI agent, CI) must not grant that on the human's behalf: skip and
+  // say so, instead of letting `maybeConfirm`'s default-yes approve it silently.
+  if (NON_INTERACTIVE) {
+    log.dim('  skipped (non-interactive): run `direnv allow` yourself if you want shell autoload.');
+    return;
   }
 
   const proceed = await maybeConfirm(
@@ -1989,14 +2008,14 @@ function describeAgentDetection(detected: AgentDetection): string {
 export function repairRepositoryCompatibility(
   root = REPO_ROOT,
   platform: NodeJS.Platform = process.platform,
-): { alias: ReturnType<typeof repairClaudeSkillsAlias>, wrappersWritten: number } {
+): { alias: ReturnType<typeof repairClaudeSkillsAlias>, shadowingCommandsMoved: string[] } {
   const alias = repairClaudeSkillsAlias(root, platform);
-  const wrappersWritten = repairCommandWrappers(root);
+  const shadowingCommandsMoved = removeShadowingCommands(root);
   const check = checkAgentCompatibility(root, platform);
   if (!check.ok) {
     throw new Error(`Agent compatibility repair incomplete:\n${check.errors.join('\n')}`);
   }
-  return { alias, wrappersWritten };
+  return { alias, shadowingCommandsMoved };
 }
 
 // ============================================================================
@@ -2551,14 +2570,15 @@ function statusFor(found: number, total: number): string {
 // ============================================================================
 
 /**
- * Print the "Next steps — finish later" block: every NON-critical manifest var
- * that is still empty in `.env`, each with its `obtainHint`. These are NEVER
- * asked at install and NEVER warned about — they live here so the user knows
- * where to get them and that `bun run setup --variables` sets them.
+ * Print the "Next steps — finish later" block: every non-offered manifest var
+ * that is still empty in `.env`, grouped by SCOPE (ADR-0005), each with its
+ * `obtainHint`. These are NEVER asked at install and NEVER warned about — they
+ * live here so the user knows where to get them and that `bun run setup
+ * --variables` sets them. The project block is titled as what it is: examples
+ * to rename or delete when the framework is adapted.
  *
- * Excluded: TEST_ENV (carries a default the installer already wrote). DEV-only
- * infra-autogenerated vars (Supabase/Vercel) do not exist in the QA manifest,
- * so nothing further to exclude here.
+ * Excluded: TEST_ENV (carries a default the installer already wrote) and
+ * GitHub-only vars (no `.env` slot; `setup --variables --remote` pushes them).
  */
 function printNonCriticalNextSteps(): void {
   let envValues: Record<string, string> = {};
@@ -2569,20 +2589,75 @@ function printNonCriticalNextSteps(): void {
 
   const pending = nonCriticalVars().filter((spec) => {
     if (spec.defaultValue !== undefined) { return false; } // e.g. TEST_ENV
+    if (!spec.destinations.includes('local')) { return false; }
     const value = (envValues[spec.name] ?? '').trim();
     return value.length === 0;
   });
 
   if (pending.length === 0) { return; }
 
-  tui.section('Next steps — finish later (non-critical vars)');
-  process.stdout.write(`  ${COLORS.dim}These are project-dependent — not needed to start. Set them with:${COLORS.reset}\n`);
+  tui.section('Next steps — finish later (optional vars, by scope)');
+  process.stdout.write(`  ${COLORS.dim}Nothing here blocks the agent. Set what your project needs with:${COLORS.reset}\n`);
   process.stdout.write(`      ${COLORS.cyan}bun run setup --variables${COLORS.reset}\n\n`);
-  for (const spec of pending) {
-    process.stdout.write(`  • ${COLORS.bold}${spec.name}${COLORS.reset}\n`);
-    process.stdout.write(`    ${COLORS.dim}${spec.obtainHint ?? ''}${COLORS.reset}\n`);
+  const groups: Array<{ scope: 'core' | 'tooling' | 'project', title: string }> = [
+    { scope: 'core', title: 'Framework (behind a feature switch: Xray sync, Jira host)' },
+    { scope: 'tooling', title: 'Tooling (optional; may be provided elsewhere)' },
+    { scope: 'project', title: 'Project-under-test examples: rename or delete when you adapt the framework' },
+  ];
+  for (const group of groups) {
+    const inScope = pending.filter(spec => spec.scope === group.scope);
+    if (inScope.length === 0) { continue; }
+    process.stdout.write(`  ${COLORS.bold}${group.title}${COLORS.reset}\n`);
+    for (const spec of inScope) {
+      process.stdout.write(`  • ${COLORS.bold}${spec.name}${COLORS.reset}${spec.featureGate ? `${COLORS.dim} (only when ${spec.featureGate} is on)${COLORS.reset}` : ''}\n`);
+      process.stdout.write(`    ${COLORS.dim}${spec.obtainHint ?? ''}${COLORS.reset}\n`);
+    }
+    process.stdout.write('\n');
   }
-  process.stdout.write('\n');
+}
+
+/**
+ * Print how to connect the tools that live OUTSIDE `.env`: the MCP servers
+ * that run at harness level (connected once per machine, resolved by
+ * capability) and the CLIs that keep their own login. Guidance only: nothing
+ * here is prompted, written or verified by the installer.
+ */
+function printHarnessLevelGuidance(): void {
+  tui.section('Tools that authenticate outside .env (connect once per machine)');
+  process.stdout.write(`  ${COLORS.dim}These MCP servers are not in .mcp.json on purpose: a remote server whose only project-side content is an API key is the harness's business. Skills resolve them by capability.${COLORS.reset}\n`);
+  for (const mcp of HARNESS_LEVEL_MCPS) {
+    process.stdout.write(`  • ${COLORS.bold}${mcp.id}${COLORS.reset}${mcp.capability ? ` (${mcp.capability})` : ''}: ${mcp.purpose}\n`);
+  }
+  for (const host of ['claude', 'opencode', 'codex'] as const) {
+    process.stdout.write(`    ${COLORS.cyan}${host}${COLORS.reset}: ${HARNESS_LEVEL_HOWTO[host].how}\n`);
+    process.stdout.write(`      ${COLORS.dim}${HARNESS_LEVEL_HOWTO[host].where}${COLORS.reset}\n`);
+  }
+  process.stdout.write(`  ${COLORS.dim}CLIs keep their own session:${COLORS.reset}\n`);
+  for (const cli of CLI_LOGINS) {
+    process.stdout.write(`  • ${COLORS.bold}${cli.cli}${COLORS.reset}: ${COLORS.cyan}${cli.login}${COLORS.reset}\n`);
+    process.stdout.write(`    ${COLORS.dim}${cli.note}${COLORS.reset}\n`);
+  }
+  process.stdout.write(`  ${COLORS.dim}bun run setup:doctor reports which of these servers your user-level harness config already declares.${COLORS.reset}\n\n`);
+}
+
+/**
+ * OFFERED manifest vars with no value yet, by NAME. Mirrors the day-0 step's
+ * own test: `.env` or the process for an env-file var, the yaml resolver for the
+ * Atlassian host. Never returns a value.
+ */
+function missingCriticalVarNames(): string[] {
+  let envValues: Record<string, string> = {};
+  if (existsSync(ENV_PATH)) {
+    try { envValues = parseEnvFile(readFileSync(ENV_PATH, 'utf8')); }
+    catch { /* unreadable .env → treat all as empty */ }
+  }
+  return criticalVars().filter((spec) => {
+    if (valueSourceOf(spec) === 'atlassian-instance') {
+      try { resolveAtlassianInstance(); return false; }
+      catch { return true; }
+    }
+    return (envValues[spec.name] ?? process.env[spec.name] ?? '').trim().length === 0;
+  }).map(spec => spec.name);
 }
 
 function printClosingSummary(state: InstallState): void {
@@ -2644,10 +2719,23 @@ function printClosingSummary(state: InstallState): void {
   const circled = ['⓪', '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨'];
   let stepNum = 0;
 
-  if (state.pendingEnvVars.length > 0) {
+  // Non-interactive (an AI agent drove the install): nobody typed a credential,
+  // so the CRITICAL set is still empty too. Say exactly which keys the agent has
+  // to ask its human for, names only, instead of leaving it to infer them.
+  const askHuman = NON_INTERACTIVE ? [...new Set([...missingCriticalVarNames(), ...state.pendingEnvVars])] : [];
+
+  if (state.pendingEnvVars.length > 0 || askHuman.length > 0) {
     process.stdout.write(`${circled[stepNum]}  ${COLORS.bold}Fill missing env vars${COLORS.reset}  ${COLORS.yellow}(BLOCKS the agent from working with MCPs)${COLORS.reset}\n`);
-    process.stdout.write(`    ${COLORS.cyan}Edit .env → set: ${state.pendingEnvVars.join(', ')}${COLORS.reset}\n`);
-    process.stdout.write(`    ${COLORS.dim}Without these, MCP servers will 401/403 silently.${COLORS.reset}\n\n`);
+    if (askHuman.length > 0) {
+      process.stdout.write(`    ${COLORS.cyan}Ask the human for these ${askHuman.length} keys: ${askHuman.join(', ')}${COLORS.reset}\n`);
+      process.stdout.write(`    ${COLORS.dim}Then write them to .env (never paste a value into a chat or a commit).${COLORS.reset}\n`);
+    }
+    else {
+      process.stdout.write(`    ${COLORS.cyan}Edit .env → set: ${state.pendingEnvVars.join(', ')}${COLORS.reset}\n`);
+    }
+    process.stdout.write(`    ${COLORS.dim}Without these, MCP servers will 401/403 silently.${COLORS.reset}\n`);
+    process.stdout.write(`    ${COLORS.cyan}Then: bun run harness:env${COLORS.reset}  ${COLORS.dim}(regenerates the credential files Claude and OpenCode read at startup)${COLORS.reset}\n`);
+    process.stdout.write(`    ${COLORS.cyan}Then restart the agent session${COLORS.reset}  ${COLORS.dim}(MCP servers read credentials at startup, not later)${COLORS.reset}\n\n`);
     stepNum++;
   }
 
@@ -2734,11 +2822,12 @@ function printClosingSummary(state: InstallState): void {
   process.stdout.write('    Then run:  bun run jira:sync-fields && bun run jira:check\n\n');
   process.stdout.write('  • Bootstrap KATA manifest once:  bun run kata:manifest\n');
   process.stdout.write('    Validate:                       bun run kata:manifest:check\n\n');
-  process.stdout.write('  • Adapt KATA to your stack:      /adapt-framework\n');
+  process.stdout.write('  • Adapt KATA to your stack:      /test-framework-adaptation\n');
   process.stdout.write('    (removes example tests + business maps; wires fixtures to your stack)\n\n');
 
-  // Next steps — non-critical vars still empty in .env (manifest-driven).
+  // Next steps — optional vars still empty in .env, by scope (manifest-driven).
   printNonCriticalNextSteps();
+  printHarnessLevelGuidance();
 
   // QA workflow quick reference
   tui.section('QA workflow quick reference');
@@ -2801,11 +2890,11 @@ function printClosingSummary(state: InstallState): void {
   process.stdout.write(`   ${COLORS.cyan}/plugin install warp@claude-code-warp${COLORS.reset}\n`);
   process.stdout.write(`   ${COLORS.dim}Docs: https://docs.warp.dev/agent-platform/cli-agents/claude-code/${COLORS.reset}\n\n`);
 
-  process.stdout.write('→  OpenCode Warp plugin: already wired in opencode.jsonc via the "plugin" field.\n');
+  process.stdout.write('→  OpenCode Warp plugin: personal, so add it to your global ~/.config/opencode/opencode.json (OpenCode 1; Warp installs it itself).\n');
   process.stdout.write(`   ${COLORS.dim}Docs: https://docs.warp.dev/agent-platform/cli-agents/opencode/${COLORS.reset}\n\n`);
 
   // AI personality
-  process.stdout.write(`→  Curious who you're talking to? Read ${COLORS.cyan}docs/ai-personality.md${COLORS.reset}\n\n`);
+  process.stdout.write(`→  Curious who you're talking to? Run ${COLORS.cyan}bun run docs -- --page core/personalidad.html${COLORS.reset}\n\n`);
 
   // Reference
   tui.section('REFERENCE');
@@ -2966,7 +3055,7 @@ async function main(): Promise<void> {
     await installCommunitySkills(agents, state, 'project', syncForceKeys);
     await installCommunitySkills(agents, state, 'global', syncForceKeys);
     const compatibility = repairRepositoryCompatibility();
-    log.success(`Repository compatibility ready (${compatibility.wrappersWritten} wrapper updates; Claude alias ${compatibility.alias.status}).`);
+    log.success(`Repository compatibility ready (Claude alias ${compatibility.alias.status}${compatibility.shadowingCommandsMoved.length > 0 ? `; moved ${compatibility.shadowingCommandsMoved.join(', ')} to ${SHADOWING_COMMANDS_BACKUP_DIR}/ because each shadowed a skill` : ''}).`);
     await writeInstallState(state);
     log.success(`Community skills synced to: ${agents.join(', ')}.`);
     process.exit(0);
@@ -3106,12 +3195,13 @@ async function main(): Promise<void> {
   }
 
   const compatibility = repairRepositoryCompatibility();
-  log.success(`Repository compatibility ready (${compatibility.wrappersWritten} wrapper updates; Claude alias ${compatibility.alias.status}).`);
+  log.success(`Repository compatibility ready (Claude alias ${compatibility.alias.status}${compatibility.shadowingCommandsMoved.length > 0 ? `; moved ${compatibility.shadowingCommandsMoved.join(', ')} to ${SHADOWING_COMMANDS_BACKUP_DIR}/ because each shadowed a skill` : ''}).`);
 
   // ── PHASE 3 — CONFIGURATION ──────────────────────────────────────────────
   tui.phaseHeader(3, 'CONFIGURATION');
 
   tui.section('Step 10: Wiring .env for MCP servers');
+  await cleanRetiredEnvKeys();
   await configureMcps(agents, state);
   await offerDirenvAutoload();
 
@@ -3171,6 +3261,10 @@ async function generateHarnessEnv(): Promise<void> {
   try {
     const { generate } = await import('./lib/harness-env.ts');
     const result = generate();
+    if (result.refused !== undefined) {
+      log.warn(`Harness credential surfaces NOT written: ${result.refused}`);
+      return;
+    }
     log.success(
       `${result.changed ? 'Wrote' : 'Already in sync:'} ${result.emitted.length} of `
       + `${result.declared.length} declared variables `

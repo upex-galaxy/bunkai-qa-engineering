@@ -11,8 +11,12 @@
  *
  * The MCP server SET is project-declared: whatever `.mcp.json` lists is what
  * the other two hosts must list (see PARITY RULE). Only the per-host SHAPE of
- * the six servers this boilerplate ships is pinned here (`KNOWN_MCP_IDS`), so
- * a downstream project that drops `postman` or adds `supabase` still passes.
+ * the servers this boilerplate ships is pinned here (`KNOWN_MCP_IDS`), so a
+ * downstream project that keeps a server upstream dropped, or adds `supabase`,
+ * still passes. Remote servers whose only project-side content was an API key
+ * (web search, Postman) left the shipped set with ADR-0005: they run at
+ * harness level and skills resolve them by capability. A project that still
+ * declares one gets the generic cross-host check, nothing stricter.
  *
  * Import-closed: only Node builtins and `cli/lib` siblings (see the header of
  * `agent-compatibility.ts` for why `cli/` must never import a sibling
@@ -22,6 +26,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
+import { isSchemaOwner } from './agents-schema.ts';
+
 /**
  * Servers whose per-host shape this boilerplate pins (`EXPECTED_MCP`). The
  * strict shape check applies to one of these ONLY when the project's
@@ -30,19 +36,18 @@ import { join, relative, resolve } from 'node:path';
  */
 export const KNOWN_MCP_IDS = [
   'context7',
-  'tavily',
-  'playwright',
+  'slack-aurora',
   'dbhub',
   'openapi',
-  'postman',
 ] as const;
 
 /**
- * The emitter carries three payloads per prompt (output contract, forensic
- * identity line, conditional Orca line), so the contract pins the exports the
- * three adapters rely on plus the markers a consumer greps for. A drift here
- * is a harness that silently lost its identity line: `git-flow-master` would
- * then write `Session: unknown` into every commit trailer instead of failing.
+ * The emitter carries four payloads per prompt (output contract, forensic
+ * identity line, conditional Orca line, at most one setup warning), so the
+ * contract pins the exports the three adapters rely on plus the markers a
+ * consumer greps for. A drift here is a harness that silently lost its
+ * identity line: `git-flow-master` would then write `Session: unknown` into
+ * every commit trailer instead of failing.
  */
 export const HOOK_IDENTITY_EXPORTS = [
   'resolveAgentIdentity',
@@ -56,6 +61,41 @@ export const HOOK_ORCA_MARKER = 'ORCA: available.';
 export const CLAUDE_HOOK_COMMAND = 'node "$CLAUDE_PROJECT_DIR/.agents/hooks/personality-reinject.mjs"';
 export const CODEX_HOOK_COMMAND = 'root="$(git rev-parse --show-toplevel)" && node "$root/.agents/hooks/personality-reinject.mjs"';
 export const CODEX_HOOK_COMMAND_WINDOWS = 'powershell.exe -NoProfile -Command "$root = git rev-parse --show-toplevel; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; node (Join-Path $root \'.agents/hooks/personality-reinject.mjs\')"';
+
+/**
+ * The `.env` loader every Codex stdio server launches through.
+ *
+ * Codex forwards `env_vars` BY NAME from its own process environment. A
+ * terminal launch through `bun run codex` has them; Codex Desktop, opened from
+ * Finder or the Dock, has none, so every server started with empty variables
+ * and the OpenAPI server exited before the MCP handshake. The loader reads
+ * `.env` from the launch directory (the project root, the same one
+ * `--config dbhub.toml` already resolves against) and then starts the real
+ * server, so the values arrive however Codex was opened.
+ *
+ * `-p dotenv-cli@<pin>` names the package explicitly: a bare `bunx dotenv`
+ * resolves to the `dotenv` LIBRARY when `node_modules` is absent and prints its
+ * usage instead of running anything. The pin tracks the `dotenv-cli`
+ * devDependency, so the cache already holds it after `bun install`. `-o` makes
+ * `.env` win over an inherited value, exactly as the `bun run codex` wrapper
+ * does. Measured: ADR-0006.
+ */
+export const CODEX_ENV_LOADER_COMMAND = 'bunx';
+export const CODEX_ENV_LOADER_ARGS = ['-p', 'dotenv-cli@8.0.0', 'dotenv', '-o', '-e', '.env', '--'] as const;
+
+/**
+ * Splits a Codex `command` + `args` into the server it actually starts. A
+ * server launched through `CODEX_ENV_LOADER_*` reads as the inner command with
+ * `envLoader: true`; anything else is returned as-is.
+ */
+export function unwrapCodexEnvLoader(command: string, args: readonly string[]): { command: string, args: string[], envLoader: boolean } {
+  const prefix = CODEX_ENV_LOADER_ARGS;
+  const wrapped = command === CODEX_ENV_LOADER_COMMAND
+    && args.length > prefix.length
+    && prefix.every((entry, index) => args[index] === entry);
+  if (!wrapped) { return { command, args: [...args], envLoader: false }; }
+  return { command: args[prefix.length], args: args.slice(prefix.length + 1), envLoader: true };
+}
 
 export type KnownMcpId = (typeof KNOWN_MCP_IDS)[number];
 export type McpHost = 'claude' | 'opencode' | 'codex';
@@ -84,6 +124,10 @@ export interface NormalizedMcpServer {
   dependsOn: string[]
   literalEnv: Record<string, string>
   enabled: boolean
+  /** Codex only: the server starts through `CODEX_ENV_LOADER_*`. */
+  envLoader?: boolean
+  /** Codex only: `startup_timeout_sec`; absent means Codex's default. */
+  startupTimeoutSec?: number
 }
 
 type NormalizedMcpConfig = Record<string, NormalizedMcpServer>;
@@ -103,13 +147,12 @@ interface JsonObject {
  *
  * `transport`, `command` and `args` are NOT compared generically, because Codex
  * cannot expand `${VAR}` inside `args` and a host may legitimately reach the
- * same server another way. For the six servers this boilerplate ships they
- * are pinned per host in `EXPECTED_MCP` instead, and that strict shape check
- * runs only when the project declares the server. Today the six share one
- * shape on every host (the two HTTP servers carry the key as a bearer token
- * on every host, so Codex needs no adaptation), but the table is keyed per
- * host so a Codex-specific shape can diverge later without touching the
- * generic check.
+ * same server another way. For the servers this boilerplate ships
+ * (`KNOWN_MCP_IDS`) they are pinned per host in `EXPECTED_MCP` instead, and
+ * that strict shape check runs only when the project declares the server.
+ * Today they share one shape on every host, but the table is keyed per host
+ * so a Codex-specific shape can diverge later without touching the generic
+ * check.
  *
  * Whatever the spelling, the `.env` names each server depends on are identical
  * across the three hosts. That is what the cross-host check enforces.
@@ -135,34 +178,26 @@ function canonical(shape: Pick<NormalizedMcpServer, 'transport'> & Partial<Norma
     dependsOn: [...new Set(shape.dependsOn ?? [])].sort(),
     literalEnv,
     enabled: shape.enabled ?? true,
+    envLoader: shape.envLoader ?? false,
+    startupTimeoutSec: shape.startupTimeoutSec,
   };
 }
 
 const server = canonical;
 
 const EVERY_HOST: Record<KnownMcpId, NormalizedMcpServer> = {
-  context7: server({ transport: 'stdio', command: 'bunx', args: ['-y', '@upstash/context7-mcp@4.0.3'] }),
-  tavily: server({
-    transport: 'http',
-    url: 'https://mcp.tavily.com/mcp/',
-    dependsOn: ['TAVILY_API_KEY'],
-  }),
-  playwright: server({
+  'context7': server({ transport: 'stdio', command: 'bunx', args: ['-y', '@upstash/context7-mcp@4.0.3'] }),
+  'slack-aurora': server({
     transport: 'stdio',
     command: 'bunx',
-    args: [
-      '@playwright/mcp@0.0.79',
-      '--caps',
-      'vision,pdf,testing,tracing,tabs',
-      '--timeout-action',
-      '10000',
-      '--timeout-navigation',
-      '30000',
-      '--viewport-size',
-      '1920x1080',
-    ],
+    args: ['-y', 'slack-mcp-server@latest', '--transport', 'stdio'],
+    // The server reads these two names itself, so every host forwards them by
+    // name and `.env` is the only place they live: the reaction allowlist is a
+    // list of workspace channel ids, never a committed value.
+    dependsOn: ['SLACK_MCP_XOXP_TOKEN', 'SLACK_MCP_REACTION_TOOL'],
+    literalEnv: { SLACK_MCP_ADD_MESSAGE_TOOL: 'true' },
   }),
-  dbhub: server({
+  'dbhub': server({
     transport: 'stdio',
     command: 'bunx',
     args: ['-y', '@bytebase/dbhub@1.2.1', '--config', 'dbhub.toml'],
@@ -173,23 +208,29 @@ const EVERY_HOST: Record<KnownMcpId, NormalizedMcpServer> = {
     // when a variable is absent instead of failing at startup.
     dependsOn: ['DBHUB_DATABASE', 'DBHUB_HOST', 'DBHUB_PASSWORD', 'DBHUB_PORT', 'DBHUB_TYPE', 'DBHUB_USER'],
   }),
-  openapi: server({
+  'openapi': server({
     transport: 'stdio',
     command: 'bunx',
     args: ['-y', '@ivotoby/openapi-mcp-server@1.16.1', '--tools', 'dynamic'],
     dependsOn: ['API_BASE_URL', 'OPENAPI_SPEC_PATH'],
   }),
-  postman: server({
-    transport: 'http',
-    url: 'https://mcp.postman.com/mcp',
-    dependsOn: ['POSTMAN_API_KEY'],
-  }),
 };
+
+/**
+ * Codex starts the same servers, each through the `.env` loader and with a
+ * 30-second startup budget. Codex's default is 10 seconds, and every shipped
+ * server is fetched by `bunx` on first use: a cold cache plus the loader hop
+ * can pass 10 seconds where a warm dbhub already took most of it (ADR-0006).
+ */
+export const CODEX_STARTUP_TIMEOUT_SEC = 30;
+const CODEX_SHAPE = Object.fromEntries(
+  Object.entries(EVERY_HOST).map(([id, shape]) => [id, canonical({ ...shape, envLoader: true, startupTimeoutSec: CODEX_STARTUP_TIMEOUT_SEC })]),
+) as Record<KnownMcpId, NormalizedMcpServer>;
 
 export const EXPECTED_MCP: Record<McpHost, Record<KnownMcpId, NormalizedMcpServer>> = {
   claude: EVERY_HOST,
   opencode: EVERY_HOST,
-  codex: EVERY_HOST,
+  codex: CODEX_SHAPE,
 };
 
 function object(value: unknown, label: string): JsonObject {
@@ -310,8 +351,8 @@ function stripTrailingCommas(source: string): string {
  * OpenCode's `{file:<path>/<VAR>}` form, which substitutes a FILE'S CONTENTS.
  *
  * It belongs here because it is a DEPENDENCY, not a literal.
- * `{file:.auth/opencode/TAVILY_API_KEY}` says the server needs TAVILY_API_KEY
- * exactly as `{env:TAVILY_API_KEY}` does; only the delivery route differs, and
+ * `{file:.auth/opencode/DBHUB_HOST}` says the server needs DBHUB_HOST
+ * exactly as `{env:DBHUB_HOST}` does; only the delivery route differs, and
  * `scripts/harness-env.ts` generates those files from `.env`. This checker exists
  * to assert SEMANTIC parity across the three hosts, so reading the file form as
  * an opaque literal reported the hosts as disagreeing when they agree. Teaching
@@ -453,14 +494,21 @@ function normalizeCodex(root: JsonObject): NormalizedMcpConfig {
       throw new Error(`${label}.env cannot reference ${leaked.join(', ')}: Codex does not expand placeholders. Forward the variable through env_vars instead.`);
     }
 
+    // The loader is a launch detail, not a different server: compare what it
+    // starts, and record that it is there.
+    const launch = transport === 'stdio'
+      ? unwrapCodexEnvLoader(stringValue(server.command, `${label}.command`), stringArray(server.args ?? [], `${label}.args`))
+      : undefined;
     return [id, {
       transport,
-      command: transport === 'stdio' ? stringValue(server.command, `${label}.command`) : undefined,
-      args: transport === 'stdio' ? stringArray(server.args ?? [], `${label}.args`) : undefined,
+      command: launch?.command,
+      args: launch?.args,
       url: transport === 'http' ? stringValue(server.url, `${label}.url`) : undefined,
       dependsOn: sorted(dependsOn),
       literalEnv: literalEntries(env, `${label}.env`),
       enabled: server.enabled !== false,
+      envLoader: launch?.envLoader ?? false,
+      startupTimeoutSec: typeof server.startup_timeout_sec === 'number' ? server.startup_timeout_sec : undefined,
     }];
   }));
 }
@@ -509,9 +557,63 @@ export function declaredMcpIds(root = process.cwd()): string[] {
   return Object.keys(servers).sort();
 }
 
-export function validateMcpParity(root = process.cwd()): string[] {
+/** What `validateMcpParityFindings` returns: errors fail the check, warnings are printed and never fail it. */
+export interface McpParityFindings {
+  errors: string[]
+  warnings: string[]
+}
+
+export interface McpParityOptions {
+  /**
+   * True in the boilerplate itself (`isSchemaOwner`). There a Codex launch
+   * gap (no `.env` loader, no startup budget) is an ERROR: the boilerplate
+   * ships the fix, so its own copy must carry it. Downstream it is a WARNING
+   * that names the file and what to add: `.codex/config.toml` is
+   * bootstrap-only, so a project scaffolded before the loader existed cannot
+   * receive it from a sync, and a red gate it cannot clear by syncing is how a
+   * team learns `--no-verify`. Defaults to reading `<root>/package.json`.
+   */
+  schemaOwner?: boolean
+}
+
+function readSchemaOwner(root: string): boolean {
+  const packageJson = join(root, 'package.json');
+  return existsSync(packageJson) && isSchemaOwner(readFileSync(packageJson, 'utf8'));
+}
+
+const LOADER_REASON = 'a Codex Desktop launch has no process environment, so env_vars alone forwards nothing';
+
+function loaderFix(): string {
+  return `set command = "${CODEX_ENV_LOADER_COMMAND}" and put ${JSON.stringify(CODEX_ENV_LOADER_ARGS)} before the current command and args`;
+}
+
+/**
+ * What a known server's Codex entry lacks when the ONLY difference from the
+ * pinned shape is a launch detail (the loader, the startup budget), or null
+ * when anything else differs too. Both details change how Codex starts the
+ * server, never which server it starts.
+ */
+function codexLaunchGaps(actual: NormalizedMcpServer, expected: NormalizedMcpServer): string[] | null {
+  if (!sameServer({ ...actual, envLoader: expected.envLoader, startupTimeoutSec: expected.startupTimeoutSec }, expected)) { return null; }
+  const gaps: string[] = [];
+  if ((actual.envLoader ?? false) !== (expected.envLoader ?? false)) { gaps.push(`${loaderFix()} (${LOADER_REASON})`); }
+  if (actual.startupTimeoutSec !== expected.startupTimeoutSec) {
+    gaps.push(expected.startupTimeoutSec === undefined
+      ? 'remove startup_timeout_sec'
+      : `set startup_timeout_sec = ${expected.startupTimeoutSec} (Codex's 10-second default is too short for a bunx-fetched server on a cold cache)`);
+  }
+  return gaps;
+}
+
+export function validateMcpParity(root = process.cwd(), options: McpParityOptions = {}): string[] {
+  return validateMcpParityFindings(root, options).errors;
+}
+
+export function validateMcpParityFindings(root = process.cwd(), options: McpParityOptions = {}): McpParityFindings {
   const resolvedRoot = resolve(root);
   const errors: string[] = [];
+  const warnings: string[] = [];
+  const schemaOwner = options.schemaOwner ?? readSchemaOwner(resolvedRoot);
   let configs: Record<McpHost, NormalizedMcpConfig>;
   try {
     configs = {
@@ -521,7 +623,7 @@ export function validateMcpParity(root = process.cwd()): string[] {
     };
   }
   catch (error) {
-    return [error instanceof Error ? error.message : String(error)];
+    return { errors: [error instanceof Error ? error.message : String(error)], warnings };
   }
 
   // The declaring host defines the set; the other two must match it exactly.
@@ -542,15 +644,36 @@ export function validateMcpParity(root = process.cwd()): string[] {
   }
 
   // Strict per-host shape, only for the servers this boilerplate knows AND the
-  // project declares (see PARITY RULE).
+  // project declares (see PARITY RULE). Downstream, a Codex entry that differs
+  // ONLY in a launch detail is a warning (see `McpParityOptions`).
+  const launchWarned = new Set<string>();
   for (const [host, config] of Object.entries(configs) as Array<[McpHost, NormalizedMcpConfig]>) {
     for (const id of declared) {
       const actual = config[id];
       if (!actual || !isKnownMcpId(id)) { continue; }
       const expected = EXPECTED_MCP[host][id];
-      if (!sameServer(actual, expected)) {
-        errors.push(`${host} MCP ${id} mismatch: expected ${describeServer(expected)}, found ${describeServer(actual)}`);
+      if (sameServer(actual, expected)) { continue; }
+      const gaps = host === 'codex' && !schemaOwner ? codexLaunchGaps(actual, expected) : null;
+      if (gaps !== null) {
+        warnings.push(`codex MCP ${id} launch is out of date in ${MCP_CONFIG_FILE.codex}: ${gaps.join('; ')}. Upstream never overwrites this file, so add it by hand.`);
+        launchWarned.add(id);
+        continue;
       }
+      errors.push(`${host} MCP ${id} mismatch: expected ${describeServer(expected)}, found ${describeServer(actual)}`);
+    }
+  }
+
+  // Codex: a stdio server that needs `.env` values must start through the
+  // loader, known to this boilerplate or not. `env_vars` alone forwards
+  // nothing when Codex Desktop was opened from the Dock.
+  for (const id of declared) {
+    const server = configs.codex[id];
+    if (!server || server.transport !== 'stdio' || server.dependsOn.length === 0 || server.envLoader === true) { continue; }
+    if (schemaOwner) {
+      errors.push(`codex MCP ${id} must launch through the .env loader (command = "${CODEX_ENV_LOADER_COMMAND}", args starting ${JSON.stringify(CODEX_ENV_LOADER_ARGS)}): ${LOADER_REASON}.`);
+    }
+    else if (!launchWarned.has(id)) {
+      warnings.push(`codex MCP ${id} starts without the .env loader in ${MCP_CONFIG_FILE.codex}: ${loaderFix()} (${LOADER_REASON}).`);
     }
   }
 
@@ -568,7 +691,7 @@ export function validateMcpParity(root = process.cwd()): string[] {
     }
   }
 
-  return errors;
+  return { errors, warnings };
 }
 
 function personalAbsolutePath(command: string): boolean {
@@ -588,6 +711,37 @@ function personalAbsolutePath(command: string): boolean {
 export function hookScriptPath(command: string): string | null {
   const match = /(?:\$CLAUDE_PROJECT_DIR\/|\$root\/|\$root\s+')([^"')]+\.m?js)/.exec(command);
   return match === null ? null : match[1];
+}
+
+/**
+ * The OpenCode adapter must load on BOTH plugin generations, because the repo
+ * cannot pin which OpenCode a teammate runs.
+ *
+ * OpenCode 2 reads ONE default export `{ id, setup(ctx) }` and refuses
+ * anything else ("Plugin must export a default definition with an id and an
+ * effect or setup function"); the context lines then go through
+ * `ctx.session.hook('context', ...)`. OpenCode 1 (1.18.29 and newer) calls
+ * `server()` on that same object and expects the
+ * `experimental.chat.system.transform` hook back. The V1-only shape this file
+ * used to have passed every check above while OpenCode 2 refused to load it,
+ * so the check now names each entrypoint. Text-level on purpose, like the
+ * rest of this contract: importing the adapter would execute it.
+ */
+export function validateOpenCodePluginEntrypoints(plugin: string): string[] {
+  const errors: string[] = [];
+  if (!/^export default\b/m.test(plugin)) {
+    errors.push('OpenCode personality adapter must default-export one plugin definition: OpenCode 2 loads nothing else.');
+  }
+  if (!/^\s*id:\s*['"][^'"]+['"]/m.test(plugin)) {
+    errors.push('OpenCode personality adapter must declare a stable id: OpenCode 2 refuses a definition without one.');
+  }
+  if (!/\bsetup\s*\(/.test(plugin) || !/ctx\.session\.hook\(\s*['"]context['"]/.test(plugin)) {
+    errors.push('OpenCode personality adapter must register the OpenCode 2 entrypoint: setup(ctx) with ctx.session.hook(\'context\', ...).');
+  }
+  if (!/\bserver\s*\(/.test(plugin) || !plugin.includes('experimental.chat.system.transform')) {
+    errors.push('OpenCode personality adapter must keep the OpenCode 1 entrypoint: server() returning experimental.chat.system.transform.');
+  }
+  return errors;
 }
 
 function readHookCommand(settings: JsonObject, host: 'claude' | 'codex'): JsonObject {
@@ -679,6 +833,10 @@ export function validateHookCompatibility(root = process.cwd()): string[] {
     if (plugin.includes('output.system =')) {
       errors.push('OpenCode personality adapter must mutate output.system in place.');
     }
+    if (/\bevent\.system\s*=[^=]/.test(plugin)) {
+      errors.push('OpenCode personality adapter must mutate event.system in place.');
+    }
+    errors.push(...validateOpenCodePluginEntrypoints(plugin));
     for (const [label, source] of [['emitter', shared], ['OpenCode adapter', plugin]] as const) {
       if (personalAbsolutePath(source)) {
         errors.push(`Shared hook ${label} contains an absolute personal path.`);

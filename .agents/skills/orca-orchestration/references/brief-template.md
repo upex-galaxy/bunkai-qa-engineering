@@ -35,7 +35,7 @@ a system temp directory (it triggers a permission prompt on some harnesses).
 | 1 | **Goal** | unchanged: one sentence |
 | 2 | **Context docs** | ABSOLUTE paths into the PRIMARY checkout. A relative path resolves against a cwd the worker may not share, and a path inside the worker's own worktree may not exist there at all |
 | 3 | **Project Standards (auto-resolved)** | unchanged: compact rules pasted from the generated skill registry. A worker trusts them and does not re-read the full SKILL.md unless told to |
-| 4 | **Skills to load** | the domain skill by trigger, `orca-orchestration` in WORKER mode, AND the stubs in `orchestration.orchestrator_skills` (the vendor command grammar — load them, they are ~2k tokens for the pair and skipping them is what produces invented flags) |
+| 4 | **Skills to load** | the domain skill by trigger, `orca-orchestration` in WORKER mode, AND the stubs in `orchestration.orchestrator_skills` (the vendor command grammar — load them, they are small and skipping them is what produces invented flags) |
 | 5 | **Exact instructions** | numbered, each naming its tool or skill action, and each verifiable |
 | 6 | **Report format** | two destinations now: the long report FILE, and the `worker_done` message that points at it |
 | 7 | **Rules** | the relevant Critical Rules, plus the fleet prohibitions below |
@@ -82,19 +82,20 @@ a system temp directory (it triggers a permission prompt on some harnesses).
 
    **Continuation, in writing**: run every stage without returning to the prompt until `worker_done`
    is sent; a stage boundary is not a checkpoint. It belongs here AND in the launch prompt, because
-   as a file pointer the same sentence reads as reference material — two of three workers in one
-   fleet stopped mid-work on briefs that already said it. The prompt is what makes it an instruction.
+   as a file pointer the same sentence reads as reference material — measured on a real fleet
+   (G58): workers stopped mid-work on briefs that already said it. The prompt is what makes it an
+   instruction.
 
    **The mandatory `ask`**: name it explicitly — when the worker's own measurement contradicts a
    conductor instruction, it stops and asks with both readings and its evidence. Never silent
    compliance, never silent deviation.
 
-7. **Session label and rename** — the label the roster, the board card and the commit trailer all
-   key off. On the supervised path there is no name flag at all: on Claude Code the identity hook
-   titles the session from the prompt's `/<workflow-skill> <KEY> fleet worker` opening, so the brief
-   tells that worker NOT to rename itself (a rename freezes the name as human-set). Every other
-   harness, and any worker whose first prompt lacked the token, is instructed to rename itself in its
-   first turn to EXACTLY that label. Detail: `references/session-identity.md` §2b.
+7. **Session label** — the worker's roster name `<KEY>`, the one value the roster, the tab, the board
+   card and the commit trailer all key off. On the supervised path there is no name flag: on Claude
+   Code the identity hook names the session from the prompt's `/<workflow-skill> <KEY> fleet worker`
+   opening, and on OpenCode and Codex the conductor types `/rename <KEY>`. The brief never asks the
+   worker to rename itself: `/rename` is user input, and a model cannot run it. Detail:
+   `references/session-identity.md` §2b.
 
 8. **Trailer reminder** — the two forensic trailers as the last lines of every commit, and the
    reminder that they are forensics, not attribution, and that no AI attribution of any kind is
@@ -111,7 +112,7 @@ Read <ABS>/.session/orchestration/<slug>/COMMON.md first, then this file.
 
 Label: <label>   Task: <task_id>   Dispatch: <dispatch_id>
 [Run: <run_id>]                       # ONLY when launched without a dispatch
-Session label: <KEY>-<slug>           # rename yourself to this if your harness needs it
+Session label: <KEY>                  # set for you (hook or conductor); your `Session:` trailer
 Model / effort: <model> / <effort>
 Worktree: <primary | name>            # first trailer value
 
@@ -178,6 +179,6 @@ Then send worker_done exactly once, outcome succeeded|failed, with --files-modif
 | no file-ownership list in a same-checkout fleet | two workers edit one file and one of them loses the work |
 | no explicit heartbeat prohibition | the worker obeys its injected preamble and wakes the conductor every few minutes |
 | claims listed in the brief while the protocol says "wait for the grant" | the worker cannot tell which document governs and stalls on a claim that was never disputed. Measured |
-| the continuation rule only in the brief, never in the prompt | the worker reads it as reference material and stops at the first stage boundary anyway. Measured on two of three workers |
+| the continuation rule only in the brief, never in the prompt | the worker reads it as reference material and stops at the first stage boundary anyway. Measured on a real fleet (G58) |
 | a launch prompt containing `"` or `<` / `>` | the shell mangles the line; the terminal reports success and nothing ran |
 | "report when you are done" with no path and no shape | a prose report the conductor cannot diff, aggregate or hand to the next wave |

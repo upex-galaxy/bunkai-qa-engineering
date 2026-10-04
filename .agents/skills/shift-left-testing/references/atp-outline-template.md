@@ -36,7 +36,7 @@ The skeleton below is the canonical body for `shift-left-refinement.md`, the `[L
 
 ### Technical context
 - **Frontend**: components, pages / routes, state management (if any)
-- **Backend**: endpoints (cite `business-api-map.md`), services, DB tables
+- **Backend**: endpoints (cite the `business-api-context` section id), services, DB tables
 - **External services**: ...
 - **Integration points specific to this Story**: ...
 
@@ -240,7 +240,7 @@ If Partial / No, list issues:
 - [ ] PO answers Critical Questions before sprint planning
 - [ ] Dev answers Technical Questions before estimation
 - [ ] Story enters sprint at status `{{jira.status.story.ready_for_dev}}` once estimated
-- [ ] When Story reaches `{{jira.status.story.ready_for_qa}}`, `/sprint-testing` will short-circuit refinement (label `shift-left-reviewed` detected)
+- [ ] When Story reaches `{{jira.status.story.ready_for_qa}}`, `/sprint-testing` will short-circuit refinement on this published ATP body plus the fresh `shift-left-*` labels (never on the label alone)
 ```
 
 ---

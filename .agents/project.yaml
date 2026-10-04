@@ -42,6 +42,18 @@ testing:
   # `.agents/skills/sprint-testing/SKILL.md` §"Which stage creates the TCs".
   # Read as {{TC_CREATION_STAGE}}; unset or unrecognized is treated as `auto`.
   tc_creation_stage: auto
+  # Agentic browser sessions (`/playwright-cli`). Canon:
+  # .agents/skills/agentic-qa-core/references/browser-sessions.md
+  browser:
+    # Agentic Pair Testing: the human and the AI test together in the human's own
+    # running Chrome (`playwright-cli attach`), instead of the AI's own session.
+    # null  = not chosen yet: the first agentic browser session presents both modes
+    #         and saves the answer here (true | false), once.
+    # true  = pair testing is the default mode for agentic browser sessions.
+    # false = dedicated sessions by default; pair testing only on explicit request,
+    #         after one confirmation. Unattended runs never pair, whatever the value.
+    # Read directly by skills (not a {{VAR}} token).
+    pair_mode: null
 
 qa:
   formal_blocked_gate: true # When true and the substrate exposes a `blocked` story status, FAILED stories dispatch `defect_reported` (in_test -> blocked). When false (or no `blocked` slug), the skill leaves the story in `in_test` with the linked bug — non-strict fallback. See sprint-testing/references/sprint-orchestration.md Briefing 4 Step 5.
@@ -65,6 +77,27 @@ qa:
     test_artifacts_epic:
       name: QA Test Artifacts # convention name; holds every Test Execution (STR/ATR), Precondition and Test Set
       key: BK-515 # discovered 2026-09-17 by the bunkai-dogfood conductor
+  # How THIS project runs the IQL. Read by the shipped `iql-context` skill (the methodology
+  # index) and, through it, by every workflow skill that asks "which stages does this project
+  # run and how strict are its gates". The skill body syncs verbatim from upstream; these
+  # VALUES are the first of its two adaptation seams (the second is the project-owned prose
+  # overlay `.agents/skills/iql-context/references/project-overrides.md`, delivered once,
+  # never overwritten). Read directly by skills (not {{VAR}} tokens) → skipped by vars:check.
+  methodology:
+    # Stages this project actually runs, by NAME (never by number), from the ladder in
+    # .agents/skills/agentic-qa-core/references/stage-gates.md. Remove a stage the team has
+    # consciously not adopted; its owning skill then declines the work with a stated note.
+    stages: [shift-left, planning, execution, reporting, documentation, automation, regression]
+    # Gate strictness: `strict` runs every DoD as written; `light` allows the collapsible gates
+    # named on the official methodology site (ATP item, feature Test Set promotion, ROI
+    # verifier, FLAKY history), one sprint at a time, written in the STP, with a debt item per
+    # collapse. The never-collapsed gates (ATR Test Environment, human OK before filing a bug,
+    # plan approval before automation code, human merge approval) hold in both.
+    gate_mode: strict
+    # Execution profile the agentic contract assumes: `agentic` (an agent executes the skills
+    # under the guardrails and the human decides at the declared points) or `manual` (a person
+    # runs each stage; the human gates still apply). Documentation only: no skill branches on it.
+    execution_profile: agentic
 
 # Per-environment config. Add/remove environments freely (production, dev, qa, uat, etc.).
 # Each environment must define ALL four keys: web_url, api_url, db_mcp, api_mcp.

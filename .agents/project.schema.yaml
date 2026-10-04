@@ -37,8 +37,9 @@ issue_tracker:
   # cli/lib/atlassian-instance.ts). Inverse of project_key, on purpose: the host is
   # project identity, not a per-developer override, and it is the value that goes stale
   # after a site migration — a stale host silently overwrites .context/PBI/ and the
-  # .agents/*.json catalogs with another site's content. Keep it identical to .env's
-  # ATLASSIAN_URL; when they disagree the yaml wins and the scripts print a warning.
+  # .agents/*.json catalogs with another site's content. ATLASSIAN_URL is NOT a .env
+  # variable (AGENTS.md §7): if a stale copy is loose in the environment, the yaml wins
+  # and the scripts print a warning naming both values.
   atlassian_url: null # TODO: Atlassian site base URL (e.g. https://company.atlassian.net)
 
 testing:
@@ -56,6 +57,18 @@ testing:
   # `.agents/skills/sprint-testing/SKILL.md` §"Which stage creates the TCs".
   # Read as {{TC_CREATION_STAGE}}; unset or unrecognized is treated as `auto`.
   tc_creation_stage: auto
+  # Agentic browser sessions (`/playwright-cli`). Canon:
+  # .agents/skills/agentic-qa-core/references/browser-sessions.md
+  browser:
+    # Agentic Pair Testing: the human and the AI test together in the human's own
+    # running Chrome (`playwright-cli attach`), instead of the AI's own session.
+    # null  = not chosen yet: the first agentic browser session presents both modes
+    #         and saves the answer here (true | false), once.
+    # true  = pair testing is the default mode for agentic browser sessions.
+    # false = dedicated sessions by default; pair testing only on explicit request,
+    #         after one confirmation. Unattended runs never pair, whatever the value.
+    # Read directly by skills (not a {{VAR}} token).
+    pair_mode: null
 
 qa:
   formal_blocked_gate: true # When true and the substrate exposes a `blocked` story status, FAILED stories dispatch `defect_reported` (in_test -> blocked). When false (or no `blocked` slug), the skill leaves the story in `in_test` with the linked bug — non-strict fallback. See sprint-testing/references/sprint-orchestration.md Briefing 4 Step 5.
@@ -79,8 +92,9 @@ qa:
   # Doctrine: .agents/skills/agentic-qa-core/references/defect-management-doctrine.md (Part 4).
   qa_epics:
     master_test_plan_epic:
-      name: QA Master Test Plan # the MTP — parent of every Test Plan (FTP/STP/ATP and the long-lived RTP); description mirrors
-      # .context/master-test-plan.md + points to the official QA repo; cross-linked to the 3 sibling QA epics
+      name: QA Master Test Plan # the MTP — parent of every Test Plan (FTP/STP/ATP and the long-lived RTP); its description IS
+      # the plan (section `## Master Test Plan`, cached at .context/PBI/qa-artifacts/master-test-plan.md) + points to the
+      # official QA repo; cross-linked to the 3 sibling QA epics
       key: null # discovered/created at runtime, then cached here (e.g. PROJ-100)
     test_repository_epic:
       name: QA Test Repository # convention name; holds every Test (TC) issue
@@ -91,6 +105,27 @@ qa:
     defect_epic:
       name: QA Defect Management # convention name; the `QA ` prefix marks a process epic, not product
       key: null # discovered/created at runtime, then cached here (e.g. PROJ-123)
+  # How THIS project runs the IQL. Read by the shipped `iql-context` skill (the methodology
+  # index) and, through it, by every workflow skill that asks "which stages does this project
+  # run and how strict are its gates". The skill body syncs verbatim from upstream; these
+  # VALUES are the first of its two adaptation seams (the second is the project-owned prose
+  # overlay `.agents/skills/iql-context/references/project-overrides.md`, delivered once,
+  # never overwritten). Read directly by skills (not {{VAR}} tokens) → skipped by vars:check.
+  methodology:
+    # Stages this project actually runs, by NAME (never by number), from the ladder in
+    # .agents/skills/agentic-qa-core/references/stage-gates.md. Remove a stage the team has
+    # consciously not adopted; its owning skill then declines the work with a stated note.
+    stages: [shift-left, planning, execution, reporting, documentation, automation, regression]
+    # Gate strictness: `strict` runs every DoD as written; `light` allows the collapsible gates
+    # named on the official methodology site (ATP item, feature Test Set promotion, ROI
+    # verifier, FLAKY history), one sprint at a time, written in the STP, with a debt item per
+    # collapse. The never-collapsed gates (ATR Test Environment, human OK before filing a bug,
+    # plan approval before automation code, human merge approval) hold in both.
+    gate_mode: strict
+    # Execution profile the agentic contract assumes: `agentic` (an agent executes the skills
+    # under the guardrails and the human decides at the declared points) or `manual` (a person
+    # runs each stage; the human gates still apply). Documentation only: no skill branches on it.
+    execution_profile: agentic
 
 # Git workflow for THIS project — the SOURCE OF TRUTH read by the git-flow-master skill
 # before any git/gh operation. Ships `strategy: solo-main` as an inherited DEFAULT, not a
@@ -173,14 +208,12 @@ orchestration:
   # skill owns WHEN and WHAT, these own the command grammar. They are small
   # enough to load rather than fetch on demand. Empty list = none installed;
   # the repo skill then asks the binary for its grammar.
-  # Measurements and dates: orca-orchestration/references/channel-discipline.md.
+  # Measurements and dates: .context/ADR/ADR-0006-forensic-measurements-ledger.md.
   orchestrator_skills: [orca-cli, orchestration]
 
 # Files `bun run up` must keep as THIS project's own. Read by `cli/update-boilerplate.ts`
-# at the start of every run and merged into the protected watchlist (AGENTS.md,
-# .agents/project.yaml, .mcp.json, opencode.jsonc, .codex/config.toml,
-# .claude/settings.json, .husky/pre-commit, .husky/pre-push, allurerc.mjs,
-# playwright.config.ts, the KATA bases under tests/components/, ...): a listed path is
+# at the start of every run and merged into the protected watchlist
+# (`PROTECTED_WATCHLIST` in `cli/update-boilerplate.ts`): a listed path is
 # never overwritten, is delivered once from upstream when missing, and shows a drift row
 # with hunk evidence when upstream's copy changes. List a SYNCED file you merged by hand
 # (the parity row "project edit overwritten" names the path to add); repo-relative FILE

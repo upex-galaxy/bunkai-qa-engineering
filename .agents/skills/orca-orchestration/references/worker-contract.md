@@ -2,7 +2,7 @@
 
 > Loaded by: a worker session (WORKER mode), and by the conductor when it writes a brief.
 > A worker loads THIS file, its domain skill, and the stubs in `orchestration.orchestrator_skills`
-> (`.agents/project.yaml`) — the vendor's command grammar, about 2k tokens for the pair. On the supervised
+> (`.agents/project.yaml`) — the vendor's command grammar, small. On the supervised
 > path the runtime injects a preamble at launch that already carries the message grammar (`taskId`,
 > `dispatchId`, the exact syntax of `worker_done` / `ask` / `escalation`, and the correct `--from`).
 > Launched unsupervised, that same text reaches you as a FILE your brief points at — read it once,
@@ -18,11 +18,11 @@
    decision, and it gets recorded in the brief before you resume.
 
 2. **The channel is the orchestration mailbox.** Do NOT use the harness's own agent-to-agent
-   messaging tool: from an isolated worktree the conductor is not in your agent list, and on
-   2026-09-13 five workers reported this way — two sent their report to an unrelated session, three
-   left it typed and unsent, and the conductor found out by reading screens up to 35 minutes late.
-   Do NOT use a user-question prompt either: nobody is watching it (one such question waited 7.5
-   hours).
+   messaging tool: from an isolated worktree the conductor is not in your agent list, and a whole
+   fleet once reported this way (G35) — reports went to an unrelated session or sat typed and
+   unsent, and the conductor found out by reading screens much later.
+   Do NOT use a user-question prompt either: nobody is watching it (one such question waited for
+   hours, G36).
 
 3. **A question that blocks you goes out as a blocking `ask`.** If it times out, the question stays
    pending: resume it by its original message id, never ask again (a duplicate question produces two
@@ -47,7 +47,9 @@
    terminal — the conductor owns that.
 
 7. **Write the long report BEFORE `worker_done`**, to the path the brief gives you
-   (`.session/orchestration/<slug>/reports/<label>.md`, or the scope the workflow skill declares).
+   (`<ABS>/.session/orchestration/<slug>/reports/<label>.md` in the PRIMARY checkout, or the scope
+   the workflow skill declares, always by absolute path: a report written inside your worktree dies
+   with it).
    Sections: `## Summary`, `## Files changed`, `## Commits` (sha + subject), `## Decisions taken`
    (and why), `## Verification` (commands + exit codes), `## Left open`. The message body is a
    summary; the file is the record.
@@ -76,7 +78,7 @@
 11. **Run to completion. A stage boundary is not a checkpoint.** Do not return to your prompt until
     `worker_done` is sent: finishing a stage, writing an artifact, or reaching a natural pause is not
     permission to stop and wait. If the work is done, send `worker_done`; if it is blocked, `ask` or
-    escalate (rule 8); otherwise keep going. Measured: two of three workers in one fleet stopped at a
+    escalate (rule 8); otherwise keep going. Measured on a real fleet (G58): workers stopped at a
     stage boundary with work remaining, on briefs that already said "no checkpoints" — which is why
     the instruction is in your PROMPT as well as here. Every one of those stops cost a manual nudge.
 
@@ -84,7 +86,7 @@
     measured contradicts what the conductor told you, do not comply silently and do not deviate
     silently. Send a blocking `ask` carrying BOTH readings, the evidence for yours (the command, the
     data, the counts), and what you believe the consequence of each is. Then wait.
-    This is the highest-value behaviour ever recorded in a fleet: on 2026-09-17 a worker did it by
+    This is the highest-value behaviour ever recorded in a fleet: a worker once did it by
     judgement and stopped a wrong blocker from shipping against a release. A conductor derives from
     reports; you are the one holding the instrument. Silent compliance turns your measurement into
     nothing, and silent deviation turns it into a mystery nobody can audit.
@@ -103,8 +105,8 @@
     truncated send, and because the head is what gets lost it reads like a typo or a stray keystroke
     instead of like a missing instruction. Do not answer it, do not guess the rest, and do not act on
     the half you can see. Say what you received, verbatim, and ask for the pointer: the file, by
-    absolute path, or the same content through the mailbox. Measured 2026-09-21, in both directions,
-    between two sessions that had each just written the rule they were breaking (G64).
+    absolute path, or the same content through the mailbox. Measured in both directions, between
+    two sessions that had each just written the rule they were breaking (G64).
 
 ---
 
@@ -132,24 +134,29 @@ agent, a model and an effort level, not a command line. Your name therefore come
 places:
 
 - **Claude Code** — from your first prompt. It opens with `/<workflow-skill> <KEY> fleet worker`, and
-  the repo's identity hook turns that into the session title. Nothing for you to do; do NOT rename
-  yourself, because a rename marks the name as human-set and freezes it.
-- **Any other harness, or a Claude Code worker whose first prompt did not carry the token** — the
-  brief instructs you to rename yourself in your FIRST turn with that harness's own rename command
-  (`/rename` is the documented form on Claude Code, OpenCode and Codex).
+  the repo's identity hook names the session `<KEY>`, your roster name. Nothing for you to do.
+- **OpenCode and Codex** — the conductor types `/rename <KEY>` into your terminal once you are
+  ready. Nothing for you to do either.
 
-A worker launched from a pasted line on the no-runtime path may already be named by that line's own
-name flag. Either way: use EXACTLY the label the brief gives you. The conductor's roster, the board
-card and the commit trailer all key off it, and a self-invented name breaks the resume path.
+You cannot rename yourself: `/rename` is user input, not a command you can run, so do not try, and
+do not treat a missing name as a blocker. Your tab title is also the conductor's job. A worker
+launched from a pasted line on the no-runtime path may already be named by that line's own name
+flag. Either way, the `Session:` trailer carries EXACTLY the label the brief gives you: the
+conductor's roster, the board card and the commit trailer all key off it, and a self-invented name
+breaks the resume path.
 
 ---
 
 ## Resource hygiene
 
 - Close every browser-automation session when you finish, including the ones your subagents opened.
-  Ten orphaned headless browsers (~2.7 GB) once ran for hours before the owner noticed.
+  Orphaned headless browsers once ran for hours before the owner noticed (G37).
 - One dev server and one browser per worktree. Splitting ports is NOT enough when two processes share
   a build directory in the same checkout.
+- Browser sessions are named and in memory; an owner's persistent profile is single-writer across
+  every worktree and repo on the machine, so check `playwright-cli list --all` before opening one and
+  never `kill-all` (it kills every session on the machine, G73). Canon:
+  `agentic-qa-core/references/browser-sessions.md`.
 - Check free disk before a long round. With a full disk, **writing the output fails, not the
   command**: the worker goes mute because the message command is also a shell process, while file
   writes keep working.

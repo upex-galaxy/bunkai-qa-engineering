@@ -1,11 +1,13 @@
 ---
 name: framework-development
-description: "Framework evolution mode — evolves the QA boilerplate itself (KATA, fixtures, cli/, scripts/, api/schemas/ pipeline, package.json deps). Self-contained Plan → Code → Verify → Archive pipeline; runs under the `gentle-ai install --preset minimal` install (no SDD-* skills required). Use when adding new fixture APIs, refactoring KATA base classes, evolving the installer, modifying the OpenAPI sync pipeline, or any change to the framework infrastructure that is NOT per-ticket test writing or manual QA. Triggers on: /framework-development, \"evolve framework\", \"framework refactor\", \"new fixture API\", \"modify KATA base\", \"refactor cli\", \"boilerplate evolution\". Do NOT use for: writing tests for a ticket (use /test-automation), manual QA per ticket (use /sprint-testing), documenting test cases (use /test-documentation), running regression suites (use /regression-testing)."
+description: "Framework evolution mode — evolves the QA boilerplate itself (KATA, fixtures, cli/, scripts/, api/schemas/ pipeline, package.json deps). Self-contained Plan → Code → Verify → Archive pipeline; runs under the `gentle-ai install --preset minimal` install (no SDD-* skills required). Use when adding new fixture APIs, refactoring KATA base classes, evolving the installer, modifying the OpenAPI sync pipeline, or any change to the framework infrastructure that is NOT per-ticket test writing or manual QA. Triggers on: /framework-development, \"evolve framework\", \"framework refactor\", \"new fixture API\", \"modify KATA base\", \"refactor cli\", \"boilerplate evolution\", \"sync AI context\", \"sync AI memory\" (the docs follow-through after a boilerplate change). Do NOT use for: writing tests for a ticket (use /test-automation), manual QA per ticket (use /sprint-testing), documenting test cases (use /test-documentation), running regression suites (use /regression-testing)."
 license: MIT
 compatibility: [claude-code, copilot, cursor, codex, opencode]
 complementary_categories: [framework-evolution, meta-skill]
 metadata:
   kind: workflow
+  stage_owner: true
+
 ---
 
 # Framework Development — Evolve the QA Boilerplate
@@ -27,10 +29,11 @@ The skill exists because framework-surface changes — new fixture, new layer he
 - DO NOT: add a new fixture API without updating the matching fixture file AND `kata-manifest.json` AND citing at least one existing test that consumes it. Orphan fixtures rot, and the manifest is the anti-duplication gate.
 - DO NOT: bump a major version of Playwright / Bun / TypeScript without a regression run on a representative E2E suite — lockstep upgrades hide breaks in fixture lifecycle, locator engines, and type emit.
 - DO NOT: refactor `cli/install.ts` without exercising the full install flow on a clean clone. Verification on an already-installed repo proves nothing, and the installer is the one surface where a bug ships silently to every new user.
-- WHEN the chosen approach reshapes test architecture (KATA layers, a fixture API, the runner, the isolation/parallelization model, the OpenAPI/type pipeline) AND is hard to reverse: record an ADR under `.context/ADR/` after plan approval and before coding, drafted `Proposed` for the human to accept. ADRs are append-only — supersede, never rewrite.
+- WHEN the chosen approach reshapes test architecture (KATA layers, a fixture API, the runner, the isolation/parallelization model, the OpenAPI/type pipeline) AND is hard to reverse: record an ADR under `.context/ADR/` after plan approval and before coding. The plan approval IS the decision, so the ADR is written `Accepted` citing it, never handed back for acceptance (`Proposed` only for a question still open). ADRs are append-only — supersede, never rewrite.
 - DO: verify with all four checks (test, types, lint, skills) and treat any non-zero exit as REJECT — present retry / skip-and-document / abort, never auto-fix. A skill that itself broke (a wrong step, a missing verifier, a stale rule) is reported upstream per `../agentic-qa-core/references/upstream-feedback.md`: drafted and redacted locally, filed only on explicit OK, verified with `gh issue view`.
-- WHEN the change IS a skill (a new or restructured `.agents/skills/<slug>/`): scaffold it per `../agentic-qa-core/references/skill-scaffold.md` (frontmatter incl. `metadata.kind`, per-kind files and sections, Definition of Done). `skill-creator` (T4, ask before loading) is loaded only for the test prompts and the description optimizer; the scaffold works without it. Consumer SUT context skills are NOT this skill's job: `project-context` mode `context-skill` owns them.
+- WHEN the change IS a skill (a new or restructured `.agents/skills/<slug>/`): scaffold it per `../agentic-qa-core/references/skill-scaffold.md` (frontmatter incl. `metadata.kind`, per-kind files and sections, Definition of Done). `skill-creator` (T3, installed at project level) is ALWAYS the builder: load it for the draft, the test prompts, the evals and the description pass; the scaffold contract stays this repo's. Missing on the machine → scaffold from the reference's template and say so. Consumer SUT context skills are NOT this skill's job: `project-context` mode `context-skill` owns them.
 - DO NOT: let a subagent write `progress.md`; it is orchestrator-only. Code subagents return one-line summaries per task, and the orchestrator does not read their diffs.
+- DO: close every change that adds, renames or retires a skill, a `package.json` script or a doc path with the docs follow-through (Phase 3): patch `AGENTS.md` §4/§5, `README.md`, `INSTALLER.md`, `CONTEXT.md` and the `docs/core/` pages in the same PR. `bun run docs:check` proves the router and the quoted scripts; the prose is judgment.
 - DO: archive the session directory only after all four verifiers pass. On REJECT it stays in place so the run can be debugged or resumed.
 
 **Read full SKILL.md when**: writing the plan artifact, batching Code-phase tasks, resuming an interrupted session, or reading the ALLOWED/FORBIDDEN path tables themselves.
@@ -101,7 +104,7 @@ Phase 2 Code is sequential per task batch by default, and a change that fits one
 | Playwright browsers | SCOPE — touching fixtures / KATA bases / tests | Verify of a fixture or base-class change runs the suite, which needs chromium (`bun run pw:install`). |
 | `/github-actions-docs` + `/playwright-best-practices` | OPTIONAL | Injected per dispatch when the change touches CI YAML or fixtures/tests (already noted in the briefing skeleton). |
 
-Active env, test-user creds, OpenAPI/`API_TOKEN`, DBHub, issue-tracker, TMS and `resend` are **N/A** — framework evolution is meta-work on this repo. After the gate clears (all REQUIRED GREEN), continue to Phase 0 below.
+Active env, test-user creds, OpenAPI / API token, DBHub, issue-tracker, TMS and `resend` are **N/A** — framework evolution is meta-work on this repo. After the gate clears (all REQUIRED GREEN), continue to Phase 0 below.
 
 ---
 
@@ -173,7 +176,7 @@ Present the plan to the user. Wait for approval before Phase 2.
 
 When the change IS a skill, the plan's Task breakdown follows `../agentic-qa-core/references/skill-scaffold.md` §2 for that kind, and the Verification checklist includes its §5 Definition of Done.
 
-**ADR seeding (framework architecture).** When the chosen approach reshapes the framework's test architecture — KATA layers, fixture APIs, the test runner, the isolation/parallelization model, or the OpenAPI/type pipeline — and the decision passes the two-gate test (architectural AND hard to reverse per `agentic-qa-core/references/adr-doctrine.md` §1), record a `.context/ADR/ADR-NNNN-<slug>.md` after the plan is approved and before Phase 2 coding. Framework evolution is meta-work: its decisions bind every test session that follows, so historicize them rather than leaving them in a one-off `plan.md` that gets archived. The plan's "Invariants touched" / "Public API delta" sections are the prime ADR candidates. Draft `Proposed`; the human accepts. Template + lifecycle: `.context/ADR/README.md`.
+**ADR seeding (framework architecture).** When the chosen approach reshapes the framework's test architecture — KATA layers, fixture APIs, the test runner, the isolation/parallelization model, or the OpenAPI/type pipeline — and the decision passes the two-gate test (architectural AND hard to reverse per `agentic-qa-core/references/adr-doctrine.md` §1), record a `.context/ADR/ADR-NNNN-<slug>.md` after the plan is approved and before Phase 2 coding. Framework evolution is meta-work: its decisions bind every test session that follows, so historicize them rather than leaving them in a one-off `plan.md` that gets archived. The plan's "Invariants touched" / "Public API delta" sections are the prime ADR candidates. The human already approved the plan, so the ADR is `Accepted` from the start, its `Deciders` line naming that approval; never ask the human to accept it again (`agentic-qa-core/references/adr-doctrine.md` step 4 and A4). `Proposed` is only for a part of the decision still open, and the ADR says what. Template + lifecycle: `.context/ADR/README.md`.
 
 ### Phase 2 — Code
 
@@ -198,12 +201,16 @@ Dispatch: **Parallel** — four Verifier subagents in the same `<function_calls>
 | V3       | `bun run lint:check`   | exit code, summary   |
 | V4       | `bun run skills:check` | exit code, ERROR/WARN/INFO counts |
 
-`skills:check` is included because framework changes routinely touch `.agents/skills/framework-development/`, `agentic-qa-core/references/`, `AGENTS.md`, and `cli/install.ts` — every one of those surfaces is read by `scripts/lint-skills.ts` and gated by 10 named checks (tier coherence, anti-leak, stale-path, duplicate-tier, etc.). The other three commands never see this surface; adding the fourth verifier costs one parallel slot and prevents an entire failure class.
+`skills:check` is included because framework changes routinely touch `.agents/skills/framework-development/`, `agentic-qa-core/references/`, `AGENTS.md`, and `cli/install.ts` — every one of those surfaces is read by `scripts/lint-skills.ts` and gated by the named checks it declares (tier coherence, anti-leak, stale-path, duplicate-tier, etc.). The other three commands never see this surface; adding the fourth verifier costs one parallel slot and prevents an entire failure class.
 
 After all four return, the orchestrator inline-aggregates:
 
 - All four `exitCode == 0` → ACCEPT. Proceed to Phase 4.
 - Any `exitCode != 0` → REJECT. Present failing verifier(s) to the user. Options: retry the failing Phase 2 batch / skip-and-document / abort. Do NOT auto-fix.
+
+### Docs follow-through (closing step of Phase 3)
+
+When the change adds, renames or retires a skill, a `package.json` script or a doc path, the same PR patches every doc that names it: `AGENTS.md` (§4 task map, §5 router), `README.md`, `INSTALLER.md`, `CONTEXT.md`, and the `docs/core/` pages. `bun run docs:check` (inside `repo:check`) fails when a repo skill is missing from the §5 router or a doc quotes a `bun run` script `package.json` does not declare; the wording around each fact, and any page that describes the old behaviour, is read and fixed by hand. Human pages point to `.agents/skills/REGISTRY.md` for the skill list and never enumerate it (Critical Rule #17). A downstream project's own docs are `test-framework-adaptation` Phase 9.3, never this skill.
 
 ### Phase 4 — Archive
 
@@ -227,7 +234,7 @@ Archive is a "close-the-loop" step, not "ship-the-code". Code is shipped by `/gi
 - **F5.** NEVER bump major versions of Playwright / Bun / TypeScript without a regression run on a representative E2E suite. Lockstep upgrades hide breaking changes in fixture lifecycle, locator engines, or type-emit behavior.
 - **F6.** NEVER add a new fixture API without updating `tests/components/TestFixture.ts` (or the matching `ApiFixture.ts` / `UiFixture.ts`) AND `kata-manifest.json` AND citing at least one existing test that consumes it. Orphan fixtures rot — and `kata-manifest.json` is the anti-duplication gate (Critical Rule #12).
 - **F7.** NEVER refactor `cli/install.ts` without testing the full install flow on a clean clone. The installer is the only surface where a bug ships silently to every new user — verification on the developer's already-installed repo proves nothing.
-- **F8.** NEVER introduce a hard-to-reverse test-framework architectural decision (KATA-layer reshape, new fixture API, test-runner swap, isolation/parallelization model) without recording it as an ADR in `.context/ADR/`. Framework evolution binds every later test session — a decision left only in an archived `plan.md` gets re-litigated or silently violated. Draft `Proposed` before Phase 2; the human approves. ADRs are append-only: supersede, never rewrite. See `agentic-qa-core/references/adr-doctrine.md`.
+- **F8.** NEVER introduce a hard-to-reverse test-framework architectural decision (KATA-layer reshape, new fixture API, test-runner swap, isolation/parallelization model) without recording it as an ADR in `.context/ADR/`. Framework evolution binds every later test session — a decision left only in an archived `plan.md` gets re-litigated or silently violated. Write it before Phase 2, `Accepted` and citing the plan approval (`Proposed` only while a question is still open). ADRs are append-only: supersede, never rewrite. See `agentic-qa-core/references/adr-doctrine.md`.
 
 ---
 
@@ -240,7 +247,7 @@ Archive is a "close-the-loop" step, not "ship-the-code". Code is shipped by `/gi
 ## References
 
 - `references/kata-invariants.md` — INVARIANT vs EXTENSIBLE rules for the 4 KATA layers, fixture selection, ATC identity, DRY scope, import aliases, public-method contract, extension points, evolution checklist, out-of-scope surfaces, and §10 ALLOWED / FORBIDDEN path tables. Required reading before any Plan or Code subagent that touches `tests/components/`, `api/schemas/`, or fixtures.
-- `../agentic-qa-core/references/skill-composition-strategy.md` — T1/T2/T3/T4 tier model, category vocabulary, validation rules. The §4 anti-leak contract is informational here: framework-development no longer chains SDD by default; §4 governs users who manually install SDD and explicitly request the SDD ceremony.
+- `../agentic-qa-core/references/skill-composition-strategy.md` — T1/T2/T3/T4 tier model, category vocabulary, validation rules. The §4 anti-leak contract is informational here: framework-development does not chain SDD by default; §4 governs users who manually install SDD and explicitly request the SDD ceremony.
 - `../agentic-qa-core/references/briefing-template.md` — 7-component briefing examples per pattern.
 - `../agentic-qa-core/references/dispatch-patterns.md` — Single / Sequential / Parallel / Background decision guide.
 - `../agentic-qa-core/references/orchestration-doctrine.md` — failure protocol, ASK-on-error rule, no auto-fix.

@@ -47,10 +47,13 @@ const SESSION_BANNER = '> **Orchestration & Session contracts**: this skill foll
  * A project-authored SKILL.md. `kind` is the purpose axis (`metadata.kind`);
  * `null` omits the whole `metadata:` block so KIND-MISSING can be provoked
  * (`null`, not `undefined`: an explicit `undefined` would select the default).
+ * `capabilities` renders `metadata.requires_capabilities` as an inline list;
+ * omitted = the key is absent.
  */
-function t1Skill(slug: string, body = '', kind: string | null = 'workflow'): string {
+function t1Skill(slug: string, body = '', kind: string | null = 'workflow', capabilities?: string[]): string {
   const categories = slug === 'framework-development' ? 'complementary_categories: [framework-evolution]\n' : '';
-  const metadata = kind === null ? '' : `metadata:\n  kind: ${kind}\n`;
+  const requires = capabilities ? `  requires_capabilities: [${capabilities.join(', ')}]\n` : '';
+  const metadata = kind === null ? '' : `metadata:\n  kind: ${kind}\n${requires}`;
   return [
     '---',
     `name: ${slug}`,
@@ -87,13 +90,14 @@ const KIND_VIOLATION = /KIND-(MISSING|VOCAB|SUFFIX):/;
  * AGENTS.md §5 table carries the `resend-cli` row. `sprintTestingKind` overrides
  * the `metadata.kind` of `sprint-testing` (`null` omits the block entirely).
  * `extraSkills` adds project-authored skills, each with its §5 row, so the
- * purpose-axis checks can be exercised on any slug shape.
+ * purpose-axis and capability checks can be exercised on any slug shape
+ * (`capabilities` = `metadata.requires_capabilities`, `body` = extra body text).
  */
 interface FixtureOptions {
   listCommunityInAgentsMd: boolean
   staleT1Body?: boolean
   sprintTestingKind?: string | null
-  extraSkills?: Array<{ slug: string, kind?: string }>
+  extraSkills?: Array<{ slug: string, kind?: string, capabilities?: string[], body?: string }>
 }
 
 function fixture(options: FixtureOptions): string {
@@ -136,7 +140,7 @@ function fixture(options: FixtureOptions): string {
     write(root, `.agents/skills/${slug}/SKILL.md`, t1Skill(slug, body, kind));
   }
   for (const extra of extraSkills) {
-    write(root, `.agents/skills/${extra.slug}/SKILL.md`, t1Skill(extra.slug, '', extra.kind ?? null));
+    write(root, `.agents/skills/${extra.slug}/SKILL.md`, t1Skill(extra.slug, extra.body ?? '', extra.kind ?? null, extra.capabilities));
   }
 
   // The committed community skill: a real directory, not a symlink, with a
@@ -255,6 +259,250 @@ describe('lint-skills purpose axis (metadata.kind)', () => {
 
     expect(output).not.toMatch(KIND_VIOLATION);
     expect(output).toContain('lint:skills passed');
+    expect(exitCode).toBe(0);
+  });
+});
+
+/** A capability VIOLATION line (`CAPABILITY-VOCAB:` / `CAPABILITY-UNDECLARED:`); the colon excludes the summary list. */
+const CAPABILITY_VIOLATION = /CAPABILITY-(VOCAB|UNDECLARED):/;
+
+describe('lint-skills MCP capabilities (metadata.requires_capabilities)', () => {
+  test('a declared capability outside the vocabulary is a CAPABILITY-VOCAB error', () => {
+    const { exitCode, output } = runLint(fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-flow', kind: 'workflow', capabilities: ['db', 'tavily'] }] }));
+
+    expect(output).toContain('[acme-flow] CAPABILITY-VOCAB: `metadata.requires_capabilities` names `tavily`');
+    expect(output).not.toContain('names `db`');
+    expect(exitCode).toBe(1);
+  });
+
+  test('the vocabulary names pass', () => {
+    const { exitCode, output } = runLint(fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-flow', kind: 'workflow', capabilities: ['web-search', 'library-docs', 'db', 'api-schema'] }] }));
+
+    expect(output).not.toMatch(CAPABILITY_VIOLATION);
+    expect(exitCode).toBe(0);
+  });
+
+  test('the retired `browser` capability is rejected: browser automation is a CLI, not an MCP', () => {
+    const { exitCode, output } = runLint(fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-flow', kind: 'workflow', capabilities: ['db', 'browser'] }] }));
+
+    expect(output).toContain('[acme-flow] CAPABILITY-VOCAB: `metadata.requires_capabilities` names `browser`');
+    expect(exitCode).toBe(1);
+  });
+
+  test('`[AUTOMATION_TOOL]` maps to no capability, so a body using it never warns', () => {
+    const { exitCode, output } = runLint(fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-flow', kind: 'workflow', body: 'Explore the UI via `[AUTOMATION_TOOL]`.' }] }));
+
+    expect(output).not.toMatch(CAPABILITY_VIOLATION);
+    expect(exitCode).toBe(0);
+  });
+
+  test('a block-list declaration is read too', () => {
+    const root = fixture({ listCommunityInAgentsMd: true });
+    write(root, '.agents/skills/acme-flow/SKILL.md', t1Skill('acme-flow').replace('metadata:\n  kind: workflow\n', 'metadata:\n  kind: workflow\n  requires_capabilities:\n    - db\n    - gadget\n'));
+    const { exitCode, output } = runLint(root);
+
+    expect(output).toContain('[acme-flow] CAPABILITY-VOCAB: `metadata.requires_capabilities` names `gadget`');
+    expect(exitCode).toBe(1);
+  });
+
+  test('a resolution tag in the body without the matching declaration is a CAPABILITY-UNDECLARED warning, not an error', () => {
+    const { exitCode, output } = runLint(fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-flow', kind: 'workflow', body: 'Validate rows via `[DB_TOOL]`.' }] }));
+
+    expect(output).toContain('[acme-flow] CAPABILITY-UNDECLARED: body uses `[DB_TOOL]` but `metadata.requires_capabilities` does not declare `db`');
+    expect(exitCode).toBe(0);
+  });
+
+  test('a tag whose capability is declared, or one inside a fenced block, does not warn', () => {
+    const body = 'Validate rows via `[DB_TOOL]`.\n\n```\nSchema via [API_TOOL]\n```\n';
+    const { exitCode, output } = runLint(fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-flow', kind: 'workflow', capabilities: ['db'], body }] }));
+
+    expect(output).not.toMatch(CAPABILITY_VIOLATION);
+    expect(exitCode).toBe(0);
+  });
+
+  test('a core skill describing the tags is exempt from CAPABILITY-UNDECLARED', () => {
+    const { exitCode, output } = runLint(fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-core', kind: 'core', body: 'The `[DB_TOOL]` tag resolves per AGENTS.md §6.' }] }));
+
+    expect(output).not.toMatch(CAPABILITY_VIOLATION);
+    expect(exitCode).toBe(0);
+  });
+});
+
+describe('lint-skills STALE-PATH on `.context/` (kind-scoped)', () => {
+  const deadMap = 'Read `.context/business/business-data-map.md` before every rule.';
+  const cacheCite = 'The Jira mirror lives in `.context/PBI/epics/EPIC-1-x/story.md`.';
+  const committedDead = 'See `.context/ADR/ADR-9999-nope.md` for the decision.';
+
+  test('a context skill citing a map that does not exist is a STALE-PATH error', () => {
+    const { exitCode, output } = runLint(fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-context', kind: 'context', body: deadMap }] }));
+
+    expect(output).toContain('[acme-context] STALE-PATH: `.context/business/business-data-map.md`');
+    expect(output).toContain('a context skill cites a map that exists');
+    expect(exitCode).toBe(1);
+  });
+
+  test('the same generator-output cite inside a workflow skill passes (written per project, absent here)', () => {
+    const { exitCode, output } = runLint(fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-flow', kind: 'workflow', body: deadMap }] }));
+
+    expect(output).not.toContain('STALE-PATH:');
+    expect(exitCode).toBe(0);
+  });
+
+  test('the gitignored `.context/PBI/` cache is exempt even inside a context skill', () => {
+    const { exitCode, output } = runLint(fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-context', kind: 'context', body: cacheCite }] }));
+
+    expect(output).not.toContain('STALE-PATH:');
+    expect(exitCode).toBe(0);
+  });
+
+  test('a committed `.context/` path no generator owns must exist for every skill', () => {
+    const { exitCode, output } = runLint(fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-flow', kind: 'workflow', body: committedDead }] }));
+
+    expect(output).toContain('[acme-flow] STALE-PATH: `.context/ADR/ADR-9999-nope.md`');
+    expect(exitCode).toBe(1);
+  });
+});
+
+describe('lint-skills volatile facts (Critical Rule #17, checks 20-21)', () => {
+  test('a path:line citation and a dated claim in a T1 body are FILE-LINE / CURRENT-STATE findings', () => {
+    const { exitCode, output } = runLint(fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-flow', kind: 'workflow', body: 'See `cli/install.ts:403` for the probe.\nMeasured 2026-09-17 on a live project.' }] }));
+
+    expect(output).toContain('[ERROR]\x1B[0m [.agents/skills/acme-flow/SKILL.md] FILE-LINE: `cli/install.ts:403`');
+    expect(output).toContain('[ERROR]\x1B[0m [.agents/skills/acme-flow/SKILL.md] CURRENT-STATE: `Measured 2026-09-17`');
+    expect(exitCode).toBe(1);
+  });
+
+  test('AGENTS.md is scanned too, and a fenced block or a volatile-ok line is not', () => {
+    const root = fixture({ listCommunityInAgentsMd: true });
+    write(root, 'AGENTS.md', [
+      '# AGENTS.md',
+      '',
+      '## 5. SKILLS + COMMANDS + MCPs REGISTRY',
+      '',
+      '| Skill | Trigger | Purpose |',
+      '|---|---|---|',
+      ...T1_SKILLS.map(slug => `| \`${slug}\` | \`/${slug}\` | fixture |`),
+      '| `resend-cli` | `/resend-cli` | community, installed at PROJECT level |',
+      '',
+      '## 6. TOOL RESOLUTION',
+      '',
+      'Since 8.4 the updater prints a table.',
+      '```',
+      'inside a fence: scripts/x.ts:1 today',
+      '```',
+      'The bad form is `scripts/x.ts:1` <!-- volatile-ok: teaching example -->',
+      '',
+    ].join('\n'));
+    const { output } = runLint(root);
+
+    expect(output).toContain('[AGENTS.md] CURRENT-STATE: `Since 8.4`');
+    expect(output).not.toContain('FILE-LINE:');
+  });
+
+  test('a community skill body committed in the store and the generated registry are not scanned', () => {
+    const root = fixture({ listCommunityInAgentsMd: true });
+    write(root, '.agents/skills/resend-cli/SKILL.md', '# resend-cli\n\nSee `src/index.ts:10`, as of 2026.\n');
+    write(root, '.agents/skills/REGISTRY.md', 'Generated today from `x.ts:1`.\n');
+    const { output } = runLint(root);
+
+    expect(output).not.toContain('FILE-LINE:');
+    expect(output).not.toContain('CURRENT-STATE:');
+  });
+});
+
+describe('lint-skills stage owners (check 22) and the §5 table scope', () => {
+  test('a stage-owner skill without a Subagent Dispatch Strategy section is an error; with it, it passes', () => {
+    const root = fixture({ listCommunityInAgentsMd: true });
+    write(root, '.agents/skills/sprint-testing/SKILL.md', t1Skill('sprint-testing').replace('metadata:\n  kind: workflow\n', 'metadata:\n  kind: workflow\n  stage_owner: true\n'));
+    const bare = runLint(root);
+    expect(bare.output).toContain('[sprint-testing] STAGE-OWNER-DISPATCH:');
+    expect(bare.exitCode).toBe(1);
+
+    write(root, '.agents/skills/sprint-testing/SKILL.md', t1Skill('sprint-testing', '## Subagent Dispatch Strategy\n\nSingle.').replace('metadata:\n  kind: workflow\n', 'metadata:\n  kind: workflow\n  stage_owner: true\n'));
+    const ok = runLint(root);
+    expect(ok.output).not.toContain('STAGE-OWNER-DISPATCH:');
+    expect(ok.exitCode).toBe(0);
+  });
+
+  test('capability and alias tables under §5 are not read as skill rows', () => {
+    const root = fixture({ listCommunityInAgentsMd: true });
+    write(root, 'AGENTS.md', [
+      '# AGENTS.md',
+      '',
+      '## 5. SKILLS + COMMANDS + MCPs REGISTRY',
+      '',
+      '### Skills (lazy-loaded by trigger phrase)',
+      '',
+      '| Skill | Trigger | Purpose |',
+      '|---|---|---|',
+      ...T1_SKILLS.map(slug => `| \`${slug}\` | \`/${slug}\` | fixture |`),
+      '| `resend-cli` | `/resend-cli` | community, installed at PROJECT level |',
+      '',
+      '### MCPs (decision rules)',
+      '',
+      '| Capability | Use for | Rule |',
+      '|---|---|---|',
+      '| `db` | data checks | primary |',
+      '',
+      '## 6. TOOL RESOLUTION',
+      '',
+    ].join('\n'));
+    const { exitCode, output } = runLint(root);
+    expect(output).not.toContain('TIER-MISMATCH:');
+    expect(exitCode).toBe(0);
+  });
+});
+
+describe('lint-skills context write scope (check 23, CONTEXT-WRITES)', () => {
+  function contextSkill(root: string, slug: string, writes: string, body = '', refresh: string | null = 'Propose, then apply on approval.'): void {
+    write(root, `.agents/skills/${slug}/SKILL.md`, t1Skill(slug, body, 'context').replace('  kind: context\n', `  kind: context\n  writes: ${writes}\n`));
+    if (refresh !== null) { write(root, `.agents/skills/${slug}/references/refresh.md`, refresh); }
+  }
+
+  test('a context skill writing only its own references/ with a refresh procedure passes', () => {
+    const root = fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-context', kind: 'context' }] });
+    contextSkill(root, 'acme-context', '[references/]');
+    const { exitCode, output } = runLint(root);
+
+    expect(output).not.toContain('CONTEXT-WRITES:');
+    expect(exitCode).toBe(0);
+  });
+
+  test('a write scope outside references/, or escaping it, is an error', () => {
+    const root = fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-context', kind: 'context' }] });
+    contextSkill(root, 'acme-context', '[references/, .context/business/, references/../SKILL.md]');
+    const { exitCode, output } = runLint(root);
+
+    expect(output).toContain('names `.context/business/`');
+    expect(output).toContain('names `references/../SKILL.md`');
+    expect(output).not.toContain('names `references/`;');
+    expect(exitCode).toBe(1);
+  });
+
+  test('a non-context skill cannot declare a write scope', () => {
+    const root = fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-flow', kind: 'workflow' }] });
+    write(root, '.agents/skills/acme-flow/SKILL.md', t1Skill('acme-flow').replace('  kind: workflow\n', '  kind: workflow\n  writes: [references/]\n'));
+    const { exitCode, output } = runLint(root);
+
+    expect(output).toContain('[acme-flow] CONTEXT-WRITES: `metadata.writes` is the context-kind amendment');
+    expect(exitCode).toBe(1);
+  });
+
+  test('a write scope without references/refresh.md, or next to a Jira tag, is an error', () => {
+    const root = fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-context', kind: 'context' }, { slug: 'beta-context', kind: 'context' }] });
+    contextSkill(root, 'acme-context', '[references/]', '', null);
+    contextSkill(root, 'beta-context', '[references/]', '', 'Then comment on the story via `[ISSUE_TRACKER_TOOL]`.');
+    const { exitCode, output } = runLint(root);
+
+    expect(output).toContain('[acme-context] CONTEXT-WRITES: a context skill that declares `metadata.writes` must carry `references/refresh.md`');
+    expect(output).toContain('[beta-context] CONTEXT-WRITES: a context skill with a write scope carries `[ISSUE_TRACKER_TOOL]`');
+    expect(exitCode).toBe(1);
+  });
+
+  test('`diagrams` is in the capability vocabulary', () => {
+    const { exitCode, output } = runLint(fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-flow', kind: 'workflow', capabilities: ['diagrams'] }] }));
+
+    expect(output).not.toMatch(CAPABILITY_VIOLATION);
     expect(exitCode).toBe(0);
   });
 });

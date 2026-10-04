@@ -1,6 +1,6 @@
 ---
 name: acli
-description: "Atlassian CLI (official `acli` binary, v1.3+ as of 2026) for Jira Cloud, Confluence Cloud, and org admin tasks from the terminal. Use whenever the user wants to create, view, edit, transition, assign, clone, archive, comment on, link, or bulk-operate on Jira work items; list or manage projects, boards, sprints, filters, dashboards, or custom-field definitions; create or update Confluence spaces, pages, or blog posts; activate/deactivate users at the org level; or authenticate to Atlassian from a shell or CI pipeline. Triggers on: `acli`, Atlassian CLI, Jira from the terminal, Confluence from the terminal, bulk Jira operations, scripting Jira, automate Jira tickets, transition a bunch of issues, create issues from a JSON/CSV file, CI pipeline that touches Jira, log in to Jira CLI, switch Atlassian sites, API-token auth for Jira. Use this skill even when the user does not say the word `acli` — if the task is CLI-driven Jira or Confluence work, this is the right tool. Do NOT use for: Atlassian MCP server work (that is a different integration), REST-API-only workflows where no CLI is involved, Bitbucket command-line needs (acli does not cover Bitbucket yet), or the legacy Appfire/Bob Swift `acli` tool (a different product that happens to share the binary name). The Atlassian MCP server is OPT-IN, documented in docs/mcp/."
+description: "Atlassian CLI (official `acli` binary) for Jira Cloud, Confluence Cloud, and org admin tasks from the terminal. Use whenever the user wants to create, view, edit, transition, assign, clone, archive, comment on, link, or bulk-operate on Jira work items; list or manage projects, boards, sprints, filters, dashboards, or custom-field definitions; create or update Confluence spaces, pages, or blog posts; activate/deactivate users at the org level; or authenticate to Atlassian from a shell or CI pipeline. Triggers on: `acli`, Atlassian CLI, Jira from the terminal, Confluence from the terminal, bulk Jira operations, scripting Jira, automate Jira tickets, transition a bunch of issues, create issues from a JSON/CSV file, CI pipeline that touches Jira, log in to Jira CLI, switch Atlassian sites, API-token auth for Jira. Use this skill even when the user does not say the word `acli` — if the task is CLI-driven Jira or Confluence work, this is the right tool. Do NOT use for: Atlassian MCP server work (that is a different integration), REST-API-only workflows where no CLI is involved, Bitbucket command-line needs (acli does not cover Bitbucket), or the legacy Appfire/Bob Swift `acli` tool (a different product that happens to share the binary name). The Atlassian MCP server is OPT-IN, documented in agentic-qa-core/references/mcp-atlassian-optin.md."
 license: MIT
 compatibility: [claude-code, cursor, codex, opencode]
 allowed-tools: Bash(acli:*)
@@ -56,7 +56,7 @@ Steps for protocol consistency:
 1. Read `complementary_categories` from this skill's frontmatter (`issue-tracker`).
 2. Resolve via the host repo's skill-registry cache (`.agents/skills/REGISTRY.md`, built by `scripts/build-skill-registry.ts`). Fallback: scan the session-start `system-reminder` skill list.
 3. Apply the threshold rule per the host repo's skill-composition strategy doc (T1 / T3 silent; T4 ASK).
-4. The Atlassian MCP fallback documented below is OPT-IN, not a skill — enable manually via `docs/mcp/`.
+4. The Atlassian MCP fallback documented below is OPT-IN, not a skill — enable manually via `agentic-qa-core/references/mcp-atlassian-optin.md`.
 
 Expected matches: typically none. Repo-specific composability (which workflow skills load this) lives in `<repo-core>/references/acli-integration.md` §Composability.
 
@@ -64,7 +64,7 @@ Skip step if the catalog is unavailable; log `skill_resolution: "fallback-inline
 
 ## Fallback: Atlassian MCP
 
-> **Opt-in only**: this MCP is NOT enabled in the default boilerplate. To use it, copy the atlassian block from `docs/mcp/<agent>.template.*` into `.mcp.json` / `opencode.jsonc`, ensure `ATLASSIAN_*` in `.env` are set, and restart the agent. Behavior below applies only after opt-in.
+> **Opt-in only**: this MCP is NOT enabled in the default boilerplate. To use it, add the atlassian block from `agentic-qa-core/references/mcp-atlassian-optin.md` to `.mcp.json`, `opencode.jsonc` AND `.codex/config.toml` (parity is checked), ensure `ATLASSIAN_*` in `.env` are set, run `bun run harness:env`, and restart the agent. Behavior below applies only after opt-in.
 
 If `acli` is not installed or authenticated, fall back to the Atlassian MCP server (MCP tool namespace: `mcp__atlassian__*` or similar — check the MCP tool list for the exact prefix in the current environment).
 
@@ -155,7 +155,7 @@ acli jira workitem transition --jql "project = {{PROJECT_KEY}} AND assignee = cu
 | `auth`     | login · logout · status · switch — same model as `jira auth`         |
 | `space`    | archive · create · list · restore · update · view (full CRUD)        |
 | `blog`     | create · list · view                                                 |
-| `page`     | view (read-only as of v1.3.18 — page CRUD not yet exposed)           |
+| `page`     | view (read-only: page CRUD is not exposed; confirm with `acli confluence page --help`) |
 
 ### Admin (`acli admin`)
 
@@ -351,7 +351,7 @@ This pattern scales cleanly to dozens of items in one run. The bottleneck is aut
 
 ### WORKAROUND: Editing rich-text custom fields on existing work items (REST PUT)
 
-This is the **only** working path as of acli v1.3.18 — there is no acli-native channel for editing custom-field values on existing items. The recipe below is the turnkey workaround.
+This is the **only** working path: there is no acli-native channel for editing custom-field values on existing items. The recipe below is the turnkey workaround.
 
 **Prerequisites.** Two env vars must be exported in the current shell. They are loaded automatically by the project tooling (`bun claude`, `bun opencode`, or `direnv`) from `.env`:
 
@@ -525,16 +525,16 @@ Load the reference that matches the user's current need. Do not preload all of t
 - **Capture the trace ID on any failure** and surface it when reporting to the user.
 - **Do not invent flags.** When unsure, run `acli <path> --help` — it is authoritative and version-pinned to the installed binary. Convention: every multi-word flag is **kebab-case** (`--from-json`, `--searcher-key`, `--filter-id`, `--order-by`). camelCase variants will fail.
 - **Verify subcommand existence before assuming.** Unknown subcommands silently fall back to parent help with exit 0 — they do NOT error. Read the help body, don't trust the exit code.
-- **Know what `acli` cannot do.** All of the following require REST or MCP — `acli` does not cover them as of v1.3.18:
+- **Know what `acli` cannot do.** All of the following require REST or MCP — `acli` does not cover them (confirm against the installed binary with `acli <path> --help`):
   - Enumerate custom fields (`field` has no `list`).
   - Edit custom-field values on existing work items (`workitem edit` does not document custom-field input).
   - Manage workflows, workflow schemes, statuses, or transition definitions.
   - Manage issue types, priorities, resolutions, project versions, project components.
-  - Add a work item to a sprint (`JRACLOUD-97107`).
+  - Add a work item to a sprint (Atlassian tracked it as `JRACLOUD-97107` when this was written).
   - Upload attachments, add watchers.
   - Retrieve the cached auth token for reuse in another tool.
   - Bitbucket operations (out of scope entirely).
-  - Confluence page CRUD beyond `page view` (as of v1.3.18 — space and blog have full CRUD).
+  - Confluence page CRUD beyond `page view` (space and blog have a fuller CRUD surface; see `references/confluence.md`).
 
   See `references/gotchas.md` for the full list with REST recipes.
 
@@ -549,4 +549,4 @@ Users usually already have `acli` installed. If not, point them at:
 - Windows: PowerShell `curl` install (no Chocolatey/MSI yet)
 - CI one-liner (Linux): `curl -LO "https://acli.atlassian.com/linux/1.3.18/acli_linux_amd64/acli" && chmod +x acli`
 
-Pin to a version URL in production pipelines — `latest/` has caused same-day mass failures. Each release is supported for six months. Run `acli --version` to check.
+Pin to a version URL in production pipelines — `latest/` has caused same-day mass failures. Each release has a support window; check the vendor policy. Run `acli --version` to check.

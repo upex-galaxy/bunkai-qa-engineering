@@ -4,7 +4,7 @@
 
 Stage 2 Execution playbook for in-sprint manual / exploratory QA: smoke test, then UI / API / DB exploration as applicable to the ticket. Session notes written into the ticket PBI folder; bugs filed via `reporting-templates.md`.
 
-This reference is for IN-SPRINT manual execution RIGHT NOW. It does NOT cover:
+This reference is for IN-SPRINT manual execution (Stage 2). It does NOT cover:
 - Stage 1 planning, Discover-Modify-Generate data classification, test-outline naming, or traceability checks (see `acceptance-test-planning.md`).
 - Stage 5 automated-test coding patterns (see `test-automation`).
 - Stage 6 CI regression-suite execution (see `regression-testing`).
@@ -28,7 +28,7 @@ Every feature validates through up to three layers. Pick by feature type:
 
 ## Finding triage — blocking vs non-blocking (graduated pause)
 
-A FAIL found during deep exploration is NOT automatically a Critical bug and does NOT automatically halt the pass. Triage first, then decide whether to stop or keep going. Pausing the whole 17-TC pass on a cosmetic finding wastes the dispatch and loses coverage; a genuine blocker must still stop immediately.
+A FAIL found during deep exploration is NOT automatically a Critical bug and does NOT automatically halt the pass. Triage first, then decide whether to stop or keep going. Pausing the whole pass on a cosmetic finding wastes the dispatch and loses coverage; a genuine blocker must still stop immediately.
 
 | Finding class | Examples | Action |
 |---------------|----------|--------|
@@ -56,6 +56,8 @@ Deep-dive the UI on `{{WEB_URL}}` via `[AUTOMATION_TOOL]`. Goal: validate ACs, d
 | Console + Network | `[AUTOMATION_TOOL]` | Observe errors / requests |
 
 Before any `[AUTOMATION_TOOL]` call, capture with an explicit destination path resolving to the ticket's `evidence/` folder — never repoint the shared `.playwright/cli.config.json` `outputDir` (see `agentic-qa-core/references/evidence-conventions.md` §1 Bucket B and §5). Screenshots still need the full path in `--filename` because `outputDir` does not apply to `.png`.
+
+**Session and login.** One named session per ticket (`-s=<KEY>`), in memory. The app's login comes from the role's state file, never from a login typed inside the exploration session: `open`, then `state-load <repo>/.auth/<env>-<role>.json`, then `goto`. Two roles = two sessions (`-s=<KEY>-admin`, `-s=<KEY>-member`). Missing file or a login page after `goto` → produce the file first (suite setup, or the one-off login recipe). Before the first session of the project, check `testing.browser.pair_mode` in `.agents/project.yaml` (`null` = ask once). `close` every session before reporting, and prove it with `playwright-cli list`. Canon: `agentic-qa-core/references/browser-sessions.md`.
 
 ### 1.2 Scenario loop (per AC)
 
