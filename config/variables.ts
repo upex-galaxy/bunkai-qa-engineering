@@ -187,6 +187,44 @@ function readTestUser(): { email: string, password: string } {
   );
 }
 
+/**
+ * Pre-existing hierarchy the ATC integration specs attach new ATCs to.
+ *
+ * A workspace can hit its project limit (POST /projects -> 422), and the ATC
+ * API has no DELETE, so the specs reuse an existing project/module/user-story/
+ * acceptance-criterion instead of building one per run. Ids are per environment
+ * ({ENV}_ATC_*) and read at the point of use: an unset one fails with its name.
+ */
+export interface AtcTarget {
+  projectId: string
+  moduleId: string
+  userStoryId: string
+  acceptanceCriterionId: string
+}
+
+function readAtcTarget(): AtcTarget {
+  const ENV = env.current.toUpperCase();
+  const names = {
+    projectId: `${ENV}_ATC_PROJECT_ID`,
+    moduleId: `${ENV}_ATC_MODULE_ID`,
+    userStoryId: `${ENV}_ATC_USER_STORY_ID`,
+    acceptanceCriterionId: `${ENV}_ATC_AC_ID`,
+  } satisfies Record<keyof AtcTarget, string>;
+  const missing = Object.values(names).filter(name => (process.env[name] ?? '') === '');
+  if (missing.length > 0) {
+    throw new Error(
+      `ATC target hierarchy for TEST_ENV=${env.current} is not set: ${missing.join(', ')} `
+      + '(values in .env, see .env.example).',
+    );
+  }
+  return {
+    projectId: process.env[names.projectId] ?? '',
+    moduleId: process.env[names.moduleId] ?? '',
+    userStoryId: process.env[names.userStoryId] ?? '',
+    acceptanceCriterionId: process.env[names.acceptanceCriterionId] ?? '',
+  };
+}
+
 // ============================================
 // Main Configuration Object
 // ============================================
@@ -206,11 +244,18 @@ export const config = {
     // Storage paths for authenticated sessions
     storageStatePath: '.auth/user.json',
     apiStatePath: '.auth/api-state.json',
+    // NDJSON ledger of PAT ids minted by THIS tooling (setups + the real-login spec); the global teardown revokes them.
+    mintedPatsPath: '.auth/minted-pats.ndjson',
   },
 
   // Test User (configure in .env). A getter: validated on first read, by name.
   get testUser(): { email: string, password: string } {
     return readTestUser();
+  },
+
+  // Existing project/module/story/AC the ATC specs write into. A getter: validated on first read, by name.
+  get atcTarget(): AtcTarget {
+    return readAtcTarget();
   },
 
   // TMS / Browser / Reporting — synced (config/variables.core.ts)

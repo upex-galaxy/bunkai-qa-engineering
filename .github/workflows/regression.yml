@@ -53,6 +53,10 @@ env:
   LOCAL_USER_EMAIL: ${{ secrets.LOCAL_USER_EMAIL }}
   LOCAL_USER_PASSWORD: ${{ secrets.LOCAL_USER_PASSWORD }}
   STAGING_USER_EMAIL: ${{ secrets.STAGING_USER_EMAIL }}
+  STAGING_ATC_PROJECT_ID: ${{ vars.STAGING_ATC_PROJECT_ID }}
+  STAGING_ATC_MODULE_ID: ${{ vars.STAGING_ATC_MODULE_ID }}
+  STAGING_ATC_USER_STORY_ID: ${{ vars.STAGING_ATC_USER_STORY_ID }}
+  STAGING_ATC_AC_ID: ${{ vars.STAGING_ATC_AC_ID }}
   STAGING_USER_PASSWORD: ${{ secrets.STAGING_USER_PASSWORD }}
   # TMS Configuration (for Xray sync)
   # TMS modality. Only 'xray' has Test Executions to import into — a jira-native
@@ -148,7 +152,7 @@ jobs:
         with:
           name: integration-test-results
           path: test-results/
-          retention-days: 10
+          retention-days: 3
 
       - name: Cleanup Workspace
         if: always()
@@ -218,7 +222,7 @@ jobs:
         with:
           name: e2e-test-results
           path: test-results/
-          retention-days: 10
+          retention-days: 3
 
       - name: Upload Playwright Report
         if: always()
@@ -226,7 +230,7 @@ jobs:
         with:
           name: e2e-playwright-report
           path: playwright-report/
-          retention-days: 10
+          retention-days: 3
 
       - name: Upload Failure Evidence
         if: failure()
@@ -236,7 +240,7 @@ jobs:
           path: |
             test-results/
             playwright-report/
-          retention-days: 10
+          retention-days: 3
 
       - name: Cleanup Workspace
         if: always()
