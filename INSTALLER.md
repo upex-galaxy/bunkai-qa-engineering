@@ -30,7 +30,6 @@ Downloads and installs all software dependencies:
 Wires runtime configuration:
 
 - `.env` population — discovers `${VAR}` / `{env:VAR}` placeholders in `.mcp.json` and `opencode.jsonc`, then prompts for values not already set
-- `direnv allow` — optional; auto-loads `.env` on `cd`
 - GitHub repository — interactive `gh repo create` (optional); hydrates `state.github` from an existing remote if already wired
 
 ### Phase 4 — VERIFICATION
@@ -124,12 +123,6 @@ jq               missing     JSON parsing in `acli` Jira pipelines (`acli ... --
 
 Missing per-skill CLIs do not exit the installer. Install them lazily when the owning skill surfaces a missing-binary error, or eagerly if you already know which workflow you want.
 
-### Convenience opt-ins — never required
-
-| Tool     | What it buys you                                                                                                                                                                                                                               | Where the installer surfaces it                                                                                                                                                                                                                                                                                                                  |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `direnv` | Auto-loads `.env` on `cd` so the bare `claude` / `opencode` binaries see MCP credentials. Without it, the `bun run claude` / `bun run opencode` wrappers (powered by `dotenv-cli`, already a project devDep) do the same thing cross-platform. | `cli/doctor.ts` (`detectDirenv`) reports `direnv.installed`, `version`, `envrc_allowed`, `hook_in_rc`. The installer offers `direnv allow` + a shell-hook nudge. **Windows users**: skip — PowerShell support is experimental (direnv 2.37+); Git Bash works but the wrapper is simpler. The installer offers the prompt anyway; decline freely. |
-
 ### MCP credentials — 7 env vars filled into `.env`
 
 `VAR_MANIFEST` in `cli/lib/variables-manifest.ts` (read by `cli/doctor.ts`) declares the vars consumed by the 6 canonical MCPs plus the ATLASSIAN_* family used by acli + scripts/sync-jira-*.ts. Missing keys do not block setup, but every `bun run setup:doctor` will list them under `pending_actions` with the canonical `where` URL (token-generation page) until they are filled.
@@ -148,7 +141,7 @@ The OpenAPI MCP is schema-read-only — no credential is injected into it. Authe
 | Command                            | What it does                                                                                                         |
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `bun run setup:doctor --preflight` | Fast Bun / deps check only — exit 0 if green, 1 with explicit fix command otherwise                                  |
-| `bun run setup:doctor`             | Full report: env vars, deps, Playwright browsers, direnv hook, MCP config files, pending actions with `where` URLs   |
+| `bun run setup:doctor`             | Full report: env vars, deps, Playwright browsers, MCP config files, pending actions with `where` URLs   |
 | `bun run setup:doctor --json`      | Same as above as machine-readable JSON for an agent to consume                                                       |
 | `bun run setup`                    | Re-run the interactive installer end-to-end (idempotent — gentle-ai snapshots configs, MCP overwrites are confirmed) |
 
@@ -176,10 +169,8 @@ Exit code: `0` when everything is green, `1` when any pending action remains. JS
   "shell": "/usr/bin/bash",
   "is_tty": true,
   "env_vars": { "TAVILY_API_KEY": "set", "POSTMAN_API_KEY": "missing", ... },
-  "direnv": { "installed": true, "version": "2.25.2", "envrc_allowed": true, "hook_in_rc": true, "rc_file": "/home/user/.bashrc" },
   "pending_actions": [
-    { "type": "credential", "target": "POSTMAN_API_KEY", "hint": "Postman API key for Postman MCP", "where": "https://postman.com → settings → API keys" },
-    { "type": "shell_hook", "target": "~/.bashrc", "hint": "Add direnv hook ...", "where": "eval \"$(direnv hook bash)\"" }
+    { "type": "credential", "target": "POSTMAN_API_KEY", "hint": "Postman API key for Postman MCP", "where": "https://postman.com → settings → API keys" }
   ]
 }
 ```
@@ -225,7 +216,6 @@ Then `bun run setup:doctor --json` to confirm.
 | `INSTALL_SKIP_COMMUNITY=1`    | Skip `bunx skills add` step      |
 | `INSTALL_SKIP_JIRA=1`         | Skip optional Jira bootstrap     |
 | `INSTALL_SKIP_API=1`          | Skip optional API auth bootstrap |
-| `INSTALL_SKIP_DIRENV=1`       | Skip direnv detection / autoload |
 
 ### Force flags (re-run completed steps)
 
@@ -243,23 +233,13 @@ Then `bun run setup:doctor --json` to confirm.
 
 ## Launching the agent after setup
 
-`bun run setup` finishes with two recommended ways to start an agent so MCP env vars (e.g. `TAVILY_API_KEY`, `ATLASSIAN_API_TOKEN`) get loaded from `.env`:
+`.env` is the single source of credentials, and no harness gets a copy of it. Every MCP server that needs `.env` values starts through the same `.env` loader in `.mcp.json`, `opencode.jsonc` and `.codex/config.toml` (`varlock run`, run through `bunx -p` from the project devDep), so each server reads `.env` itself, and only its own variables, even on a bare or Dock launch. `bun run setup:doctor` reports any plaintext copy an older `bun run harness:env` left behind, and `bun run harness:env` retires it. After filling `.env`, restart the agent session (MCP servers read `.env` when the harness spawns them). `bun run setup` finishes by printing the commands below. Nothing needs `.env` exported into your shell: the Bun scripts (`bun run jira:*`, `bun run api:login`, `bun xray`) read it through Bun's own autoload, `acli` uses its stored login (`acli jira auth login`) and `gh` its keyring.
 
-| Method                                              | Platform                                                                                      | One-time setup                                                                                                                                          | Usage                                                 |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| **`bun run claude` / `bun run opencode`** (default) | Windows, macOS, Linux                                                                         | None — `dotenv-cli` is a project devDep                                                                                                                 | `bun run claude` from the repo root                   |
-| **direnv autoload** (optional)                      | macOS, Linux, **Windows** (Git Bash recommended; PowerShell experimental, needs direnv 2.37+) | Install direnv (`brew install direnv` / `apt install direnv` / `winget install direnv`) + add hook to your shell rc, then installer runs `direnv allow` | Just `claude` or `opencode` from anywhere in the repo |
+Open the harness from the repo root, on Windows, macOS or Linux alike: `claude`, `opencode` or `codex`, or the desktop app (Claude Desktop, Codex Desktop, OpenCode desktop) on the project folder. No wrapper and no one-time setup beyond `bun install` (the `.env` loader is the `varlock` devDependency).
 
-### direnv hook per shell
+All three MCP configs are committed with variable NAMES only: every server that needs `.env` values launches as `bunx -p varlock@<pin> varlock run --no-redact-stdout --inject vars --filter A,B -- <server>`, the same on every host. The loader reads the varlock schema plus `.env` / `.env.local` (or the secret manager the schema names) from the project root at spawn time and hands the server only the names in its `--filter`; `--no-redact-stdout` keeps the JSON-RPC stream intact. Real values live in `.env` (gitignored), and no plaintext copy is written anywhere. If a server returns 401/403 at first call, the matching env var is missing — see `AGENTS.md` Critical Rule #10 (stop, fix `.env`, restart the agent session).
 
-| Shell      | Line to add                               | File                                             |
-| ---------- | ----------------------------------------- | ------------------------------------------------ |
-| bash       | `eval "$(direnv hook bash)"`              | `~/.bashrc` (also works for Git Bash on Windows) |
-| zsh        | `eval "$(direnv hook zsh)"`               | `~/.zshrc`                                       |
-| fish       | `direnv hook fish \| source`              | `~/.config/fish/config.fish`                     |
-| PowerShell | `Invoke-Expression "$(direnv hook pwsh)"` | `$PROFILE` (requires direnv 2.37+, experimental) |
-
-`.mcp.json` (Claude Code) and `opencode.jsonc` are committed with `${VAR}` / `{env:VAR}` placeholders. Real values live in `.env` (gitignored). If a server returns 401/403 at first call, the matching env var is missing — see `CLAUDE.md` Critical Rule #11 (stop, fix `.env`, restart the agent session).
+Open the harness directly: no wrapper, no script. The retired `claude` / `codex` / `opencode` scripts started it inside `varlock run`, which exported every `.env` value into the AI's own process (ADR-0014). Nothing in the repo exports `.env` into a shell any more: the test scripts (`bun run test`, `test:e2e`, ...) load it through `scripts/launch.ts`, which warns when a variable inherited from the shell differs from `.env.local` over `.env` (names and lengths only) and goes on, so a deliberate `AUTO_SYNC=true bun run test` still works. A project variable you export in your own shell profile still wins over `.env` for whatever starts from that shell, MCP servers included; `bun run vars:env:check` names it.
 
 ### Optional cosmetic polish
 
@@ -268,7 +248,7 @@ Pure UX, zero behavioral change. Skip without consequence.
 | Agent           | Tool                                                        | How                                                                                                                                                                                                                                                                                             |
 | --------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Claude Code** | [`ccstatusline`](https://github.com/sirmalloc/ccstatusline) | `bunx -y ccstatusline@latest` — interactive TUI to customize the Claude Code status line (model, tokens, context %, git branch, etc.). **Run in a plain terminal with no active agent session**; the configurator owns the terminal while it runs and will collide with a live Claude Code TUI. |
-| **OpenCode**    | `opencode-subagent-statusline` plugin                       | Already enabled in `opencode.jsonc` (`"plugin": [..., "opencode-subagent-statusline"]`). Shows the active subagent in the OpenCode status line. Nothing to install — `bun run opencode` picks it up.                                                                                            |
+| **OpenCode**    | `opencode-subagent-statusline` plugin                       | Already enabled in `opencode.jsonc` (`"plugin": [..., "opencode-subagent-statusline"]`). Shows the active subagent in the OpenCode status line. Nothing to install.                                                                                            |
 
 ### Optional UX upgrades
 
@@ -466,8 +446,7 @@ The right choice when the change is to the boilerplate's own infrastructure (KAT
 
 - **gentle-ai not detected after install** — re-run `bun run setup`. The detector probes `which gentle-ai` plus `gentle-ai version`; if either fails the installer falls back to the "skip gentle-ai" branch. Confirm the binary is on PATH (`which gentle-ai` should return a path under `/usr/local/bin/`, `~/bin/`, `~/go/bin/`, or a Homebrew prefix).
 - **MCPs returning 401/403** — the matching env var in `.env` is unset or wrong. `.mcp.json` (Claude) and `opencode.jsonc` are committed with `${VAR}` / `{env:VAR}` expansion; real values live in `.env`. Open `.env`, fill the var, and **restart the agent session** — env vars are read once at MCP-server spawn time. See `CLAUDE.md` Critical Rule #11.
-- **MCPs not loading at all** — confirm you launched the agent via `bun run claude` / `bun run opencode` (wraps with `dotenv-cli`), or that direnv autoload is active (`direnv status` shows your `.envrc` allowed). Launching `claude` directly without either path means MCP placeholders never get expanded.
-- **`direnv allow` produced `dotenv_if_exists: command not found`** — this would mean the `.envrc` is using a newer direnv feature than your version supports. The committed `.envrc` uses portable POSIX loading (works on direnv 2.21+), so if you see this, your `.envrc` has been edited locally — restore it from `git checkout .envrc`.
+- **MCPs not loading at all** — confirm `bun install` ran (the `.env` loader is the `varlock` devDependency, run through `bunx -p`) and `.env` exists at the project root; for Codex, also that the repository is trusted. A value that fails the schema stops only the server whose `--filter` names it (`bunx varlock load --agent` names it, redacted). `bun run setup:doctor` also reports any plaintext MCP credential copy still on disk; `bun run harness:env` retires it.
 - **Skills not appearing in autocomplete** — restart Claude Code (or your agent of choice). MCP and skill configs are cached at agent startup.
 - **`/agentic-qa-onboard` does not trigger on natural language** — use the explicit slash command: `/agentic-qa-onboard`. The natural-language triggers (`onboard me to QA`, `primer vez en QA`) are advisory, not guaranteed.
 - **How do I uninstall gentle-ai engram?** — `gentle-ai uninstall --agent <agent> --components engram --yes` removes the engram component for one agent. `gentle-ai uninstall --all --yes` removes everything gentle-ai-managed for every supported agent. Note the asymmetry vs `install`: `uninstall` accepts `--yes`/`-y` (skip confirmation) but does NOT accept `--skill(s)`. Backups are created automatically before uninstall.
