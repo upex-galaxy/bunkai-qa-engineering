@@ -8,18 +8,22 @@
  * Dependents: None (this is the final step)
  */
 
+import type { ApiFixture } from '@ApiFixture';
+
 import { existsSync, readFileSync } from 'node:fs';
 
-import { test as teardown } from '@playwright/test';
+import { test as teardown } from '@TestFixture';
 import { ATC_PARTIAL_PATH } from '@utils/decorators';
 import { syncResults } from '@utils/jiraSync';
+import { clearMintedPats, readMintedPats } from '@utils/mintedPats';
+import { config } from '@variables';
 
 /**
  * Global Teardown: generate reports and sync TMS
  *
  * Generates ATC execution report and syncs results to TMS if enabled.
  */
-teardown('Global Teardown: generate reports and sync TMS', async () => {
+teardown('Global Teardown: generate reports and sync TMS', async ({ api }) => {
   console.log(`\n${'='.repeat(60)}`);
   console.log('KATA Architecture - Global Teardown');
   console.log('='.repeat(60));
@@ -97,7 +101,52 @@ teardown('Global Teardown: generate reports and sync TMS', async () => {
     console.log('\n[SKIP] TMS sync disabled (set AUTO_SYNC=true to enable)');
   }
 
+  await revokeMintedPats(api);
+
   console.log(`\n${'='.repeat(60)}`);
   console.log('[OK] Global teardown complete');
   console.log(`${'='.repeat(60)}\n`);
 });
+
+/**
+ * Revoke the PATs this run's setups and real-login specs minted.
+ *
+ * Revoking is session-only (a Bearer PAT gets 403), so it opens one cookie
+ * session, which mints a PAT of its own: that one is revoked last. Only ids
+ * from the ledger are touched, never a token that already existed. A failed
+ * revoke warns and does not fail the run (teardown must not mask test results);
+ * its id stays in the ledger for the next run.
+ */
+async function revokeMintedPats(api: ApiFixture): Promise<void> {
+  const minted = readMintedPats();
+  if (minted.length === 0) {
+    return;
+  }
+
+  console.log(`\n[CLEANUP] Revoking ${minted.length} PAT(s) minted by this run...`);
+  let sessionPatId: string | undefined;
+  const failed: string[] = [];
+  try {
+    sessionPatId = await api.auth.openSession(config.testUser.email, config.testUser.password);
+    for (const id of [...minted, sessionPatId]) {
+      try {
+        await api.auth.revokeToken(id);
+      }
+      catch {
+        failed.push(id);
+      }
+    }
+  }
+  catch (error) {
+    console.warn('[WARN] Could not open a session to revoke minted PATs:', error instanceof Error ? error.message : error);
+    return;
+  }
+
+  console.log(`[CLEANUP] Revoked ${minted.length + 1 - failed.length} of ${minted.length + 1} (incl. the cleanup session's own)`);
+  if (failed.length === 0) {
+    clearMintedPats();
+  }
+  else {
+    console.warn(`[WARN] ${failed.length} revoke(s) failed; ids kept in the ledger for the next run`);
+  }
+}

@@ -81,6 +81,44 @@ export class AuthApi extends ApiBase {
     }
   }
 
+  /**
+   * Helper: Revoke a PAT (DELETE /tokens/{id}) - test cleanup, not an ATC.
+   *
+   * The route is session-only: a Bearer PAT is rejected (403), even the token's
+   * own. So this sends NO Authorization header and relies on the session cookie
+   * that `signIn` left on this request context.
+   *
+   * @param tokenId - `pat.id` from the sign-in response
+   */
+  @step
+  async revokeToken(tokenId: string): Promise<APIResponse> {
+    const response = await this.request.delete(this.apiEndpoint(`${this.config.auth.tokenEndpoint}/${tokenId}`), {
+      headers: { Accept: '*/*' },
+    });
+    expect(response.status()).toBe(204);
+    return response;
+  }
+
+  /**
+   * Helper: open a cookie session (POST /auth/signin) WITHOUT being an ATC, for
+   * cleanup code that needs the session-only revoke route. Sends no Bearer and
+   * attaches nothing to Allure (the body carries the password and the PAT).
+   * Sign-in mints a PAT of its own, so the caller must revoke the returned id.
+   *
+   * @returns id of the PAT this sign-in minted
+   */
+  @step
+  async openSession(email: string, password: string): Promise<string> {
+    const response = await this.request.post(this.apiEndpoint(this.config.auth.loginEndpoint), {
+      headers: { 'Accept': '*/*', 'Content-Type': 'application/json' },
+      data: { email, password } satisfies SigninRequest,
+    });
+    expect(response.status()).toBe(200);
+    const body = await this.getResponseJsonObject<SigninResponse>(response);
+    expect(body.pat?.id).toBeDefined();
+    return body.pat.id;
+  }
+
   // ============================================
   // ATCs - Complete Test Cases (ACTION + VERIFICATION)
   // ============================================

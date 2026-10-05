@@ -80,11 +80,13 @@ export default defineConfig({
 
   use: {
     baseURL,
-    // `retain-on-failure` on BOTH sides, deliberately. `on-first-retry` was the
-    // local value, and `retries: 0` above means there is never a first retry —
-    // so a local failure produced no trace at all, which is the one artifact
-    // you need for the failure you just got.
-    trace: 'retain-on-failure',
+    // Local: `retain-on-failure` (`on-first-retry` never fires with `retries: 0`,
+    // so a local failure would leave no trace). CI: OFF. The repo is public and
+    // Actions artifacts are downloadable by any logged-in GitHub user; a trace
+    // keeps every request header, so the session cookie and the Bearer PAT of an
+    // authenticated project would sit in it unredacted. Allure still carries the
+    // (masked) request/response attachments for CI diagnosis.
+    trace: env.isCI ? 'off' : 'retain-on-failure',
     screenshot: config.reporting.screenshotOnFailure ? 'only-on-failure' : 'off',
     video: env.isCI && config.reporting.videoOnFailure ? 'retain-on-failure' : 'off',
     headless: env.isCI || config.browser.headless,
@@ -116,12 +118,17 @@ export default defineConfig({
       testMatch: /ui-auth\.setup\.ts/,
       testDir: './tests/setup',
       dependencies: ['global-setup'],
+      // The login form is filled with the REAL password here; a retained trace
+      // would store the fill value unredacted. The report dirs are public in CI.
+      use: { trace: 'off' },
     },
     {
       name: 'api-setup',
       testMatch: /api-auth\.setup\.ts/,
       testDir: './tests/setup',
       dependencies: ['global-setup'],
+      // The sign-in request body (password) and response (PAT) must not land in a trace.
+      use: { trace: 'off' },
     },
 
     // ============================================
@@ -144,7 +151,10 @@ export default defineConfig({
       name: 'integration',
       testMatch: '**/integration/**/*.test.ts',
       dependencies: ['api-setup'],
-      use: {},
+      // API traces record every request header + body: the sign-in password and
+      // the Bearer PAT would sit unredacted in a public report. Allure keeps
+      // the (masked) request/response attachments.
+      use: { trace: 'off' },
     },
 
     // ============================================
@@ -178,7 +188,7 @@ export default defineConfig({
       grep: /@critical/,
       testMatch: '**/integration/**/*.test.ts',
       dependencies: ['api-setup'],
-      use: {},
+      use: { trace: 'off' }, // same reason as `integration`
     },
 
     // ============================================
@@ -189,6 +199,8 @@ export default defineConfig({
       name: 'global-teardown',
       testMatch: /global\.teardown\.ts/,
       testDir: './tests/teardown',
+      // Signs in to revoke the PATs this run minted: password in the request body.
+      use: { trace: 'off' },
     },
 
     // ============================================

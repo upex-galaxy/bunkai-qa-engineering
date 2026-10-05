@@ -13,6 +13,7 @@ import type { ApiState } from '@data/types';
 import { writeFileSync } from 'node:fs';
 import { test as setup } from '@TestFixture';
 import { attachRequestResponseToAllure } from '@utils/allure';
+import { recordMintedPat } from '@utils/mintedPats';
 import { config } from '@variables';
 
 const apiStateFile = config.auth.apiStatePath;
@@ -40,6 +41,9 @@ setup('API Setup: authenticate via API', async ({ api }) => {
     responseBody: { ...body, pat: { ...body.pat, token: '***' } },
     requestBody: { email: config.testUser.email, password: '***' },
   });
+
+  // Sign-in minted a PAT on the shared account: record it so the global teardown revokes it.
+  recordMintedPat(body.pat.id);
 
   console.log('[API Setup] Authentication successful');
   console.log(`[API Setup] PAT scopes: ${body.pat.scopes.join(', ')}`);

@@ -13,8 +13,22 @@
 import { config, test } from '@TestFixture';
 
 test.describe('BK auth API gateway', { tag: ['@critical'] }, () => {
+  // Each sign-in mints a PAT on the shared staging account and nothing else
+  // revokes it. Revoke the one this test minted (session-only route, so it uses
+  // the cookie signIn left on the request context, never the PAT).
+  let mintedPatId: string | undefined;
+
+  test.afterEach(async ({ api }) => {
+    if (mintedPatId) {
+      const tokenId = mintedPatId;
+      mintedPatId = undefined;
+      await api.auth.revokeToken(tokenId);
+    }
+  });
+
   test('BK-311: should sign in and authenticate GET /me with the minted PAT', async ({ api }) => {
-    await api.auth.signIn(config.testUser.email, config.testUser.password);
+    const [, body] = await api.auth.signIn(config.testUser.email, config.testUser.password);
+    mintedPatId = body.pat.id;
   });
 
   test('BK-312: should reject a wrong password and leave GET /me unauthenticated', async ({ api }) => {

@@ -16,6 +16,7 @@
 
 import { existsSync, statSync } from 'node:fs';
 import { test as setup } from '@TestFixture';
+import { trackSigninPats } from '@utils/mintedPats';
 import { config } from '@variables';
 
 const storageStateFile = config.auth.storageStatePath;
@@ -31,6 +32,9 @@ const storageStateFile = config.auth.storageStatePath;
 setup('UI Setup: authenticate via UI', async ({ ui, page }) => {
   console.log('[UI Setup] Starting UI authentication...');
   console.log('[UI Setup] Target: /login');
+
+  // The form's POST /auth/signin mints a PAT: record it so the global teardown revokes it.
+  trackSigninPats(page);
 
   // Navigate to login page (outside of ATC)
   await ui.login.goto();

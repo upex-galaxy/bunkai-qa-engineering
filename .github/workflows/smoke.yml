@@ -124,7 +124,7 @@ jobs:
         with:
           name: smoke-test-results
           path: test-results/
-          retention-days: 10
+          retention-days: 3
 
       - name: Upload Failure Evidence
         if: failure()
@@ -134,7 +134,7 @@ jobs:
           path: |
             test-results/
             playwright-report/
-          retention-days: 10
+          retention-days: 3
 
       - name: Cleanup Workspace
         if: always()
