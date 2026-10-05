@@ -4,16 +4,16 @@
   "templateCommit": "fb5c9f275ba413ca6cb43b9065de338e07f6a934",
   "perComponentCommit": {
     "claude-config": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
-    "scripts": "4f3fd69690ec3141dbae890b06d9d3a547327524",
-    "docs": "4f3fd69690ec3141dbae890b06d9d3a547327524",
-    "cli": "4f3fd69690ec3141dbae890b06d9d3a547327524",
+    "scripts": "cc38ad028bcdaef5f31b5a9716737f4246447bb8",
+    "docs": "cc38ad028bcdaef5f31b5a9716737f4246447bb8",
+    "cli": "cc38ad028bcdaef5f31b5a9716737f4246447bb8",
     "vscode": "4f3fd69690ec3141dbae890b06d9d3a547327524",
     "husky": "4f3fd69690ec3141dbae890b06d9d3a547327524",
     "agents-docs": "4f3fd69690ec3141dbae890b06d9d3a547327524",
     "tooling": "fa79100d98af3e61b350276b0a91c476938474f2",
     "commands": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
-    "skills": "4f3fd69690ec3141dbae890b06d9d3a547327524",
-    "env-template": "4f3fd69690ec3141dbae890b06d9d3a547327524",
+    "skills": "cc38ad028bcdaef5f31b5a9716737f4246447bb8",
+    "env-template": "cc38ad028bcdaef5f31b5a9716737f4246447bb8",
     "agent-compatibility": "4f3fd69690ec3141dbae890b06d9d3a547327524",
     "codex-config": "090c7b73244d70e2f59467d92ddfc50e32b8c9f7",
     "agent-root-config": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
@@ -22,7 +22,7 @@
     "worktree-include": "fb5c9f275ba413ca6cb43b9065de338e07f6a934",
     "orca-config": "fb5c9f275ba413ca6cb43b9065de338e07f6a934",
     "playwright-cli-config": "fb5c9f275ba413ca6cb43b9065de338e07f6a934",
-    "instructions": "4f3fd69690ec3141dbae890b06d9d3a547327524"
+    "instructions": "cc38ad028bcdaef5f31b5a9716737f4246447bb8"
   },
   "syncedComponents": [],
   "ignoreFileSync": {
@@ -143,6 +143,6 @@
     }
   },
   "cliVersion": "8.5",
-  "lastSyncedAt": "2026-10-05T11:05:17.963Z",
+  "lastSyncedAt": "2026-10-05T11:16:54.717Z",
   "variableSystemVersion": 1
 }
