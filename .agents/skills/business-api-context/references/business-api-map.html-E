@@ -108,7 +108,7 @@
           <li>The caller sends <code>Authorization: Bearer bk_pat_...</code> from then on. The secret is shown once and stored only as a hash.</li>
           <li>A longer-lived or admin token needs a browser session: <code>POST /api/v1/tokens</code> is cookie-only.</li>
         </ol>
-        <p><strong>Endpoints:</strong> <code>POST /auth/signup</code>, <code>/auth/confirm</code>, <code>/auth/signin</code>, <code>/auth/magic-link</code>, <code>/auth/check-email</code>, <code>/auth/resend</code>, <code>POST /tokens</code>, <code>GET /me</code>. <strong>Entities:</strong> <code>business-data-context</code> section <code>entity-secret-split</code>. <strong>Features:</strong> <code>business-e2e-context</code> section <code>journey-first-setup</code> and <code>journey-issue-token</code>.</p>
+        <p><strong>Endpoints:</strong> <code>POST /auth/signup</code>, <code>/auth/confirm</code>, <code>/auth/signin</code>, <code>/auth/magic-link</code>, <code>/auth/check-email</code>, <code>/auth/resend</code>, <code>POST /tokens</code>, <code>GET /me</code>. <strong>Entities:</strong> <code>business-data-context</code> section <code>entity-access-tokens</code>. <strong>Features:</strong> <code>business-e2e-context</code> section <code>journey-first-setup</code> and <code>journey-issue-token</code>.</p>
       </section>
       <section id="journey-author-atc" data-sources="openapi:Modules,openapi:User Stories,openapi:Acceptance Criteria,openapi:ATCs,route:app/api/v1/atcs/route.ts" data-updated="2026-10-05" data-migrated-from=".context/business/business-api-map.md">
         <h2>Journey: author an ATC</h2>
@@ -119,7 +119,7 @@
           <li><code>POST /atcs</code> (201) with <code>title</code>, <code>module_id</code>, <code>user_story_id</code>, <code>acceptance_criterion_ids</code>, <code>layer</code> and <code>steps</code>; optional <code>technique</code>, <code>priority</code>, <code>tags</code>, <code>assertions</code>.</li>
           <li>Edit with <code>PATCH /atcs/{id}</code>, reuse with <code>POST /atcs/{id}/duplicate</code>, find with <code>GET /atcs/search</code>.</li>
         </ol>
-        <p>Domain errors a client can branch on: <code>ac_outside_user_story</code>, <code>module_outside_project_subtree</code>, <code>steps_position_invalid</code>, <code>slug_collision</code>. <strong>Capability:</strong> <code>atc:write</code>. <strong>Entities:</strong> <code>entity-atcs</code>, <code>entity-modules</code>, <code>entity-modules</code>, <code>entity-modules</code>. <strong>Features:</strong> <code>journey-author-atc</code>.</p>
+        <p>Domain errors a client can branch on: <code>ac_outside_user_story</code>, <code>module_outside_project_subtree</code>, <code>steps_position_invalid</code>, <code>slug_collision</code>. <strong>Capability:</strong> <code>atc:write</code>. <strong>Entities:</strong> <code>entity-atc</code>, <code>entity-user-story</code>, <code>entity-acceptance-criterion</code>, <code>entity-module</code>. <strong>Features:</strong> <code>journey-author-atc</code>.</p>
       </section>
       <section id="journey-run-test" data-sources="openapi:Tests,openapi:Runs,route:app/api/v1/runs/route.ts,route:app/api/v1/tests/route.ts" data-updated="2026-10-05">
         <h2>Journey: compose a Test and run it</h2>
@@ -131,7 +131,7 @@
           <li><code>POST /runs/{id}/steps/{stepId}/mark</code> sets passed, failed or blocked, with note and evidence URL.</li>
           <li><code>POST /runs/{id}/finish</code> closes it with a verdict; <code>POST /runs/{id}/abort</code> cancels.</li>
         </ol>
-        <p><strong>Capability:</strong> <code>atc:write</code> for tests, <code>run:execute</code> for runs. <strong>Entities:</strong> <code>entity-tests-runs</code>, <code>state-run</code>. <strong>Features:</strong> <code>journey-execute-run</code>.</p>
+        <p><strong>Capability:</strong> <code>atc:write</code> for tests, <code>run:execute</code> for runs. <strong>Entities:</strong> <code>entity-test</code>, <code>entity-run</code>, <code>state-run</code>. <strong>Features:</strong> <code>journey-execute-run</code>.</p>
       </section>
       <section id="journey-report-bug" data-sources="openapi:Bugs,route:app/api/v1/bugs/,route:lib/bugs/constants.ts" data-updated="2026-10-05">
         <h2>Journey: file and move a bug</h2>
@@ -143,7 +143,7 @@
           <li><code>POST /bugs/{id}/status</code> advances one stage at a time: open, in_progress, resolved, closed. Skipping a stage is rejected.</li>
           <li>Read with <code>GET /projects/{id}/bugs</code>, <code>GET /projects/{id}/bugs/heatmap</code> and <code>GET /workspaces/{id}/open-bugs</code>.</li>
         </ol>
-        <p><strong>Entities:</strong> <code>flow-bug-reporting</code>, <code>state-bug</code>. <strong>Features:</strong> <code>journey-report-bug</code>.</p>
+        <p><strong>Entities:</strong> <code>entity-bug</code>, <code>state-bug</code>. <strong>Features:</strong> <code>journey-report-bug</code>.</p>
       </section>
       <section id="journey-upgrade-billing" data-sources="openapi:Billing,openapi:Workspaces,route:app/api/v1/billing/webhook/route.ts,route:lib/billing/" data-updated="2026-10-05">
         <h2>Journey: upgrade a workspace to Cloud</h2>
@@ -155,7 +155,7 @@
           <li>On <code>checkout.session.completed</code> or <code>async_payment_succeeded</code> the plan is applied, but only when Stripe says <code>payment_status = paid</code>. Failed or expired events release the session lock. An unknown session answers 5xx on purpose so Stripe retries.</li>
           <li><code>POST .../billing/checkout/cancel</code> abandons an open session.</li>
         </ol>
-        <p><strong>Entities:</strong> <code>entity-workspaces</code>, <code>flow-billing-upgrade</code>. <strong>Features:</strong> <code>journey-billing-upgrade</code>.</p>
+        <p><strong>Entities:</strong> <code>entity-workspace</code>, <code>entity-billing-checkout-session</code>. <strong>Features:</strong> <code>journey-billing-upgrade</code>.</p>
       </section>
       <section id="journey-invite-member" data-sources="openapi:Invites,route:app/api/v1/workspaces/,route:lib/api/invite-tokens.ts" data-updated="2026-10-05">
         <h2>Journey: invite a teammate</h2>
@@ -166,7 +166,7 @@
           <li><code>POST /invites/accept</code> with <code>token</code> redeems it (404 unknown, 409 already used).</li>
           <li>Admins list, resend or revoke with <code>GET</code>, <code>POST</code>, <code>DELETE /workspaces/{id}/invites/{inviteId}</code>.</li>
         </ol>
-        <p><strong>Entities:</strong> <code>flow-invites-membership</code>. <strong>Features:</strong> <code>journey-invite-teammate</code>.</p>
+        <p><strong>Entities:</strong> <code>entity-workspace-invite</code>, <code>entity-workspace-member</code>. <strong>Features:</strong> <code>journey-invite-teammate</code>.</p>
       </section>
       <section id="architecture" data-sources="route:app/api/v1/,route:lib/api/handler.ts,route:lib/supabase/,route:vercel.json,route:middleware.ts" data-updated="2026-10-05" data-migrated-from=".context/business/business-api-map.md">
         <h2>Architecture behind the API</h2>
@@ -252,7 +252,7 @@
           <li>Rate limiting: the error code <code>rate_limited</code> and 429 responses exist on sign-up and magic link, but I could not find an app-level limiter in <code>lib/api/</code>; it is probably Supabase Auth throttling. Not measured.</li>
           <li>Role-by-role access (viewer, member, admin, owner) is enforced in RLS policies that I did not read route by route; the tier table covers capabilities, not roles.</li>
           <li>Per-route Idempotency-Key requirement was confirmed on four routes by code search; other write routes may accept the header without requiring it.</li>
-          <li><code>business-e2e-context</code> ids were aligned to its generated map on 2026-10-05; its cited <code>business-data-context</code> ids were checked against the generated map on 2026-10-05.</li>
+          <li><code>business-e2e-context</code> ids were aligned to its generated map on 2026-10-05; <code>business-data-context</code> was still a placeholder then, so its cited <code>entity-*</code> and <code>state-*</code> ids are planned slugs to re-check.</li>
           <li>Env values (Stripe price id, Resend sender, Supabase project) were read by name only; no secrets were opened.</li>
         </ul>
       </section>
