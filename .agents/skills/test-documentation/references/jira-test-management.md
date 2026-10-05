@@ -106,7 +106,7 @@ Create a **Test** issue type in the Jira project with the following fields. This
 |-------|------|---------|
 | Summary | Text | TC title per naming convention. |
 | Description | Long text (rich text) | Full TC documentation (Gherkin or steps + metadata). |
-| Test Status | Select list | `Draft`, `In Design`, `READY`, `MANUAL`, `In Review`, `Candidate`, `In Automation`, `Pull Request`, `AUTOMATED`, `DEPRECATED` — exact names from `.agents/jira-workflows.json` (`work_types.test_case`), the authoritative source. |
+| Test Status | Select list | The options `test_status.options` in `.agents/jira-required.yaml` declares (Execution Status, per `tms-conventions.md` §IQL) — the workflow status lives on the Test's own workflow (`.agents/jira-workflows.json` `work_types.test_case`). |
 | Automation Candidate | Checkbox | Redundant with labels but easier to filter in JQL. |
 | Priority | Select list | `Critical`, `High`, `Medium`, `Low`. |
 | Labels | Multi-select | `regression`, `smoke`, `e2e`, `integration`, `automation-candidate`, `manual-only`, etc. |
@@ -586,7 +586,7 @@ Jira Native lacks run history per Test. If historical trend matters, store runs 
 
 ## 11. Local cache — markdown per TC (synced, never hand-authored)
 
-After TMS creation, run `bun run jira:sync-issues get <STORY_KEY>` — `scripts/sync-jira-issues.ts` materializes every `Test` issue linked to the Story into `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/test-cases/TEST-<KEY>-<slug>.md`. The directory is a `[SYNC]` Jira mirror (gitignored — see `AGENTS.md` §9): this skill creates the `Test` issue, links it to the Story, syncs, and READS the materialized file — it never writes into `test-cases/`. This lets `test-automation` hand off without re-reading the TMS. So everything below (Gherkin, Variables table, Refinement Notes, the `outcome` / `labels` metadata) must land in the `Test` issue itself — the Description via the full §7 template, labels as Jira labels — because the synced file only mirrors what Jira holds. A generated file looks like this:
+After TMS creation, run `bun run jira:sync-issues get <STORY_KEY>` — `scripts/sync-jira-issues.ts` materializes every `Test` issue linked to the Story into `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/test-cases/TEST-<KEY>-<slug>.md`. The directory is a `[SYNC]` Jira mirror (gitignored — see `.agents/instructions/agent-local-context-pbi.md`): this skill creates the `Test` issue, links it to the Story, syncs, and READS the materialized file — it never writes into `test-cases/`. This lets `test-automation` hand off without re-reading the TMS. So everything below (Gherkin, Variables table, Refinement Notes, the `outcome` / `labels` metadata) must land in the `Test` issue itself — the Description via the full §7 template, labels as Jira labels — because the synced file only mirrors what Jira holds. A generated file looks like this:
 
 ```markdown
 # TEST: PROJ-123: TC1: should grant access when credentials are valid

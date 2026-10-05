@@ -39,7 +39,7 @@ orca skills installed
 ```
 
 These are **optional and never required**. The stubs teach WHEN, not HOW; the grammar is served by
-the binary on demand (`orca skills get <topic>`), which is what this repo's references ask for on the DEEP topics; the stubs themselves are loaded, not fetched (AGENTS.md §5).
+the binary on demand (`orca skills get <topic>`), which is what this repo's references ask for on the DEEP topics; the stubs themselves are loaded, not fetched (`.agents/instructions/agent-skills-and-mcps.md`).
 Install them if you want the user-level trigger words; skip them and nothing breaks.
 
 Note `orca skills install --local` installs into the current project instead of globally. In THIS
@@ -88,9 +88,9 @@ machine can tell whether you did it, which is the whole problem with a non-versi
 
 ### 3.2 · Credentials for a supervised worker: the harness surfaces, and direnv only for Codex
 
-A launch line can export variables; the native launch cannot, because it has no argv. That used to
-make direnv the only seam. It no longer is: `bun run harness:env` derives from `.env` a per-harness
-credential surface that a worker reads with NO shell involved.
+A launch line can export variables; the native launch cannot, because it has no argv. So
+`bun run harness:env` derives from `.env` a per-harness credential surface that a worker reads with
+NO shell involved.
 
 - **Claude Code workers** read the `env` block of `.claude/settings.local.json`. On macOS/Linux the
   file is resolved from the MAIN checkout's root, so every worktree inherits it with no action

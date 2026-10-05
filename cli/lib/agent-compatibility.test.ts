@@ -9,9 +9,10 @@ import {
   agentContextLines,
   MISSING_ENV_LINE,
   orcaAvailable,
-  PERSONALITY_CONTRACT,
   proposeSessionTitle,
   resolveWorktree,
+  ROUTE_PREFIX,
+  routeStatePath,
   sessionLabel,
   UNPROVISIONED_WORKTREE_LINE,
   worktreeUnprovisioned,
@@ -23,6 +24,7 @@ import {
   CODEX_ENV_LOADER_COMMAND,
   CODEX_HOOK_COMMAND,
   CODEX_HOOK_COMMAND_WINDOWS,
+  CODEX_PROJECT_DOC_MAX_BYTES,
   CODEX_STARTUP_TIMEOUT_SEC,
   declaredMcpIds,
   EXPECTED_MCP,
@@ -34,6 +36,7 @@ import {
   unwrapCodexEnvLoader,
   validateEslintBlockWiring,
   validateHookCompatibility,
+  validateInstructionRouterHooks,
   validateMcpParity,
   validateMcpParityFindings,
   validateOpenCodePluginEntrypoints,
@@ -460,20 +463,15 @@ function repositoryFixture(): string {
 }
 
 describe('shared personality hook', () => {
-  test('emits the contract plus the identity line and exits successfully', () => {
+  test('emits the identity line, not the output contract, and exits successfully', () => {
     const result = runEmitter();
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe('');
     // No harness payload, no CLAUDE_*/CODEX_* variables: plain text, no JSON.
-    expect(result.stdout).toContain(PERSONALITY_CONTRACT);
+    expect(result.stdout).not.toContain('OUTPUT CONTRACT');
     expect(result.stdout).toContain(`${HOOK_IDENTITY_MARKER} worktree=primary session=unknown harness=unknown`);
     expect(result.stdout).not.toContain(HOOK_ORCA_MARKER);
-  });
-
-  test('names AGENTS.md as canonical, never CLAUDE.md', () => {
-    expect(PERSONALITY_CONTRACT).toContain('AGENTS.md');
-    expect(PERSONALITY_CONTRACT).not.toContain('CLAUDE.md');
   });
 
   test('OpenCode 1 (server entrypoint) mutates the system array in place with the same payload', async () => {
@@ -489,9 +487,8 @@ describe('shared personality hook', () => {
     expect(output.system).toBe(originalArray);
     expect(output.system.length).toBe(afterFirst);
     expect(output.system[0]).toBe('base system');
-    expect(output.system[1]).toBe(PERSONALITY_CONTRACT);
     // The label degrades to the raw id: OpenCode exposes no session name.
-    expect(output.system[2]).toContain('session=test harness=opencode');
+    expect(output.system[1]).toContain('session=test harness=opencode');
   });
 
   test('OpenCode 2 (setup entrypoint) registers a context hook that pushes text parts once', async () => {
@@ -510,8 +507,7 @@ describe('shared personality hook', () => {
     expect(Object.keys(hooks)).toEqual(['context']);
     expect(event.system).toBe(originalArray);
     expect(event.system.length).toBe(afterFirst);
-    expect(event.system[1]).toEqual({ type: 'text', text: PERSONALITY_CONTRACT });
-    expect(event.system[2].text).toContain('session=test harness=opencode');
+    expect(event.system[1].text).toContain('session=test harness=opencode');
   });
 });
 
@@ -526,7 +522,7 @@ describe('agent identity', () => {
     expect(run.exitCode).toBe(0);
     const output = hookSpecificOutput(run.stdout);
     expect(output.hookEventName).toBe('UserPromptSubmit');
-    expect(output.additionalContext).toContain(PERSONALITY_CONTRACT);
+    expect(output.additionalContext).not.toContain('OUTPUT CONTRACT');
     expect(output.additionalContext).toContain(
       `${HOOK_IDENTITY_MARKER} worktree=primary session=agentic-qa-boilerplate-7 (${CLAUDE_SESSION_ID.slice(0, 8)}) harness=claude-code`,
     );
@@ -739,7 +735,7 @@ describe('Codex hook portability', () => {
     });
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.toString()).toContain(PERSONALITY_CONTRACT);
+    expect(result.stdout.toString()).toContain(HOOK_IDENTITY_MARKER);
   });
 
   test('renders a Windows command with Git-root and Join-Path resolution', () => {
@@ -845,10 +841,9 @@ describe('hook adapters', () => {
   test('rejects an OpenCode adapter that reassigns output.system', () => {
     const root = contractFixture();
     write(root, '.opencode/plugins/personality-reinject.js', [
-      'import { PERSONALITY_CONTRACT } from \'../../.agents/hooks/personality-reinject.mjs\';',
       'export const PersonalityReinject = async () => ({',
       '  \'experimental.chat.system.transform\': async (_input, output) => {',
-      '    output.system = [...output.system, PERSONALITY_CONTRACT];',
+      '    output.system = [...output.system, \'line\'];',
       '  },',
       '});',
       '',
@@ -923,6 +918,103 @@ describe('hook adapters', () => {
     expect(validateHookCompatibility(root)).toContain(
       'claude hook command does not name a repository-relative hook script.',
     );
+  });
+});
+
+describe('instruction router hooks', () => {
+  const ROUTER_L0 = '# L0\n<!-- router:start -->\n| When the request involves | Read | Was | Then |\n|---|---|---|---|\n| git | `agent-git.md` | §11 | - |\n<!-- router:end -->\n';
+
+  function rearmSettings(command: string, windows?: string, rearmOn: string[] = ['compact', 'clear']): string {
+    const hook: Record<string, unknown> = { type: 'command', command, timeout: 5 };
+    if (windows) { hook.commandWindows = windows; }
+    const sessionStart = rearmOn.map(matcher => ({ matcher, hooks: [hook] }));
+    return `${JSON.stringify({ hooks: { UserPromptSubmit: [{ hooks: [hook] }], SessionStart: sessionStart } }, null, 2)}\n`;
+  }
+
+  function routerFixture(): string {
+    const root = contractFixture('agent compatibility router ');
+    write(root, 'AGENTS.md', ROUTER_L0);
+    write(root, '.claude/settings.json', rearmSettings(CLAUDE_HOOK_COMMAND));
+    write(root, '.codex/hooks.json', rearmSettings(CODEX_HOOK_COMMAND, CODEX_HOOK_COMMAND_WINDOWS));
+    return root;
+  }
+
+  test('the real repository routes on every host it can', () => {
+    expect(validateInstructionRouterHooks(REPO_ROOT)).toEqual([]);
+  });
+
+  test('binds only once AGENTS.md carries the router', () => {
+    const root = contractFixture();
+    expect(validateInstructionRouterHooks(root)).toEqual([]);
+    write(root, 'AGENTS.md', '# single-file layout\n');
+    expect(validateInstructionRouterHooks(root)).toEqual([]);
+    write(root, 'AGENTS.md', ROUTER_L0);
+    const errors = validateInstructionRouterHooks(root);
+    for (const after of ['compaction', '/clear']) {
+      expect(errors.some(e => e.startsWith(`claude must re-arm the routes after ${after}`))).toBe(true);
+      expect(errors.some(e => e.startsWith(`codex must re-arm the routes after ${after}`))).toBe(true);
+    }
+    expect(validateHookCompatibility(root)).toEqual(errors);
+  });
+
+  test('accepts a compact and a clear SessionStart on both command hosts', () => {
+    expect(validateInstructionRouterHooks(routerFixture())).toEqual([]);
+  });
+
+  test('rejects a host that re-arms on compaction only', () => {
+    const root = routerFixture();
+    write(root, '.claude/settings.json', rearmSettings(CLAUDE_HOOK_COMMAND, undefined, ['compact']));
+    write(root, '.codex/hooks.json', rearmSettings(CODEX_HOOK_COMMAND, CODEX_HOOK_COMMAND_WINDOWS, ['compact']));
+    expect(validateInstructionRouterHooks(root)).toEqual([
+      `claude must re-arm the routes after /clear: a SessionStart group with matcher "clear" running ${CLAUDE_HOOK_COMMAND}`,
+      'codex must re-arm the routes after /clear: a SessionStart group with matcher "clear" running the Codex hook command (and its Windows variant).',
+    ]);
+  });
+
+  test('rejects an OpenCode adapter that stopped classifying the prompt or declaring OpenCode 2', () => {
+    const root = routerFixture();
+    const plugin = readFileSync(join(REPO_ROOT, '.opencode/plugins/personality-reinject.js'), 'utf8')
+      .replace('\'chat.message\'', '\'chat.params\'')
+      .replaceAll('ROUTER-ONLY', 'router only');
+    write(root, '.opencode/plugins/personality-reinject.js', plugin);
+    expect(validateInstructionRouterHooks(root)).toEqual([
+      'OpenCode personality adapter must classify the prompt in chat.message with the shared routeLines (OpenCode 1).',
+      'OpenCode personality adapter must declare the OpenCode 2 degradation (ROUTER-ONLY: no hook carries the prompt).',
+    ]);
+  });
+
+  test('rejects an emitter that lost the classifier', () => {
+    const root = routerFixture();
+    const emitter = readFileSync(join(REPO_ROOT, '.agents/hooks/personality-reinject.mjs'), 'utf8')
+      .replace('export function routeLines', 'function routeLines');
+    write(root, '.agents/hooks/personality-reinject.mjs', emitter);
+    expect(validateInstructionRouterHooks(root)).toEqual(['Shared hook emitter must export routeLines(): the ROUTE: lines have one classifier.']);
+  });
+
+  test('rejects an always-on file Codex would cut', () => {
+    const root = routerFixture();
+    write(root, 'AGENTS.md', `${ROUTER_L0}${'x'.repeat(CODEX_PROJECT_DOC_MAX_BYTES)}\n`);
+    expect(validateInstructionRouterHooks(root)[0]).toContain(`Codex cuts the always-on file at ${CODEX_PROJECT_DOC_MAX_BYTES} bytes`);
+  });
+
+  test('OpenCode 1 classifies in chat.message, routes through the system transform once, re-arms on compaction', async () => {
+    const sessionID = `compat-route-${process.pid}-${Date.now()}`;
+    const plugin = await opencodePlugin.server({ worktree: REPO_ROOT });
+    const turn = async (text: string) => {
+      await plugin['chat.message']({ sessionID }, { message: {}, parts: [{ type: 'text', text }] });
+      const output = { system: [] as string[] };
+      await plugin['experimental.chat.system.transform']({ sessionID, model: {} }, output);
+      return output.system.filter(line => line.startsWith(ROUTE_PREFIX));
+    };
+    try {
+      expect(await turn('commit and push')).toEqual([`${ROUTE_PREFIX} .agents/instructions/agent-git.md (git)`]);
+      expect(await turn('push again')).toEqual([]);
+      await plugin['experimental.session.compacting']({ sessionID });
+      expect(await turn('push again')).toEqual([`${ROUTE_PREFIX} .agents/instructions/agent-git.md (git)`]);
+    }
+    finally {
+      rmSync(routeStatePath(REPO_ROOT, sessionID), { force: true });
+    }
   });
 });
 

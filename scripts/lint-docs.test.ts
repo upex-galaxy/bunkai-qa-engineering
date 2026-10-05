@@ -153,6 +153,39 @@ describe('lint-docs roster and scripts', () => {
     expect(findings.map(f => `${f.file}:${f.target}`)).toEqual(['AGENTS.md:ghost-flow']);
   });
 
+  test('once the instructions are split, the router is read from the skills section, not from AGENTS.md', () => {
+    skill('alpha-flow');
+    skill('ghost-flow');
+    write('AGENTS.md', router(['alpha-flow', 'ghost-flow']));
+    write('.agents/instructions/agent-skills-and-mcps.md', router(['alpha-flow']));
+    write('.agents/instructions/30-tools.md', 'Run `bun run gone-script`.');
+    write('package.json', '{"scripts":{}}');
+    const findings = lintDocs(root).findings.filter(f => f.kind === 'roster' || f.kind === 'script');
+    expect(findings.map(f => `${f.file}:${f.target}`)).toEqual([
+      '.agents/instructions/agent-skills-and-mcps.md:ghost-flow',
+      '.agents/instructions/30-tools.md:gone-script',
+    ]);
+  });
+
+  test('a skill the project added is routed from its own agent-project.md table, which bun run up never overwrites', () => {
+    skill('alpha-flow');
+    skill('beta-flow');
+    skill('ghost-flow');
+    write('.agents/instructions/agent-skills-and-mcps.md', router(['alpha-flow']));
+    write('.agents/instructions/agent-project.md', [
+      '# Project',
+      '## Project context skills',
+      '| Skill | Trigger | Purpose |',
+      '|---|---|---|',
+      '| `beta-flow` | "beta" | Project workflow. |',
+      '## Other',
+      '| `ghost-flow` | a table under another heading does not route |',
+      '',
+    ].join('\n'));
+    const findings = lintDocs(root).findings.filter(f => f.kind === 'roster');
+    expect(findings.map(f => `${f.file}:${f.target}`)).toEqual(['.agents/instructions/agent-skills-and-mcps.md:ghost-flow']);
+  });
+
   test('the human pages are not a skill list: a README that names no skill passes (Critical Rule #17)', () => {
     write('packages/create-agentic-qa/package.json', '{}');
     skill('alpha-flow');

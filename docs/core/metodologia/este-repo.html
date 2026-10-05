@@ -442,11 +442,12 @@ components    -&gt;  módulo del producto  (qué parte del producto toca)</code>
       <dl class="defs">
         <dt><code>AGENTS.md</code></dt>
         <dd>
-          La memoria del agente, cargada en cada sesión: reglas críticas (§1), capa de
-          comportamiento (§2, espejo humano en
-          <a href="../personalidad.html">Personalidad de la IA</a>), modo de orquestación (§3), mapa
-          de qué cargar por tarea (§4), registro de skills y MCPs (§5) y resolución de herramientas
-          (§6).
+          La memoria del agente, en capas. <code>AGENTS.md</code> carga en cada sesión: la frase
+          obligatoria de cada regla crítica (§1), la capa de comportamiento entera (§2, espejo
+          humano en <a href="../personalidad.html">Personalidad de la IA</a>), el núcleo del modo de
+          orquestación (§3) y un router. El router nombra las secciones de
+          <code>.agents/instructions/</code> que se leen a pedido: mapa de qué cargar por tarea
+          (§4), registro de skills y MCPs (§5), resolución de herramientas (§6) y el resto.
         </dd>
         <dt><code>.agents/skills/REGISTRY.md</code></dt>
         <dd>
@@ -482,7 +483,8 @@ components    -&gt;  módulo del producto  (qué parte del producto toca)</code>
         descripción, o la invocas por nombre. Las de la comunidad las instala
         <code>cli/install.ts</code> a nivel de proyecto y no están versionadas en el repo. El
         catálogo es <code>.agents/skills/REGISTRY.md</code> (generado por
-        <code>bun run skills:registry</code>). <code>AGENTS.md</code> §5 es el router de frases
+        <code>bun run skills:registry</code>).
+        <code>.agents/instructions/agent-skills-and-mcps.md</code> es el router de frases
         disparadoras que el agente usa para elegir skill, no el inventario.
       </p>
 
@@ -498,9 +500,10 @@ components    -&gt;  módulo del producto  (qué parte del producto toca)</code>
       <h2 id="integraciones">Integraciones</h2>
       <p>
         Las skills nunca nombran una herramienta concreta. Escriben una etiqueta como
-        <code>[DB_TOOL]</code> y la tabla de resolución de <code>AGENTS.md</code> (§6) decide qué
-        herramienta es. Si cambias la fila, cambias el backend sin tocar ninguna skill. La regla
-        general: primero la CLI (gasta menos tokens) y el MCP como fallback.
+        <code>[DB_TOOL]</code> y la tabla de resolución de
+        <code>.agents/instructions/agent-tool-resolution.md</code> decide qué herramienta es. Si
+        cambias la fila, cambias el backend sin tocar ninguna skill. La regla general: primero la
+        CLI (gasta menos tokens) y el MCP como fallback.
       </p>
       <div class="table-wrap">
         <table>
@@ -530,12 +533,12 @@ components    -&gt;  módulo del producto  (qué parte del producto toca)</code>
       </div>
       <p>
         Dos filas de ejemplo; la tabla completa, con todas las etiquetas, es la de
-        <code>AGENTS.md</code> §6. La modalidad del TMS se decide una vez por proyecto. En
-        <strong>jira-xray</strong>, ATP y ATR son Test Plan y Test Execution de Xray. En
-        <strong>jira-native</strong> (sin Xray) viven en custom fields de la historia y comentarios,
-        y los test cases son issues de tipo Test. Las guías de conexión están en
-        <a href="../setup/jira-xray.html">Jira y Xray</a>, <a href="../setup/dbhub.html">DBHub</a>,
-        <a href="../setup/openapi.html">OpenAPI</a> y
+        <code>.agents/instructions/agent-tool-resolution.md</code>. La modalidad del TMS se decide
+        una vez por proyecto. En <strong>jira-xray</strong>, ATP y ATR son Test Plan y Test
+        Execution de Xray. En <strong>jira-native</strong> (sin Xray) viven en custom fields de la
+        historia y comentarios, y los test cases son issues de tipo Test. Las guías de conexión
+        están en <a href="../setup/jira-xray.html">Jira y Xray</a>,
+        <a href="../setup/dbhub.html">DBHub</a>, <a href="../setup/openapi.html">OpenAPI</a> y
         <a href="../exploracion/postman.html">Postman</a>.
       </p>
 
@@ -553,8 +556,9 @@ components    -&gt;  módulo del producto  (qué parte del producto toca)</code>
         >).
       </p>
       <p>
-        Qué hace cada server y cuándo se usa está en la tabla de MCPs de <code>AGENTS.md</code> §5;
-        las variables que necesita cada uno las lista <code>bun run setup:doctor</code>.
+        Qué hace cada server y cuándo se usa está en la tabla de MCPs de
+        <code>.agents/instructions/agent-skills-and-mcps.md</code>; las variables que necesita cada
+        uno las lista <code>bun run setup:doctor</code>.
       </p>
 
       <h2 id="pbi">El árbol <code>.context/PBI/</code></h2>
@@ -600,7 +604,8 @@ components    -&gt;  módulo del producto  (qué parte del producto toca)</code>
       </div>
       <p>
         El árbol completo, con el tier de cada ruta, está en
-        <code>.context/PBI/README.md</code> (versionado) y en <code>AGENTS.md</code> §9.
+        <code>.context/PBI/README.md</code> (versionado) y en
+        <code>.agents/instructions/agent-local-context-pbi.md</code>.
       </p>
       <p>Tres reglas para trabajar con esta caché:</p>
       <ul>

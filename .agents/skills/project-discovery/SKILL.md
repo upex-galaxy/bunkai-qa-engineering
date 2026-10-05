@@ -64,7 +64,7 @@ Canonical reading order when starting cold on a discovery run. Read in order; st
 
 This skill is **project-scope**: no `<scope>` segment. Session state lives directly at `.session/project-discovery/{plan.md, progress.md}` per `agentic-qa-core/references/session-management.md` §3 + §9. This skill runs long (hours, four hard-gate phases) and benefits most from per-phase checkpoints: if interrupted between Phase 2 (Architecture) and Phase 3 (Infrastructure), resume reads `progress.md` and skips back to the first incomplete phase without re-prompting the user for already-confirmed scope.
 
-This skill is compliant with the doctrine in `AGENTS.md` §"Orchestration Mode (Subagent Strategy)" and the session contract in `.agents/skills/agentic-qa-core/references/session-management.md`. Per-phase dispatch decisions live in `Pick the scope first` below: Fresh = heavy subagent delegation per phase; Boilerplate adoption = medium; Brownfield + Context refresh = main session only.
+This skill is compliant with the doctrine in `AGENTS.md` §3 (Orchestration Mode) and the session contract in `.agents/skills/agentic-qa-core/references/session-management.md`. Per-phase dispatch decisions live in `Pick the scope first` below: Fresh = heavy subagent delegation per phase; Boilerplate adoption = medium; Brownfield + Context refresh = main session only.
 
 ---
 
@@ -150,11 +150,11 @@ Each phase has a **completion gate**: before moving on, the phase's sections mus
 Four sub-steps, in order:
 
 1. **Project Connection** -- repo paths, tech stack detection, environment URLs, credentials from `.env`, team contacts. Output: `.context/project-config.md`.
-2. **Project Assessment** -- current testing maturity (frameworks in place, CI presence, lint/typecheck, coverage). Output: the `## Project Assessment (Phase 1)` block. HIGH risks (a hardcoded-secret hit included, path only) are recorded there and carried to the handoff as seed input for `project-context` mode `test-plan` (the MTP). No separate risk file is written.
+2. **Project Assessment** -- current testing maturity (frameworks in place, CI presence, lint/typecheck, coverage). Output: the `## Project Assessment (Phase 1)` block in `.agents/instructions/agent-project.md`. HIGH risks (a hardcoded-secret hit included, path only) are recorded there and carried to the handoff as seed input for `project-context` mode `test-plan` (the MTP). No separate risk file is written.
 3. **Business Model Discovery** -- problem statement, target users, value proposition, revenue model (if any). Output: the `overview` and `business-model` sections of the `business-domain-context` map.
 4. **Domain Glossary** -- core entities and concepts, UI-label vs code-identifier mapping, enumerations. Output: one `term-<slug>` section per core entity or concept, plus `enumerations` and `discovery-gaps`, in the same map.
 
-**Completion gate**: `bun run context:map business-domain-context --list` prints sections and no placeholder notice; `.context/project-config.md` exists and is non-empty; the `## Project Assessment (Phase 1)` block is in canonical `AGENTS.md`. Sanity-check content (soft gates, surfaced to the human as warnings, not hard aborts):
+**Completion gate**: `bun run context:map business-domain-context --list` prints sections and no placeholder notice; `.context/project-config.md` exists and is non-empty; the `## Project Assessment (Phase 1)` block is in `.agents/instructions/agent-project.md`. Sanity-check content (soft gates, surfaced to the human as warnings, not hard aborts):
 - Several `term-` sections exist, one per real core entity from the schema (not one catch-all section, not only enumerations).
 - `overview` and `business-model` carry `data-sources` (the reader's `--list` shows them).
 - `project-config.md` has a `## Tech Stack` section AND a `## Environments` section.
@@ -210,7 +210,7 @@ Read `references/phase-3-infrastructure.md` when running any Phase 3 sub-step. C
 **Goal**: prove the testing framework can reach the team's issue tracker, without duplicating content. Phase 4 writes no file.
 
 One sub-step:
-1. **Backlog connection check** -- connect to `{{ISSUE_TRACKER}}` via `[ISSUE_TRACKER_TOOL]`, confirm the project key in `.agents/project.yaml`, run `bun run jira:check` (read `package.json` first to confirm the script), and confirm the hierarchy the sync will use is declared in `.agents/jira-required.yaml`. NEVER write `.context/PBI/README.md` or the committed `templates/`: the access recipe lives in `.context/PBI/README.md` and AGENTS.md §9.
+1. **Backlog connection check** -- connect to `{{ISSUE_TRACKER}}` via `[ISSUE_TRACKER_TOOL]`, confirm the project key in `.agents/project.yaml`, run `bun run jira:check` (read `package.json` first to confirm the script), and confirm the hierarchy the sync will use is declared in `.agents/jira-required.yaml`. NEVER write `.context/PBI/README.md` or the committed `templates/`: the access recipe lives in `.context/PBI/README.md` and `.agents/instructions/agent-local-context-pbi.md`.
 
 > **Per-ticket PBI is NOT generated by this skill.** It is materialized later by `/sprint-testing` via `bun run jira:sync-issues get <KEY> --include-comments`, which writes the canonical synced tree `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/` (Module = Epic, 1:1). Those local `.md` files are a READ-ONLY cache of Jira (Jira = source of truth). This skill does NOT create per-ticket `story.md`.
 

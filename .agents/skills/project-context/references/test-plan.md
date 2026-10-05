@@ -33,7 +33,7 @@ This is **NOT** a flow description (→ `business-data-context`), a journey or f
 |--------|--------|----------------|------|
 | `business-data-context` map | **HARD REQUIREMENT** | Critical flows, state machines, automatic processes, integrations, business rules | `bun run context:map business-data-context` |
 | `business-e2e-context` map | Optional — warn if missing | Journeys, feature catalog, CRUD matrix, feature flags, high-risk tags, QA relevance matrix | `bun run context:map business-e2e-context` |
-| Discovery risk seed | If available | The HIGH risks `project-discovery` recorded in its Phase 1 assessment and carried in its handoff (severity, evidence path) | The `## Project Assessment (Phase 1)` block in `AGENTS.md`, or the handoff the user pastes |
+| Discovery risk seed | If available | The HIGH risks `project-discovery` recorded in its Phase 1 assessment and carried in its handoff (severity, evidence path) | The `## Project Assessment (Phase 1)` block in `.agents/instructions/agent-project.md` (`AGENTS.md` on a project discovered before the move), or the handoff the user pastes |
 | `infra-context` map | If available | NFR sections (`nfr-<slug>`: performance, security, reliability, observability budgets), external services, environments | `bun run context:map infra-context` (`--list`, then `--section nfr-<slug>`) |
 | Domain vocabulary | If available | Business terms, so flows and risks are named the way the business names them | `bun run context:map business-domain-context` |
 | Legacy `.context/risk-assessment.md` (input only) | Only when a project still holds one | Earlier risk findings, merged into the discovery seed | Read file; never delete or rewrite it |
@@ -146,7 +146,7 @@ ASCII box with project name + one-line intent ("What to test in this system, and
 
 ### 2. Executive risk map
 
-Narrative paragraph (3–5 sentences) framing the system's most fragile areas, followed by:
+A short narrative paragraph framing the system's most fragile areas, followed by:
 
 ```markdown
 | Priority  | Flow                       | Why it matters                   | Depends on / Affects         |
@@ -155,7 +155,7 @@ Narrative paragraph (3–5 sentences) framing the system's most fragile areas, f
 | HIGH      | Auth & session management  | Security, locks out every flow   | Everything gated by login    |
 ```
 
-Cap at 7–10 rows. Anything below HIGH goes to §8 as a short list.
+CRITICAL and HIGH flows only. Anything below HIGH goes to §8 as a short list.
 
 ### 3. What to test first and why
 
@@ -203,7 +203,7 @@ Grouped by theme, not by flow: concurrency, data limits, timezone / DST, permiss
 
 ### 9. Pre-release checklist (priority-ordered)
 
-Short, action-oriented. No more than 15 items. Ordered CRITICAL first, then HIGH. Each line is one check phrased as "Verify X does Y under Z". No TC IDs (those live in the TMS).
+Short, action-oriented, sized to fit the Epic's description budget. Ordered CRITICAL first, then HIGH. Each line is one check phrased as "Verify X does Y under Z". No TC IDs (those live in the TMS).
 
 ### 10. What is NOT in this plan
 

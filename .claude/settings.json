@@ -70,7 +70,9 @@
       "Skill(pr-review-lead)",
       "Skill(session-handoff)",
       "mcp__exa__*",
-      "Skill(test-framework-adaptation)"
+      "Skill(test-framework-adaptation)",
+      "mcp__tavily__*",
+      "mcp__postman__*"
     ],
     "deny": [
       "Bash(rm -rf *)",
@@ -99,6 +101,28 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/.agents/hooks/personality-reinject.mjs\"",
             "timeout": 5,
             "statusMessage": "Loading output contract..."
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.agents/hooks/personality-reinject.mjs\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.agents/hooks/personality-reinject.mjs\"",
+            "timeout": 5
           }
         ]
       }

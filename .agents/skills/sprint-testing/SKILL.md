@@ -156,7 +156,7 @@ This skill runs at two altitudes, and each is a real session scope per `agentic-
 
 `test-session-memory.md` exists at the ISSUE altitude only and is a SEPARATE concern from `plan.md`: it carries TMS modality + issue context + stage state shared across the 4 sub-agent dispatches (domain memory). All three coexist per issue — `plan.md` indexes the session, `progress.md` decides the next stage, `test-session-memory.md` holds the cross-stage shared payload.
 
-This skill is compliant with the doctrine in `AGENTS.md` §"Orchestration Mode (Subagent Strategy)" and the session contract in `.agents/skills/agentic-qa-core/references/session-management.md`. Every dispatch follows the 7-component briefing format defined in `.agents/skills/agentic-qa-core/references/briefing-template.md`, and the pattern selected per stage matches the decision guide in `.agents/skills/agentic-qa-core/references/dispatch-patterns.md`. This skill operates in two modes (single-issue and sprint-wide) and BOTH modes use the same four dispatch points per issue — Session Start -> Stage 1 -> Stage 2 -> Stage 3. The only difference is that sprint-wide loops them once per issue. The full briefings (Goal / Context docs / Project Standards (auto-resolved) / Skills to load / Exact instructions / Report format / Rules) live in `references/sprint-orchestration.md` §"Sub-agent prompt templates".
+This skill is compliant with the doctrine in `AGENTS.md` §3 (Orchestration Mode) and the session contract in `.agents/skills/agentic-qa-core/references/session-management.md`. Every dispatch follows the 7-component briefing format defined in `.agents/skills/agentic-qa-core/references/briefing-template.md`, and the pattern selected per stage matches the decision guide in `.agents/skills/agentic-qa-core/references/dispatch-patterns.md`. This skill operates in two modes (single-issue and sprint-wide) and BOTH modes use the same four dispatch points per issue — Session Start -> Stage 1 -> Stage 2 -> Stage 3. The only difference is that sprint-wide loops them once per issue. The full briefings (Goal / Context docs / Project Standards (auto-resolved) / Skills to load / Exact instructions / Report format / Rules) live in `references/sprint-orchestration.md` §"Sub-agent prompt templates".
 
 | Stage                                              | Pattern    | Subagent role                                                                                                                                                                  |
 |----------------------------------------------------|------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -240,6 +240,8 @@ Execute it with `bun run jira:sync-issues jql "<query>"` (resolves every slug an
 
 ## Workflow — one pipeline for all modes
 
+Where a Gotcha or a reference disagrees with §"TC creation timing" or §"Stage 1 Set-first order", those sections win.
+
 ```
 Session Start (always first)
     -> PBI folder + context.md · session dir + test-session-memory.md
@@ -287,8 +289,10 @@ Stage 3 — Reporting
 ---> Hand off (cross-skill, NOT this skill):
        Stage 4 -> test-documentation
        Stage 5 -> test-automation
+       Stage 6 -> regression-testing
+```
 
-### TC creation timing (modality-aware) — AUTHORITATIVE
+### TC creation timing (modality-aware)
 
 > Resolves the one question that decides this skill's whole shape: *when does a test case become a work item in the TMS?* Guiding principle: **a test is persisted into the REGRESSION repository because it will be re-executed (manual or automated), never to hit a count.** The mechanism differs by modality because the TMS tools differ — an Xray `Test` issue is an **execution unit**, a Jira-native `Test` issue is **documentation**.
 
@@ -297,10 +301,19 @@ Stage 3 — Reporting
 | | **Modality jira-native** | **Modality jira-xray** (`bun xray` CLI) |
 |---|---|---|
 | Stage 1 (Planning) | TC **outlines only** (names + 1-line precond/expected in the ATP). **No `Test` work items** — a native `Test` issue IS documentation, so it waits for the Stage-4 regression-worthy gate. | **ASK the format once per batch** (see "Test-case format — ask once per batch" below), then **create + execute** Xray `Test` issues for the **planned outlines**, at *executable* detail (preconditions + runnable steps), and run them via a **Test Execution** — all in one pass. By Xray's plugin design the `Test` is the execution unit, so generating these artifacts is what makes the rest of the Xray flow work. All created Tests are aggregated into the Story's **ATS** and the Plan/Execution lists derive from that membership (see "Stage 1 Set-first order" below). **Manual** tests are created **without inline steps**, then steps are added one-by-one (see "Manual Xray test steps — two-step creation"). |
+| Stage 2 (Execution) | Run planned outlines **+ explore beyond them**; track outline status (PASS/FAIL) in `test-session-memory.md`. | Execute the created Tests in the Test Execution; **explore beyond them**. A throwaway exploratory probe becomes a `Test` ONLY if it found a defect or is worth repeating — otherwise it stays as session evidence / a bug, NOT a `Test` (avoid one-shot-Test explosion). |
+| Stage 4 (`test-documentation`) | **Create** `Test` work items **only for regression-worthy** scenarios (Candidate/Manual) after ROI; apply the feature/Epic label (native's organizer — no Test Set entity). Deferred → report only, no TMS `Test`. | **Select + promote**: from the sprint Xray Tests, the regression-worthy ones (Candidate/Manual) get **enriched** (rich Gherkin, parameterization, edge elaboration), **labelled** `regression-candidate`, **added to the feature Test Set** (1:1 Epic, created lazily if missing) **and the Regression Test Plan**. Deferred sprint Tests stay tied to their Test Execution as historical record — **not promoted, not deleted**. |
+
+**Invariants (both modalities):**
+- The **persistent regression set** is ROI-gated in Stage 4, never assumed in Stage 1.
+- The wide 1:N technique derivation feeds the ATP outlines + execution — in native it stays as outlines; in Xray it materializes as sprint `Test` artifacts. Either way it does NOT auto-populate the regression repository.
+- Heavy specification ("specify much more") is spent only on Stage-4 regression candidates, never on Deferred scenarios.
+
+See `agentic-qa-core/references/test-design-doctrine.md` (derive widely) + `test-documentation` Three-Outcomes (persist narrowly).
 
 **Whenever this stage DOES create a `Test` work item, its summary MUST already match the canonical form** `{US_ID}: TC#: should <expected outcome> [<connector> <condition>] [given <precondition>]` — `{US_ID}` = the Story key, `#` = a stable index within that Story, assigned once and never renumbered. A sprint-era title is not a draft to be tidied later: Stage 4 re-derives and verifies it on promotion (`test-documentation/SKILL.md` §"Title on promotion"), and a Test created outside the form forces a rename there. Full grammar + anti-patterns: `references/acceptance-test-planning.md` §TC nomenclature.
 
-#### Which stage creates the TCs — `{{TC_CREATION_STAGE}}` (project knob) — AUTHORITATIVE
+#### Which stage creates the TCs — `{{TC_CREATION_STAGE}}` (project knob)
 
 The table above is the **`auto`** behavior, which is the shipped default. `.agents/project.yaml` → `testing.tc_creation_stage` (referenced as `{{TC_CREATION_STAGE}}`) lets a project override it. **Resolve it at the modality gate (Session Start step 0), alongside `{{TMS_CLI}}`, and record the resolved value in `test-session-memory.md` next to the modality** — it is sticky for the session, exactly like the modality.
 
@@ -314,7 +327,7 @@ The table above is the **`auto`** behavior, which is the shipped default. `.agen
 
 **On an unset / unrecognized value**: treat it as `auto` and say so once. Do not ask the user mid-stage; a missing knob is the shipped default, not a gap.
 
-#### Test-case format — ask once per batch (Modality jira-xray, Stage 1) — AUTHORITATIVE
+#### Test-case format — ask once per batch (Modality jira-xray, Stage 1)
 
 Before creating the batch of Xray `Test` issues, **ASK THE USER ONCE PER BATCH** which test-case format to use, and apply the chosen format to **the whole batch**:
 
@@ -331,7 +344,7 @@ Default *suggestion* (the user still picks): **Gherkin** for automation-candidat
 
 At N=1 this section is unchanged: the executor asks the user directly.
 
-#### Manual Xray test steps — two-step creation (Modality jira-xray) — AUTHORITATIVE
+#### Manual Xray test steps — two-step creation (Modality jira-xray)
 
 Xray Cloud **silently drops** steps passed inline to `test create`. So whenever the batch format is **Manual**, create each Test in **two steps**, never inline:
 
@@ -340,7 +353,7 @@ Xray Cloud **silently drops** steps passed inline to `test create`. So whenever 
 
 Optionally **verify** with `[TMS_TOOL] Get Test` that the steps landed. Gherkin/Cucumber Tests are unaffected (the Gherkin is one field) — this two-step rule applies to **Manual** tests only.
 
-#### Stage 1 Set-first order (Modality jira-xray) — AUTHORITATIVE
+#### Stage 1 Set-first order (Modality jira-xray)
 
 The Story's coverage backbone is its **ATS** (Acceptance Test Set — `ATS: {US_ID}: {story title}`, `{US_ID}` = the Story key; mandatory per Story, even with a single TC). Stage 1 runs in THIS order:
 
@@ -359,24 +372,13 @@ The Story's coverage backbone is its **ATS** (Acceptance Test Set — `ATS: {US_
    | ATR | `{{jira.status.test_execution.active}}` | **stays `active`** — the run has not happened yet | — |
    | STP (sprint altitude) | `{{jira.status.test_plan.planning}}` | `{{jira.status.test_plan.ready}}` once the sprint scope is set | `{{jira.transition.test_plan.designed}}` |
 
-   Each sprint `Test` is **parented to the QA Test Repository epic** (`qa.qa_epics.test_repository_epic`) — never the product Epic, never unparented (`AGENTS.md` §9). A TC left at `draft` and unparented is the exact defect this rule exists to kill.
+   Each sprint `Test` is **parented to the QA Test Repository epic** (`qa.qa_epics.test_repository_epic`) — never the product Epic, never unparented (`.agents/instructions/agent-local-context-pbi.md`). A TC left at `draft` and unparented is the exact defect this rule exists to kill.
 
 7. **On an unmapped slug**: run the fallback protocol in `agentic-qa-core/references/artifact-lifecycle.md` §4 — list the LIVE transitions, propose the closest synonym in ONE `AskUserQuestion`, fire the live id on yes, recommend `bun run jira:sync-workflows`. Never skip a transition silently.
 
 TC∈ATS membership is ALWAYS a `TC→ATS` issue link (`test` slug), in this modality and in jira-native alike; here the Xray-internal membership (GraphQL) is written as well, never instead. TC∈ATP / TC∈ATR membership stays Xray-internal. An instance WITHOUT the Test Set work type has no ATS — fall back to direct `TC→Story` links. Canon: `agentic-qa-core/references/traceability-linking.md` §9.
 
 Intended stage asymmetry (not drift): in-sprint Stage 1 creates the TCs first and groups them into the ATS incrementally as they land, while Stage 4 module-driven (`test-documentation`) pre-creates the containers before the first TC because parallel sharding needs the targets to exist.
-| Stage 2 (Execution) | Run planned outlines **+ explore beyond them**; track outline status (PASS/FAIL) in `test-session-memory.md`. | Execute the created Tests in the Test Execution; **explore beyond them**. A throwaway exploratory probe becomes a `Test` ONLY if it found a defect or is worth repeating — otherwise it stays as session evidence / a bug, NOT a `Test` (avoid one-shot-Test explosion). |
-| Stage 4 (`test-documentation`) | **Create** `Test` work items **only for regression-worthy** scenarios (Candidate/Manual) after ROI; apply the feature/Epic label (native's organizer — no Test Set entity). Deferred → report only, no TMS `Test`. | **Select + promote**: from the sprint Xray Tests, the regression-worthy ones (Candidate/Manual) get **enriched** (rich Gherkin, parameterization, edge elaboration), **labelled** `regression-candidate`, **added to the feature Test Set** (1:1 Epic, created lazily if missing) **and the Regression Test Plan**. Deferred sprint Tests stay tied to their Test Execution as historical record — **not promoted, not deleted**. |
-
-**Invariants (both modalities):**
-- The **persistent regression set** is ROI-gated in Stage 4, never assumed in Stage 1.
-- The wide 1:N technique derivation feeds the ATP outlines + execution — in native it stays as outlines; in Xray it materializes as sprint `Test` artifacts. Either way it does NOT auto-populate the regression repository.
-- Heavy specification ("specify much more") is spent only on Stage-4 regression candidates, never on Deferred scenarios.
-
-See `agentic-qa-core/references/test-design-doctrine.md` (derive widely) + `test-documentation` Three-Outcomes (persist narrowly).
-       Stage 6 -> regression-testing
-```
 
 Session-start is the universal entry. **Single-issue mode runs the same 4 dispatches as sprint-wide**: Session Start -> Stage 1 -> Stage 2 -> Stage 3. The orchestrator dispatches them sequentially (each subagent's report feeds the next briefing's "Context docs"). The full briefings live in `references/sprint-orchestration.md`. Use them verbatim — do NOT inline any stage just because there is only one issue. Sprint-wide loops these same four dispatches through the `PENDING` rows of the sprint `plan.md` queue and, after each issue closes, appends one entry to the sprint `progress.md` and one comment to the STP.
 
@@ -480,7 +482,7 @@ Every invocation starts by initializing the session, even in sprint-wide mode. S
    ```
    Jira-mirrored files (`story.md`, `acceptance-criteria.md`, `acceptance-test-plan.md`, `acceptance-test-results.md`, `comments.md`, etc.) are NOT hand-written here — they are materialized by `bun run jira:sync-issues get <KEY> --include-comments`.
 
-   The whole PBI tree is gitignored (it is a Jira cache; see `AGENTS.md` §9), so `context.md` and `evidence/` are local-only by construction. `test-session-memory.md` lives in `.session/` instead because a re-sync rewrites the PBI cache wholesale and this file is what every resume and every sub-agent reads.
+   The whole PBI tree is gitignored (it is a Jira cache; see `.agents/instructions/agent-local-context-pbi.md`), so `context.md` and `evidence/` are local-only by construction. `test-session-memory.md` lives in `.session/` instead because a re-sync rewrites the PBI cache wholesale and this file is what every resume and every sub-agent reads.
 8. **Writes the session `plan.md`** at `.session/sprint-testing/<scope>/plan.md` per `agentic-qa-core/references/session-management.md` §6 — Goal (one sentence per ticket), Inputs (PBI paths + TMS modality + Team Discussion summary), Approach (mode + per-stage dispatch pattern), Phase breakdown (Session Start / Stage 1 / Stage 2 / Stage 3 with dispatch pointer + exit condition), Risks (from triage), Verification checklist, Cross-references (cites `context.md`, `test-session-memory.md`, `acceptance-test-plan.md`, `acceptance-test-results.md`).
 9. Writes a Story Explanation and **STOPS** for user confirmation. Do not proceed until the user OK's.
 10. After OK, appends the first progress entry `## Session Start — <ts>` with `status: completed`, `next: Stage 1 — Planning` to `.session/sprint-testing/<scope>/progress.md`.
@@ -538,7 +540,7 @@ Run the same 4 dispatches; the Stage 1 briefing additionally applies the veto + 
 6. **Story TCs are PLANNED in Stage 1 and executed in Stage 2** ("planning first"). Three exceptions, all intended: the bug repro `Test` created at fix-verification time (Gotcha 3); an exploratory probe that found a defect or is worth repeating, which becomes a `Test` in Stage 2 (§"TC creation timing"); and jira-native, which creates no `Test` work items in-sprint at all. Which stage creates them is §"TC creation timing (modality-aware)" and `{{TC_CREATION_STAGE}}`, never this gotcha.
 7. **Explain the story -> WAIT for OK**. Never auto-proceed past Session Start without user confirmation. Same for bug triage — present the decision and wait.
 8. **Evidence directory**: never repoint the shared `.playwright/cli.config.json` `outputDir` — it stays at the tool-owned directory it ships with (`agentic-qa-core/references/evidence-conventions.md` §1 Bucket A + §5). Every `[AUTOMATION_TOOL]` capture instead carries an explicit destination path resolving to `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/evidence/`, which is mandatory anyway because `outputDir` does not apply to `.png`.
-9. **Traceability check after Stage 1** (Modality jira-xray): run the **three-edge check** (`agentic-qa-core/references/traceability-linking.md` §Traceability verification: Link List on Story + ATP + ATR, or `bun xray trace {TICKET}`) and verify the Set-first model — the **coverage backbone is the ATS**: `ATS: {US_ID}: {story title}` linked to the Story via the `test` slug ("is tested by") and holding ALL the Story's TCs (Xray-internal membership, never issue links in this modality). **Story↔ATP and Story↔ATR** links exist as administrative traceability — they contribute ZERO coverage (live-verified). The ATP's and the ATR's test lists are DERIVED from the ATS membership. **Individual TCs are NOT linked directly to the Story** (last-resort only, for instances with no Test Set work type). So verify: Story↔ATS (`test` slug) + ATS membership complete + Story↔ATP, Story↔ATR (administrative) + Plan/Exec lists matching the ATS. Full doctrine: `agentic-qa-core/references/traceability-linking.md` + `test-documentation/references/tms-architecture.md`. Bugs: the repro Test links Bug↔Test via the `test` slug at fix-verification time; before that, traceability "gaps" for missing TCs are expected and OK.
+9. **Traceability check after Stage 1** (Modality jira-xray): run the **three-edge check** (`agentic-qa-core/references/traceability-linking.md` §Traceability verification: Link List on Story + ATP + ATR, or `bun xray trace {TICKET}`) and verify the Set-first model — the **coverage backbone is the ATS**: `ATS: {US_ID}: {story title}` linked to the Story via the `test` slug ("is tested by") and holding ALL the Story's TCs (one `TC→ATS` `test` link per TC plus the Xray-internal membership, `agentic-qa-core/references/traceability-linking.md` §9). **Story↔ATP and Story↔ATR** links exist as administrative traceability — they contribute ZERO coverage (live-verified). The ATP's and the ATR's test lists are DERIVED from the ATS membership. **Individual TCs are NOT linked directly to the Story** (last-resort only, for instances with no Test Set work type). So verify: Story↔ATS (`test` slug) + ATS membership complete + Story↔ATP, Story↔ATR (administrative) + Plan/Exec lists matching the ATS. Full doctrine: `agentic-qa-core/references/traceability-linking.md` + `test-documentation/references/tms-architecture.md`. Bugs: the repro Test links Bug↔Test via the `test` slug at fix-verification time; before that, traceability "gaps" for missing TCs are expected and OK.
 10. **Graduated stop/pause protocol**: TOOL FAILURE -> stop, report, await user. **Blocking** BUG_FOUND (smoke/env down, data integrity, security-exploitable) -> pause, present bug, await decision; NEVER dispatch the next sub-agent while unresolved. **Non-blocking** finding (cosmetic, minor validation, edge-case on a non-critical TC, framework-default pending recalibration) -> the Execution subagent logs it and CONTINUES the pass; the orchestrator surfaces it at Stage 2 close. A FAIL is not auto-Critical — triage first (severity per `references/reporting-templates.md` §1.4; security/auth/framework-default recalibrated at §5.0). See `references/exploration-patterns.md` "Finding triage".
 11. **Sprint log timing (sprint-wide)**: append the sprint-altitude `progress.md` entry — and its mirror STP comment — only AFTER Stage 3 completes and the orchestrator-side checklist verifies. Not earlier. `progress.md` is append-only in both directions: never rewrite an entry, never edit a posted comment; a correction is a NEW entry and a NEW comment. There is no local sprint tracker file to update.
 12. **Language**: all artifacts, TMS content, and commit messages in English. Mirror the user's language only in conversation.
@@ -612,7 +614,7 @@ All references are self-contained. Load one at a time.
 - **S7.** NEVER skip the smoke pass before triforce (UI / API / DB) exploration. Smoke validates the environment; triforce validates the feature. Order matters — a broken env produces false-positive bug reports.
 - **S8.** NEVER mix UI + API + DB findings into a single bug ticket. File per layer (or per root-cause cluster) so triage and routing stay clean.
 - **S9.** NEVER reuse a PBI folder across tickets. Every Story or Bug gets its own `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/` directory; cross-ticket contamination breaks evidence + traceability.
-- **S10.** NEVER transition the ticket Ready For QA → In Test without explaining the story to the user AND waiting for confirmation (AGENTS.md §8 — Session Start is not a one-shot, it's a hand-off gate).
+- **S10.** NEVER transition the ticket Ready For QA → In Test without explaining the story to the user AND waiting for confirmation (`.agents/instructions/agent-ticket-work.md` — Session Start is not a one-shot, it's a hand-off gate).
 - **S11.** NEVER skip the auto-stage promote (Session Start → Stage 1 → Stage 2 → Stage 3) after a phase completes — each promote is a checkpoint that writes a `progress.md` entry and feeds the next subagent's Context docs.
 - **S12.** NEVER file a bug without a reproducible repro path AND evidence (screenshot, trace, log, network HAR, or DB row reference). "It failed for me once" is not a bug ticket.
 - **S13.** NEVER hardcode `customfield_NNNNN` IDs in ATP / ATR / QA comments or in any reference under this skill. Resolve every Jira field via `{{jira.<slug>}}` against `.agents/jira-required.yaml`.

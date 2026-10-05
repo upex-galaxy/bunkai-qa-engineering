@@ -9,16 +9,6 @@ metadata:
   kind: workflow
 ---
 
-<!-- Model preferences (advisory; dispatchers may use to route) -->
-<!--
-model_preferences:
-  foundation: opus       # high-leverage architectural work
-  planning: sonnet       # structured writing
-  implementation: sonnet # default for code work
-  review: opus           # critical analysis
-  archive: haiku         # mechanical close-out
--->
-
 # Agentic QA Onboard — First-time tour of this repo
 
 Activate when a user lands on this repo for the first time and asks "where do I start?", "how does QA work here?", or invokes `/agentic-qa-onboard`. The skill is a guided tour, not an executor: it explains the stack, the QA pipeline (the IQL stages, always by name: Shift-Left before the sprint, then Planning, Execution, Reporting, Documentation, Automation and Regression), the MCPs, and the env vars that everything depends on, then hands off to the right downstream skill.
@@ -195,7 +185,7 @@ If you cloned this repo and you don't yet have `bun run setup` complete, start t
 | Language    | TypeScript (strict mode)                     |
 | Runtime     | bun                                          |
 | Lint/format | ESLint + Prettier (pre-commit hooks)         |
-| AI agent    | the hosts declared in `AGENTS.md` (§4.5)     |
+| AI agent    | the hosts declared in `.agents/instructions/agent-harnesses.md`     |
 
 The stack is intentionally locked. If your QA project needs a different stack (Cypress, Robot Framework, etc.), this boilerplate is not the right starting point — the KATA architecture is Playwright-specific.
 
@@ -209,7 +199,7 @@ Run the interactive installer once after cloning:
 bun run setup
 ```
 
-This bootstraps `.agents/`, installs the gentle-ai `engram` component (minimal preset), configures the MCPs in `.mcp.json`, downloads Playwright browsers, installs the community skills `cli/install.ts` declares (`USER_LEVEL_SKILLS` + `PROJECT_LEVEL_SKILLS`), verifies the `${VAR}` placeholders in the committed `.mcp.json` against your `.env`, and generates the per-harness credential surfaces from it (the same thing `bun run harness:env` does). Full details in [`INSTALLER.md`](../../../INSTALLER.md).
+This bootstraps `.agents/`, wires Engram persistent memory into each selected agent (`engram setup`), configures the MCPs in `.mcp.json`, downloads Playwright browsers, installs the community skills `cli/install.ts` declares (`USER_LEVEL_SKILLS` + `PROJECT_LEVEL_SKILLS`), verifies the `${VAR}` placeholders in the committed `.mcp.json` against your `.env`, and generates the per-harness credential surfaces from it (the same thing `bun run harness:env` does). Full details in [`INSTALLER.md`](../../../INSTALLER.md).
 
 After setup, fill `.env` with the credentials the rest of the workflow expects (see "Critical env vars" below), then run `bun run harness:env` and restart the agent session: MCP servers read credentials at startup. `bun run setup:doctor` is the health check.
 
@@ -237,7 +227,7 @@ The QA work in this boilerplate runs as named stages: Shift-Left before the spri
 | Stage | Skill | When | What happens |
 | ----- | ----- | ---- | ------------ |
 | Shift-Left | `/shift-left-testing` | PRE-SPRINT (batch) | AC refinement on a batch of backlog Stories, gap-spotting, early authoring of the Story's single ATP into the `{{jira.acceptance_test_plan}}` field (outline maturity, no Test Plan item yet: `/sprint-testing` Planning creates the item FROM that field and refines the same ATP), tracked by a `[QA] Shift-Left Review` subtask, transition `backlog → shift_left_qa → estimation`. Adds labels `shift-left-reviewed` + `shift-left-{YYYY-MM-DD}` (the dated one dates the pass for the <30-day freshness check; the Stage 1 short-circuit opens only on the published ATP body, never on the labels alone). |
-| Planning → Execution → Reporting | `/sprint-testing` | IN-SPRINT (ticket) | Per-ticket: ATS, ATP, then ATR. Smoke + trifuerza (UI/API/DB) exploration. Planning short-circuits its first phases if the Story passed Shift-Left <30 days ago. |
+| Planning → Execution → Reporting | `/sprint-testing` | IN-SPRINT (ticket) | Per-ticket: ATS, ATP, then ATR. Smoke + trifuerza (UI/API/DB) exploration. Planning short-circuits its first phases only when the Story's published ATP body backs a Shift-Left pass under 30 days old (the labels alone open nothing). |
 | Documentation | `/test-documentation` | IN-SPRINT (post-QA) | Refine the executed test cases into TMS Tests, one ROI verdict per scenario (Candidate/Manual/Deferred), Candidates added to the RTP. |
 | Automation | `/test-automation` | POST-SPRINT | KATA-compliant E2E + API tests on Playwright. Plan → Code → Review, with a required separate verifier. |
 | Regression | `/regression-testing` | PRE-RELEASE | CI suite execution. Failure classification. GO/CAUTION/NO-GO release verdict. |
@@ -289,7 +279,7 @@ You confirm at the gates.
 | Authoring new automated test for a Candidate TC                            | `/test-automation`                                                   |
 | Refactor of the boilerplate itself — KATA bases, fixtures, cli/, scripts/  | `/framework-development`                                             |
 
-`/framework-development` covers framework evolution (changes to the boilerplate's own infrastructure, not per-ticket test writing). Self-contained Plan → Code → Verify → Archive pipeline; works under the minimal install preset (no SDD-* skills required).
+`/framework-development` covers framework evolution (changes to the boilerplate's own infrastructure, not per-ticket test writing). Self-contained Plan → Code → Verify → Archive pipeline; needs nothing outside the repo.
 
 ---
 
@@ -343,21 +333,15 @@ Verify your config with `bun run vars:check` (should report 0 errors when fully 
 
 ## Local skills (committed in this repo)
 
-The committed skills, with their triggers and purpose, are listed in `AGENTS.md` §5 and indexed in `.agents/skills/REGISTRY.md` (generated by `bun run skills:registry`); this skill keeps no copy.
+The committed skills, with their triggers and purpose, are listed in `.agents/instructions/agent-skills-and-mcps.md` (a project's own skills, in the `## Project context skills` table of `.agents/instructions/agent-project.md`) and indexed in `.agents/skills/REGISTRY.md` (generated by `bun run skills:registry`); this skill keeps no copy.
 
 ---
 
-## What `bun run setup` installs via gentle-ai
+## Persistent memory (Engram)
 
-`bun run setup` runs `gentle-ai install --preset minimal` — installs ONLY the **`engram`** component (persistent memory binary + MCP adapter + agent config). No SDD-* skills, no foundation skills.
+`bun run setup` wires **Engram** into each selected agent with the engram binary's own `engram setup <agent>`: it registers the Engram MCP server and nothing else. The boilerplate does not use gentle-ai's workflow layer; its own workflow skills (`/shift-left-testing`, `/sprint-testing`, `/test-automation`, `/test-documentation`, `/regression-testing`) cover Plan → Code → Verify natively.
 
-Rationale: this repo already covers Plan → Code → Verify natively in its workflow skills (`/shift-left-testing`, `/sprint-testing`, `/test-automation`, `/test-documentation`, `/regression-testing`). SDD ceremony does not apply to test authoring.
-
-Want the explicit SDD ceremony for an architectural change of your own? Run manually:
-
-```bash
-gentle-ai install --components engram,sdd --agent <claude-code|opencode|cursor>
-```
+Two things worth telling a new user: the agent saves memories only when it decides to (`mem_save`), and search matches keywords, not meaning, so a short keyword query finds more than a full question.
 
 Full details in [`INSTALLER.md`](../../../INSTALLER.md).
 

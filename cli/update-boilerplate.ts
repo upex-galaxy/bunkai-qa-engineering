@@ -10,7 +10,7 @@
 import type { CompatibilityCheck } from './lib/agent-compatibility.ts';
 import type { ProtectedWatchEntry } from './lib/updater-drift';
 import type { HarnessMigrationResult } from './lib/updater-harness-migration.ts';
-import type { GateResult, HeldBackComponent, ParityFinding, ParityReport } from './lib/updater-parity';
+import type { GateResult, HeldBackComponent, InstructionRowInput, ParityFinding, ParityReport } from './lib/updater-parity';
 import type { PbiCacheFact } from './lib/updater-pbi';
 import type { Component, DeprecatedFile, ReportSink, RunSummary, UpdaterConfig } from './lib/updater-types';
 import { execSync, spawnSync } from 'node:child_process';
@@ -47,6 +47,17 @@ import {
   readHarnessMigrationResultFromEnv,
 } from './lib/updater-harness-migration.ts';
 import { groupIgnoreLines } from './lib/updater-ignore';
+import {
+  deliverProjectInstructions,
+  INSTRUCTIONS_COMPONENT,
+  INSTRUCTIONS_DIR,
+  LEGACY_PROJECT_INSTRUCTIONS,
+  moveLegacyProjectInstructions,
+  PROJECT_INSTRUCTIONS,
+  PROJECT_INSTRUCTIONS_TEMPLATE,
+  RETIRED_SECTION_FILES,
+  runLegacyMigrationCheck,
+} from './lib/updater-instructions';
 import {
   ABORTED_OUTRO,
   archivedSkillsToReport,
@@ -214,12 +225,23 @@ export const RETIRED_SKILL_FILES: DeprecatedFile[] = [
   ].map(path => ({ path, component: 'skills', reason: RETIRED_SYNC_REASON, deprecatedSince: '8.5' })),
 ];
 
-export const DEPRECATED_FILES: DeprecatedFile[] = [...RETIRED_COMMAND_WRAPPERS, ...RETIRED_SKILL_FILES];
+// The instruction sections once carried a number (`80-git.md`): the renamed
+// files arrive through the `instructions` component, the numbered copies leave
+// here, each saved to `.backups/` first because a project may have kept a merge
+// in one (`updater.protected_paths`).
+export const DEPRECATED_FILES: DeprecatedFile[] = [...RETIRED_COMMAND_WRAPPERS, ...RETIRED_SKILL_FILES, ...RETIRED_SECTION_FILES];
 
 export const COMPONENTS: Component[] = [
   // `skills` stays its own component (not folded into `agent-compatibility` as
   // upstream dev does): `bun run up skills --skill a,b` narrows it by subdirectory.
   { name: 'skills', type: 'directory', paths: [SKILLS_CANONICAL_DIR] },
+  // The progressive-disclosure sections behind the AGENTS.md ROUTER. Synced
+  // like a skill (overwrite, `.backups/` copy, an "overwritten edit" row,
+  // `updater.protected_paths` to keep a merge), EXCEPT `agent-project.md`: that one
+  // is the project's own (excludePaths below) and arrives once, written from
+  // the generic `agent-project.md.template` this component ships
+  // (`deliverProjectInstructions`, afterApply).
+  { name: INSTRUCTIONS_COMPONENT, type: 'directory', paths: [INSTRUCTIONS_DIR] },
   // One source, three harnesses: the hook emitter and the OpenCode hook
   // adapter. `.claude/skills` is NOT here: it is the generated alias, rebuilt
   // by the afterApply compatibility hook. The `commands` component (the alias
@@ -548,9 +570,11 @@ interface RunFacts {
   allowListAdded: string[]
   /** One-line evidence for the unresolved-doctrine ledger row, when AGENTS.md carries debt. */
   doctrineDebt: string | null
+  /** Rows about the instruction sections: the `agent-project.md` stub delivery and a pre-split AGENTS.md. */
+  instructionRows: InstructionRowInput[]
   parity: { findings: ParityFinding[], report: ParityReport } | null
 }
-const runFacts: RunFacts = { compat: null, envNewKeys: [], migration: null, migrationPlanned: false, aliasDeferred: false, shadowingCommandsMoved: [], gates: [], gatesSkippedReason: null, promptKept: false, pbiCache: null, allowListAdded: [], doctrineDebt: null, parity: null };
+const runFacts: RunFacts = { compat: null, envNewKeys: [], migration: null, migrationPlanned: false, aliasDeferred: false, shadowingCommandsMoved: [], gates: [], gatesSkippedReason: null, promptKept: false, pbiCache: null, allowListAdded: [], doctrineDebt: null, instructionRows: [], parity: null };
 
 // --- ENV-VAR DRIFT DETECTION (afterApply hook) ---
 //
@@ -1225,6 +1249,58 @@ export function resolveProtectedWatchlist(cwd: string, warn: (message: string) =
 //    content is `@AGENTS.md`, so "drift" there is a defect, not a merge.
 //  - `README.md` is rewritten wholesale per project; an advisory would be noise.
 
+// --- INSTRUCTION SECTIONS (afterApply hook) ---
+//
+// `agent-project.md` is never synced (excludePaths): a project that still has
+// it under its old name `project.md` gets it moved, content kept; a project
+// without either gets the generic stub, once, behind the leak gate. A project still on the pre-split
+// monolith AGENTS.md gets one row mapping its old headings to the sections;
+// its AGENTS.md is never rewritten. Under --dry-run nothing is written.
+function makeInstructionsHook(sink: ReportSink, dryRun: boolean): () => Promise<void> {
+  return async () => {
+    const cwd = process.cwd();
+    runFacts.instructionRows = [];
+    const legacy = moveLegacyProjectInstructions(cwd, { dryRun });
+    if (legacy.kind === 'moved') {
+      sink.step(`${dryRun ? '[dry-run] Se movería' : 'Movido'} \`${LEGACY_PROJECT_INSTRUCTIONS}\` a \`${PROJECT_INSTRUCTIONS}\` (mismo contenido; las secciones ahora se llaman agent-<tema>).`);
+      runFacts.instructionRows.push({
+        path: PROJECT_INSTRUCTIONS,
+        evidence: `informational: ${dryRun ? 'would be' : 'was'} moved from ${LEGACY_PROJECT_INSTRUCTIONS} byte for byte (the instruction sections carry readable agent- names now); still this project's own and never synced`,
+        suggested: 'keep project',
+      });
+    }
+    else if (legacy.kind === 'both') {
+      runFacts.instructionRows.push({
+        path: LEGACY_PROJECT_INSTRUCTIONS,
+        evidence: `both ${LEGACY_PROJECT_INSTRUCTIONS} (old name) and ${PROJECT_INSTRUCTIONS} exist; only the second is read: merge the old file's rules into it by hand, then delete the old one`,
+        suggested: 'merge',
+      });
+    }
+    // A dry-run move left the file under its old name: the stub would not be delivered.
+    const outcome = legacy.kind === 'moved' ? { kind: 'present' as const } : deliverProjectInstructions(cwd, UPSTREAM_DIR, { dryRun });
+    if (outcome.kind === 'delivered') {
+      sink.step(`${dryRun ? '[dry-run] Se crearía' : 'Creado'} \`${PROJECT_INSTRUCTIONS}\` desde la plantilla generica (tus reglas propias van ahi).`);
+      runFacts.instructionRows.push({
+        path: PROJECT_INSTRUCTIONS,
+        evidence: `informational: ${dryRun ? 'would be' : 'was'} delivered once from upstream's generic stub (${PROJECT_INSTRUCTIONS_TEMPLATE}); it is this project's own from now on and never synced`,
+        suggested: 'keep project',
+      });
+    }
+    else if (outcome.kind === 'refused') {
+      sink.warn(`Plantilla de \`${PROJECT_INSTRUCTIONS}\` rechazada: ${outcome.reasons.join('; ')}.`);
+      runFacts.instructionRows.push({
+        path: PROJECT_INSTRUCTIONS_TEMPLATE,
+        evidence: `upstream's stub was NOT delivered, it carries the boilerplate's identity: ${outcome.reasons.join('; ')}; create ${PROJECT_INSTRUCTIONS} by hand (frontmatter id: project) and report the stub upstream`,
+        suggested: 'decide',
+      });
+    }
+    const migration = runLegacyMigrationCheck(cwd, UPSTREAM_DIR);
+    if (migration) {
+      runFacts.instructionRows.push({ path: DOCTRINE_FILE, evidence: migration.evidence, suggested: 'merge', side: 'kept', note: migration.note });
+    }
+  };
+}
+
 /** The PBI cache migration recipe (gitignored, single-use); the parity table carries one row pointing here. */
 const PBI_MIGRATION_PROMPT_PATH = path.join('.agents', 'prompts', 'pbi-cache-migration.md');
 
@@ -1438,6 +1514,7 @@ function makeParityHook(sink: ReportSink, priorLockSha: string, dryRun: boolean,
       allowListAdded: runFacts.allowListAdded,
       doctrineDebt: runFacts.doctrineDebt,
       doctrineFile: DOCTRINE_FILE,
+      instructionRows: runFacts.instructionRows,
       localEdits: (summary.localEditsOverwritten ?? []).map(edit => ({
         ...edit,
         backupPath: summary.backupDir ? path.join(summary.backupDir, edit.path) : null,
@@ -1929,6 +2006,12 @@ async function main(): Promise<void> {
     // silent replacement.
     excludePaths: [
       ...GENERATED_PATHS,
+      // Upstream's own overlay carries the boilerplate's own exceptions (its
+      // Git Strategy): it never travels. A project gets the stub instead.
+      PROJECT_INSTRUCTIONS,
+      // Its name before the `agent-` prefix: the project's own copy is moved by
+      // the instructions hook, never classified by the sync.
+      LEGACY_PROJECT_INSTRUCTIONS,
     ],
     // The boilerplate's own design material. `docs` is a synced component, so
     // without this every consumer project inherits our proposals and backlogs as
@@ -1959,6 +2042,7 @@ async function main(): Promise<void> {
             // Read-only: records what the real run would add, writes nothing.
             makeAllowListHook(UPSTREAM_DIR, sink, true),
             async () => { runFacts.doctrineDebt = runDoctrineLedger(process.cwd(), UPSTREAM_DIR, { dryRun: true }); },
+            makeInstructionsHook(sink, true),
             // Read-only detection so the preview's table matches the real run's.
             makePbiCacheMigrationHook({ promptOutPath: path.join(process.cwd(), PBI_MIGRATION_PROMPT_PATH), dryRun: true }, sink, (fact) => { runFacts.pbiCache = fact; }),
             makeParityHook(sink, priorLockSha, true, watchlist),
@@ -1978,6 +2062,10 @@ async function main(): Promise<void> {
             // only when the section is actually written. Runs before the parity
             // hook, which folds its one row in.
             async () => { runFacts.doctrineDebt = runDoctrineLedger(process.cwd(), UPSTREAM_DIR); },
+            // After the sync delivered the sections: the project's own
+            // `agent-project.md` from the stub (once), and the migration row for a
+            // pre-split AGENTS.md. Before the parity hook, which folds them in.
+            makeInstructionsHook(sink, false),
             async () => detectEnvVarDrift(UPSTREAM_DIR, sink, nonInteractive),
             // ONE schema-driven hook for `.agents/project.yaml`, replacing the
             // two hand-written ones (`git_strategy`, `qa_epics`). The two

@@ -1,0 +1,61 @@
+# Instruction sections (progressive disclosure)
+
+`AGENTS.md` is the always-on layer: every host loads it on every session (Claude Code through the `CLAUDE.md` import, OpenCode and Codex natively). It holds only what must bind on every turn: the binding sentence of each critical rule, the behavioural layer, the orchestration core, the load protocol, the ROUTER and the memory triggers.
+
+Everything else lives here, one file per topic. A model reads a section when the ROUTER in `AGENTS.md` names it for the request at hand, or when the per-prompt hook injects a `ROUTE:` line naming it. A section binds exactly like `AGENTS.md` once it applies.
+
+## How a section reaches the model
+
+Two paths, and the LOAD PROTOCOL in `AGENTS.md` makes both binding:
+
+1. **The ROUTER.** The table between `<!-- router:start -->` and `<!-- router:end -->` in `AGENTS.md`. Its rows are request kinds, not features, so it stays fixed: a new topic grows a section and its `triggers:`, not a row.
+2. **The `ROUTE:` line.** `.agents/hooks/personality-reinject.mjs` reads that same table and every section's frontmatter from disk on each prompt, classifies the prompt, and adds one line per file the session has not been routed to yet: `ROUTE: read .agents/instructions/agent-git.md (git)`, or `ROUTE: read package.json` for an import. There is no generated copy of the router, so the table the model reads and the one the classifier runs cannot drift.
+
+The classifier rules:
+
+- A row fires when the prompt matches its ANCHOR, the first file of its `Read` cell; every file of a fired row is routed. A file shared by two rows therefore does not drag the other row in.
+- A section matches through its `triggers:` (regex sources, case-insensitive, English and Spanish) or its `paths:` (a repo path named in the prompt). An import that anchors a row alone (`@package.json`) has no frontmatter and uses the generic `IMPORT_ROW_TRIGGERS` in the emitter, kept identical across the boilerplates.
+- **Per-session dedupe.** A state file per checkout and session, under the system temp directory, remembers what was routed: a prompt that needs nothing new adds nothing.
+- **Re-arm after compaction or `/clear`.** `SessionStart` with matcher `compact` or `clear` (Claude Code, Codex) or `experimental.session.compacting` (OpenCode 1) clears that state, so a file the compaction or the clear dropped is routed again the next time a prompt needs it.
+- **OpenCode 2 is router-only**: no documented hook hands a plugin the prompt text, so the model follows the ROUTER and the LOAD PROTOCOL with no `ROUTE:` cue. A declared degradation, re-verified on OpenCode upgrades.
+
+A miss is fixed in the section's `triggers:` and the prompt is added to the labelled set in `cli/lib/fixtures/instruction-router-eval.json`, whose `targets` (recall, precision) `cli/lib/instruction-router.test.ts` asserts. Relabelling a prompt to hide a false hit is not a fix.
+
+## How a section is shaped
+
+Each file opens with a frontmatter block the hook and the lint read:
+
+```yaml
+---
+id: git                       # kebab-case, unique: the file stem without `agent-` (agent-git.md)
+title: 'Git workflow'
+load_when: 'any git, branch, commit, push or PR intent'
+triggers: ['\bgit\b', '\bcommit', '\bpush']   # regex sources, case-insensitive
+paths: ['.husky/', '.github/']                 # paths whose edit implies this section
+---
+```
+
+Every file here but this `README.md` starts with `agent-`, so its name says it comes from the agent setup, and carries no number: the order of the ROUTER rows is the order. The `id` is what the hook routes and the tag a `ROUTE:` line shows. The headings inside a section keep the numbers they carry in `AGENTS.md` citations (`§9` is the `## 9.` heading of the PBI section), so a citation resolves through the ROUTER's `Was` column.
+
+## Ownership
+
+| File | Owner | On `bun run up` |
+|---|---|---|
+| `AGENTS.md` | the project | parity rows, never overwritten |
+| every section here except `agent-project.md` | upstream | synced like a skill: overwritten, a project edit saved to `.backups/` with an "overwritten edit" parity row; list the path in `updater.protected_paths` to keep a merge |
+| `agent-project.md` | the project | never synced; a project without one receives `agent-project.md.template`, once |
+| `agent-project.md.template` | upstream | synced: the generic stub a project's `agent-project.md` starts from (never the boilerplate's own `agent-project.md`, which holds its own exceptions) |
+| this `README.md` | upstream | synced |
+
+A project's own rule goes in `agent-project.md` (or a project context skill for knowledge about the system under test), never into a synced section, where the next sync would replace it. The same holds for the router row of a skill the project authored: it goes in the `## Project context skills` table of `agent-project.md`, its trigger phrases in that file's `triggers:`.
+
+A project scaffolded before this split keeps its monolith `AGENTS.md`: the sync delivers the sections, never rewrites `AGENTS.md`, and the parity report maps each old heading to the section that now carries it and names the headings that are the project's own (they move to `agent-project.md`). `instructions:check` skips such a project until its `AGENTS.md` has the ROUTER.
+
+## Editing rules
+
+- Edit the section that owns the topic; never paste section prose back into `AGENTS.md`.
+- A new topic gets a ROUTER row only when no existing row's request kind covers it; usually it grows an existing section and its `triggers:` instead.
+- A `NEVER` / `MUST` line in a section must stay reachable by the actor: its sentence is verbatim in `AGENTS.md`, or it cites `Rule #N`, binding: `/<skill>` (whose compact rules carry it) or enforced: `bun run <script>` (a gate).
+- Critical rules: the binding sentence lives in `AGENTS.md` §1 verbatim; the full text lives in `agent-critical-rules.md` under the same number and name.
+
+`bun run instructions:check` proves all of the above: the L0 byte budget (a target that warns, a ceiling that fails, a higher ceiling for a project's own additions, and Codex's cut: the constants at the top of `scripts/lint-instructions.ts`), a stub that carries none of the boilerplate's identity, every file named `agent-<id>`, every section routed, every ROUTER row resolving, frontmatter shape, triggers that compile, rule sentences verbatim and every binding line reachable.
