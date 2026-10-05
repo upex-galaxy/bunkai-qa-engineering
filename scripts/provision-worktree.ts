@@ -28,13 +28,13 @@
  * fails, `bun run agents:compat` fails).
  */
 
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { platform } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 
 // Node built-ins only on the other side, so this static import works before
 // `bun install` has run in the worktree being provisioned.
-import { PROVISION_COPIES } from '../cli/lib/worktree.ts';
+import { HARNESS_ENV_BACKUP_DIR, OPENCODE_SECRET_DIR, PROVISION_COPIES } from '../cli/lib/worktree.ts';
 
 const PREFIX = '[provision-worktree]';
 
@@ -61,9 +61,9 @@ function showHelp(): void {
 \x1B[1mWHAT IT DOES\x1B[0m
   1. Refuses to run if [path] resolves to the PRIMARY checkout.
   2. Copies every gitignored input a worktree cannot rebuild, each only when
-     the primary has it: .env, .env.local, .envrc.local,
-     .claude/settings.local.json, .auth/, api/.openapi-config.json, the local
-     MCP overrides (mode 0600; chmod skipped on Windows), api/openapi.json and
+     the primary has it: .env, .env.local, .claude/settings.local.json,
+     .auth/, api/.openapi-config.json, the local MCP overrides (mode 0600;
+     chmod skipped on Windows), api/openapi.json and
      .template/installer.state.json. One list, PROVISION_COPIES in
      cli/lib/worktree.ts, which .worktreeinclude mirrors.
   3. Runs \`bun install --frozen-lockfile\` inside the target.
@@ -71,11 +71,11 @@ function showHelp(): void {
      .claude/skills alias).
   5. Copies gitignored T3 skill directories under .agents/skills/.
   6. Creates an EMPTY .auth/opencode/<VAR> placeholder for every {file:}
-     reference in opencode.jsonc that the .auth/ copy did not supply (a
-     missing target breaks OpenCode's whole config; an empty file does not).
-  7. Runs \`direnv allow <worktree>\` ONLY when direnv is installed AND the
-     primary checkout's .envrc is already allowed; otherwise says why not.
-  8. Prints a summary + a hint to run \`bun run context:hydrate\` for the
+     reference a LEGACY opencode.jsonc carries that the .auth/ copy did not
+     supply (a missing target breaks OpenCode's whole config). A config on the
+     .env loader has none. .auth/opencode/ itself is copied only for such a
+     config, and the retirement backup (.auth/harness-env-backup/) never is.
+  7. Prints a summary + a hint to run \`bun run context:hydrate\` for the
      .context/PBI/ cache (not copied — it is per-session Jira state).
 
   Never copies .session/ — see the file header for why.
@@ -175,6 +175,18 @@ function secureChmodRecursive(target: string): void {
   }
 }
 
+/** `.auth/` children a worktree must not inherit (see `cli/lib/harness-env.ts`). */
+const RETIRED_COPIES = new Set([
+  HARNESS_ENV_BACKUP_DIR,
+  ...(opencodeReadsFileRefs(TARGET) ? [] : [OPENCODE_SECRET_DIR]),
+].map(path => path.split('/').join(sep)));
+
+/** True while the TARGET's opencode.jsonc still carries a legacy `{file:.auth/opencode/...}` reference. */
+function opencodeReadsFileRefs(root: string): boolean {
+  const path = join(root, 'opencode.jsonc');
+  return existsSync(path) && readFileSync(path, 'utf8').includes(`{file:${OPENCODE_SECRET_DIR}/`);
+}
+
 // Every entry is optional: a project with no API never syncs a spec, and most
 // developers have no `.env.local`. Absence is info, never a warning, except for
 // `.env`, without which every MCP server in the worktree starts with nothing.
@@ -193,7 +205,10 @@ for (const entry of PROVISION_COPIES) {
   const dest = join(TARGET, entry.path);
   mkdirSync(dirname(dest), { recursive: true });
   if (entry.kind === 'dir') {
-    cpSync(src, dest, { recursive: true });
+    // Never propagate a plaintext MCP credential copy the loader made obsolete:
+    // the retirement backup always stays behind, and `.auth/opencode/` travels
+    // only while the worktree's own opencode.jsonc still points at it.
+    cpSync(src, dest, { recursive: true, filter: source => !RETIRED_COPIES.has(relative(PRIMARY, source)) });
     if (entry.secret) { secureChmodRecursive(dest); }
   }
   else {
@@ -286,62 +301,6 @@ else {
   const placeholders = ensureOpencodePlaceholders(TARGET);
   if (placeholders.error) { log(`opencode.jsonc could not be scanned for {file:} references: ${placeholders.error}`, 'warn'); }
   log(`OpenCode placeholders: ${placeholders.created.length} created empty (${placeholders.created.join(', ') || 'none'}), ${placeholders.kept.length} kept from .auth/`, placeholders.created.length > 0 ? 'success' : 'info');
-}
-
-// ============================================
-// direnv: allow the worktree's .envrc ONLY if the primary's already is
-// ============================================
-
-/**
- * `direnv status` with `cwd` set to the checkout to ask about. direnv 2.37.1
- * (measured) prints `Found RC allowed 0` for an allowed .envrc and `1` for one
- * that is not; older builds printed `true`/`false`. The `Loaded RC` lines above
- * it describe whatever the CALLING shell has loaded, so only the `Found RC`
- * line answers the question. No `Found RC` line = direnv sees no .envrc there.
- */
-function direnvAllowedIn(cwd: string): boolean | 'no-envrc' | 'not-installed' {
-  let out: string;
-  try {
-    const status = Bun.spawnSync(['direnv', 'status'], { cwd, stdout: 'pipe', stderr: 'pipe' });
-    if (status.exitCode !== 0) { return 'not-installed'; }
-    out = status.stdout.toString();
-  }
-  catch {
-    return 'not-installed'; // ENOENT: no direnv on PATH
-  }
-  const match = out.match(/Found RC allowed (\d+|true|false)/);
-  if (match === null) { return 'no-envrc'; }
-  return match[1] === '0' || match[1] === 'true';
-}
-
-// The allow path is not unit-testable without a real direnv on PATH and a
-// primary whose .envrc the machine's owner approved; the test suite covers the
-// "not installed" skip. Never approves on a machine that never approved the
-// primary: `direnv allow` grants execution of the file on every `cd`.
-{
-  const primaryAllowed = direnvAllowedIn(PRIMARY);
-  if (primaryAllowed === 'not-installed') {
-    log('direnv: skipped (not installed); nothing to allow. Launch with `bun run claude` / `bun run opencode` / `bun run codex`.', 'info');
-  }
-  else if (primaryAllowed === 'no-envrc') {
-    log('direnv: skipped (direnv finds no .envrc in the primary checkout).', 'info');
-  }
-  else if (!primaryAllowed) {
-    log('direnv: skipped (the primary checkout\'s .envrc is not allowed on this machine; run `direnv allow` there first if you want shell autoload). Never approving a worktree the owner never approved.', 'warn');
-  }
-  else if (dryRun) {
-    log(`Would run: direnv allow ${TARGET} (the primary checkout's .envrc is already allowed)`, 'info');
-  }
-  else {
-    const allow = Bun.spawnSync(['direnv', 'allow', TARGET], { stdout: 'pipe', stderr: 'pipe' });
-    if (allow.exitCode === 0) {
-      log(`direnv: allowed ${TARGET}/.envrc (the primary checkout's .envrc is already allowed).`, 'success');
-      log('direnv: the allow entry outlives the worktree; run `direnv prune` after removing it.', 'info');
-    }
-    else {
-      log(`direnv: \`direnv allow ${TARGET}\` failed (exit ${allow.exitCode}); run it yourself in the worktree. ${allow.stderr.toString().trim().slice(0, 200)}`, 'warn');
-    }
-  }
 }
 
 // ============================================

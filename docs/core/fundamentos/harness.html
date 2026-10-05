@@ -534,17 +534,20 @@
         </p>
         <p>
           <strong>Confiar en que el MCP avisa si falta una variable.</strong> Si una variable de
-          <code>.env</code> no está definida, Claude Code pasa el texto literal <code>${VAR}</code>,
-          OpenCode pasa un string vacío, y el servidor muere más tarde, en su primera llamada
-          autenticada. Solo Codex falla al arrancar. Un 401 o una tool que falla sin explicación
-          casi siempre es eso: corrige el <code>.env</code> y reinicia la sesión, porque las
-          variables se leen cuando el harness levanta los servidores.
+          <code>.env</code> no está definida, el loader de <code>.env</code> arranca el servidor sin
+          ella en los tres harnesses, y el servidor muere más tarde, en su primera llamada
+          autenticada. Ninguno falla al arrancar. Un 401 o una tool que falla sin explicación casi
+          siempre es eso: corrige el <code>.env</code> y reinicia la sesión, porque las variables se
+          leen cuando el harness levanta los servidores.
         </p>
         <p>
           <strong>Lanzar el binario pelado.</strong> <code>bun run claude</code>,
-          <code>bun run opencode</code> y <code>bun run codex</code> envuelven al harness con
-          <code>dotenv -o -e .env</code>, que hace que el <code>.env</code> gane sobre una variable
-          heredada del shell. Sin eso, un valor viejo en tu terminal puede tapar el archivo.
+          <code>bun run opencode</code> y <code>bun run codex</code> arrancan el harness con
+          <code>varlock run</code>, y antes comparan tu terminal con el <code>.env</code>. Con
+          varlock una variable heredada del shell gana sobre el archivo, así que si una difiere el
+          arranque se niega y te dice cuál (solo el nombre y el largo): haz <code>unset</code> o
+          abre una terminal limpia. El binario pelado se salta esa revisión, y un valor viejo en tu
+          terminal puede tapar el archivo.
         </p>
       </div>
 

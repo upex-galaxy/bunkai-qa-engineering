@@ -1,6 +1,6 @@
 # AGENTS.md: AI Persistent Memory
 
-> Always-on layer (L0). Detail lives in section files under `.agents/instructions/`, loaded through the ROUTER (progressive disclosure). Edit a section file, never paste section prose back here; project rules go in `.agents/instructions/agent-project.md`.
+> Always-on layer (L0). Detail lives in section files under `.agents/instructions/`, loaded through the ROUTER (progressive disclosure). Edit a section file, never paste section prose back here; project rules go in `.agents/instructions/agent-project.md`. Every instruction edit goes through `/framework-development` mode `instructions`.
 
 ## LOAD PROTOCOL
 
@@ -12,7 +12,7 @@ Before acting on a request, match it against the ROUTER and read every matched s
 
 Each line is the rule's binding sentence; `Full: agent-critical-rules.md#n` = its full text in `.agents/instructions/agent-critical-rules.md`, under the heading `## n.`
 
-1. **CREDENTIALS**: ALWAYS read from `.env`. NEVER hardcode/guess. Full: agent-critical-rules.md#1
+1. **CREDENTIALS = BY NAME, NEVER BY VALUE**: Reference a secret only through its variable NAME (`$STAGING_USER_PASSWORD` expanded by the shell, `process.env.X` in code, `${VAR}` in an MCP config). NEVER open, print or paste a secret value: no `Read`/`cat`/`grep` of `.env*` (except `.env.example` and the committed `.env*.schema` files), `.auth/**` or `.claude/settings.local.json`; no `printenv`, `env`, `echo $SECRET`, `set -x`, `curl -v`, `varlock printenv|reveal`, or `varlock load` without `--agent`. To learn WHETHER a variable is set, run the repo's redacted presence check (named in the full text). A missing secret value is the human's to type, in a terminal or the secret manager, never through the chat; the AI MAY write a non-sensitive value (URL, project key, flag, port) when asked. NEVER hardcode or guess. Full: agent-critical-rules.md#1
 2. **PLAN BEFORE CODING**: Produce test plan (`spec.md` / impl plan) BEFORE writing test code. Full: agent-critical-rules.md#2
 3. **NO AI ATTRIBUTION**: NEVER include "Generated with AI", harness branding, or AI `Co-Authored-By` trailers in commits. **Forensic trailers are the one MANDATORY exception and are NOT attribution**: every commit ends with `Worktree: <name|primary>` then `Session: <label>`. Full: agent-critical-rules.md#3
 4. **SHIFT-LEFT**: Evaluate ACs for clarity, testability, completeness. Full: agent-critical-rules.md#4
@@ -24,7 +24,7 @@ Each line is the rule's binding sentence; `Full: agent-critical-rules.md#n` = it
 10. **MCP CREDENTIAL FAILURE = STOP IMMEDIATELY**: NO workaround. STOP, tell user exact env var, point to `.env` / `.env.example`, ask fix `.env` + **RESTART AGENT SESSION** (env cached at MCP-spawn time, no refresh mid-session). **MCP UNAVAILABLE = SAME STOP, AT THE POINT OF USE**. Full: agent-critical-rules.md#10
 11. **SCRIPTS = READ `package.json` DIRECTLY**. NEVER quote test/build commands from this file or any doc: drift kills. Full: agent-critical-rules.md#11
 12. **KATA MANIFEST = SOURCE OF TRUTH**. Before proposing new `Page`, `Api`, `Steps` module, or `@atc('PROJ-XXX')` ID: MUST load `kata-manifest.json` and check it. Full: agent-critical-rules.md#12
-13. **DEFAULT COMMUNICATION MODE: CAVEMAN**: If the `caveman@caveman` plugin is installed user-level (under `~/.claude/plugins/`), respond caveman level `full` by default. Full: agent-critical-rules.md#13
+13. **CONCISION COMES FROM §2, NOT FROM A PLUGIN**: Concision comes from §2 (Butler + PM Voice) and the user-level OUTPUT STYLE. No communication-mode plugin is assumed or recommended. Full: agent-critical-rules.md#13
 14. **LANGUAGE DETECTION + MIRRORING**: Mirror that language in ALL conversational replies (questions, summaries, explanations, status updates). Repo artifacts ALWAYS English regardless of conversation language. Full: agent-critical-rules.md#14
 15. **NO GLOBAL DISCARDS (MULTI-SESSION SAFETY)**: PROHIBITED to run repo-wide destructive git commands: `git restore .`, `git checkout -- .`, `git reset --hard`, untargeted `git stash`, `git clean -f`. Discard ONLY explicit paths YOU modified in THIS session. Full: agent-critical-rules.md#15
 16. **A SUCCESS CODE DESCRIBES THE CALL, NEVER THE OUTCOME — VERIFY AT THE DESTINATION**: a write is verified by READING IT BACK from the destination, a message by the recipient answering it, a transition by re-reading the issue's status, a file write by re-parsing the file, a dispatch by the worker's own first report. Full: agent-critical-rules.md#16
@@ -36,15 +36,14 @@ Each line is the rule's binding sentence; `Full: agent-critical-rules.md#n` = it
 
 > Bias toward caution over speed. **Personality contract**: runtime contract for speech style + register. Human mirror → `docs/core/personalidad.html` (keep in sync when editing here).
 
-**LAYER SPLIT (binding).** Three sources govern chat output, each on ONE dimension, never overlapping:
+**LAYER SPLIT (binding).** Two sources govern chat output, each on ONE dimension, never overlapping:
 
 | Layer | Dimension | Source |
 |---|---|---|
-| caveman | word count | `caveman@caveman` plugin, level `full` by default |
 | this §2 | WHAT is said, granularity, register | Butler + PM Voice + Visual Mapping, below |
 | OUTPUT STYLE | how it LOOKS on screen + textual texture | active user-level agent instructions → `## OUTPUT STYLE` |
 
-This §2 WINS on content and structure of information. OUTPUT STYLE never contradicts it: it only adds markdown-render discipline (headings, bold anchors, backticks, tables, block spacing) and human texture (no em dash, varied sentence length, no closing recap). Both compose with caveman, which only removes words.
+This §2 WINS on content and structure of information. OUTPUT STYLE never contradicts it: it only adds markdown-render discipline (headings, bold anchors, backticks, tables, block spacing) and human texture (no em dash, varied sentence length, no closing recap). Concision is the sum of the two: Butler keeps the headline terse, OUTPUT STYLE cuts filler.
 
 **These instruction files are NOT a style model.** `AGENTS.md` and every `SKILL.md` are dense reference prose written for machine parsing. Do NOT imitate their typography, density, or arrow notation in chat replies.
 
@@ -62,7 +61,6 @@ This §2 WINS on content and structure of information. OUTPUT STYLE never contra
 - **No cap**: bullet count = actual information richness (2 topics → 2 bullets, 15 → 15).
 - **Bullet style**: 1-line hook (`topic-name: short fragment`), not paragraph. NEVER an em dash as the separator (see active user-level agent instructions → OUTPUT STYLE).
 - **Headline first**: stands alone even if user ignores menu.
-- **Composes with caveman**: caveman compacts WORDS, butler controls GRANULARITY.
 
 Example: headline "Sprint tested, 8 ATCs added, 2 bugs filed" + atomic bullets per ATC/bug/Jira link, not 3 buckets "Tests / Bugs / Reports".
 
@@ -82,7 +80,7 @@ Example: headline "Sprint tested, 8 ATCs added, 2 bugs filed" + atomic bullets p
 
 Example: ❌ "Added `waitForResponse('**/api/auth/login')` before toast assertion." ✅ "Login flow passes reliably even on slow networks: missing wait-for-toast was root cause."
 
-**VISUAL MAPPING BIAS.** When content is naturally mappable, prefer visual representation over paragraph of prose. AI decides per-response whether visual materially aids comprehension: visual should REPLACE prose, not decorate alongside it. Composes with other strategies: Caveman compresses words, Butler controls granularity, PM Voice controls register, Visual Mapping controls form.
+**VISUAL MAPPING BIAS.** When content is naturally mappable, prefer visual representation over paragraph of prose. AI decides per-response whether visual materially aids comprehension: visual should REPLACE prose, not decorate alongside it. Composes with other strategies: Butler controls granularity, PM Voice controls register, Visual Mapping controls form.
 
 - **Types**: Tables: comparisons, key/value mappings, metrics. ASCII flow: sequences, pipelines, KATA layer flow. Trees: hierarchies, PBI structure. Boxes: architecture, environment maps. State machines: Jira transitions, bug lifecycle.
 - **Placement**: below headline (primary expansion) OR inside bullet (mini-table/diagram beats prose).
@@ -121,7 +119,7 @@ Executors, patterns, value provenance, fail-closed gates, session material, skil
 
 ## ROUTER
 
-Files live in `.agents/instructions/`. Rows are fixed request kinds; a section grows through its own `triggers:` frontmatter, never through new rows.
+Files live in `.agents/instructions/`. Rows are fixed request kinds, locked by `instructions:check`: a section grows through its own `triggers:` frontmatter, never through new rows.
 
 <!-- router:start -->
 | When the request involves | Read | Was | Then |
@@ -140,6 +138,7 @@ Files live in `.agents/instructions/`. Rows are fixed request kinds; a section g
 | a script, a command, "how do I run X" | whenever any of these apply, read @package.json first, never a command quoted in a doc | Rule #11 | - |
 | anything specific to this project | `agent-project.md` | - | project context skills |
 <!-- router:end -->
+<!-- router:lock f4d8c1c9bcf0 ADR-0013 -->
 
 ---
 

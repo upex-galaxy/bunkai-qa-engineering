@@ -198,3 +198,6 @@ storage-state-*.json
 !.context/PBI/
 .agents/skills/skill-creator/
 .agents/skills/diagram-design/
+
+# ----- 2026-10-05 (sync) -----
+!.env.provider.schema
