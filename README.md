@@ -489,7 +489,7 @@ Test Files ← Orchestrate ATCs
 | --------- | ------------------- | ------------------------- |
 | **Api**   | HTTP interactions   | `tests/components/api/`   |
 | **Page**  | UI interactions     | `tests/components/ui/`    |
-| **Step**  | Reusable ATC chains | `tests/components/steps/` |
+| **Step**  | Reusable ATC chains | tests/components/steps (created with the first Steps module) |
 
 ### Example Test
 
