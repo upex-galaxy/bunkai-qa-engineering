@@ -28,6 +28,7 @@ It does not assume one branching model. The project may run on `main` only, on `
 - DO NOT: `git add -A` or `git add .`. List explicit paths, so a secret or another session's work cannot ride along.
 - DO: keep one commit to one responsibility, in conventional format (`{type}({ISSUE-KEY}): {description}`). Commit messages, branch names and PR bodies are English and carry NO AI attribution.
 - DO: close EVERY commit message, in every strategy, with the two forensic trailers `Worktree: <name|primary>` then `Session: <label>`, copied from the `AGENT IDENTITY:` line in session context (`unknown` when a value cannot be resolved). They are forensics, not attribution — a harness-branded trailer (`Claude-Session:`, an AI `Co-Authored-By:`) stays forbidden.
+- WHEN the pre-push or CI documentation-contract gate names a region (ADR-0016): update every page it lists in the same push; only if they still hold, add `Docs-Checked: <label> <reason>` above the forensic trailers. NEVER add it by reflex or without the reason.
 - WHEN a pre-commit hook rejects a commit: stop, fix the underlying issue, and create a NEW commit. Never `--amend` the rejected one.
 - DO: propose every branch name, commit set, and PR body and wait for an explicit OK before executing.
 - DO: stop at PR creation — merging is the user's next step, never automatic. If the `gh` transport is missing or unauthenticated, surface the blocker instead of implying a PR was opened.
@@ -168,7 +169,7 @@ git_strategy:
 
 The block is the source of truth; its `git_strategy.description` field is the one-paragraph human summary. The user can edit it; the next invocation re-reads it.
 
-The `## Git Strategy` section of `.agents/instructions/agent-git.md` is **just a pointer** to `.agents/project.yaml` (`git_strategy:` block) — NEVER write strategy policy or branch decisions into `AGENTS.md` or an instruction section. A repository's own reading of its strategy goes in its project-owned `.agents/instructions/agent-project.md` (`## Git Strategy (this repository)`).
+The `## Git Strategy` section of `.agents/instructions/agent-git.md` is **just a pointer** to `.agents/project.yaml` (`git_strategy:` block) — NEVER write strategy policy or branch decisions into `AGENTS.md` or an instruction section. A repository's own reading of its strategy goes in its project-owned `.agents/instructions/agent-project.md` (`## Git Strategy (this repository)`). Any other change to an instruction file is `/framework-development` mode `instructions`.
 
 If the strategy uses an integration branch with a non-default name (anything other than `staging`), record it under `git_strategy.branches.integration` so commits don't have to re-detect.
 
@@ -278,6 +279,7 @@ Session: <label>
 - Both values come from the `AGENT IDENTITY:` line the prompt hook injects into this session's context (`worktree=…`, `session=…`). Copy them; do not re-derive them per commit. The session label may contain spaces and parentheses (`my-session (c0ffee12)`): take everything after `session=` up to the literal ` harness=` token, never split the line on whitespace.
 - `primary` is the correct worktree value when the session is not running in a linked worktree. When a value could not be resolved at all, write `unknown` — never guess a name, never drop the key. A missing trailer is less recoverable than an honest `unknown`.
 - Nothing goes below them, and nothing is added beside them.
+- **`Docs-Checked: <label> <reason>`** is the one trailer that may sit ABOVE them (ADR-0016). Add it only when the change touched a `LINT.IfChange(<label>)` region, the pages its `LINT.ThenChange(...)` names were NOT updated, and they still describe the behaviour correctly; the reason says why. Never by reflex, never without a reason (a bare label does not count). The pre-push and CI documentation-contract gate block the push without it or the page edits. On an already-pushed range the ack is an empty commit carrying the line, never an amend.
 - **These are forensics, not attribution.** They record WHICH working tree and WHICH session produced the commit, so a bisect, an incident review, or a parallel-session post-mortem can find the right transcript. They are deliberately harness-agnostic: no tool, vendor, or model is named. The prohibition in Critical Rule #3 is untouched — never `Claude-Session:`, never a `Co-Authored-By:` for an AI, never a "Generated with …" line, never any other harness-branded key.
 
 Present all proposed commits as one block. Wait for OK / modify / reject before executing.

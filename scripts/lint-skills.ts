@@ -867,6 +867,8 @@ const STALE_PATH_ALLOWED = new Set<string>([
   '.context/ADR/ADR-0006-forensic-measurements-ledger.md',
   '.context/ADR/ADR-0007-mtp-in-jira.md',
   '.context/ADR/ADR-0008-browser-session-isolation.md',
+  '.context/ADR/ADR-0009-progressive-disclosure-of-instructions.md',
+  '.context/ADR/ADR-0013-instructions-maintenance-locks.md',
   '.context/api-architecture.md',
 ]);
 

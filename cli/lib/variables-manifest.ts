@@ -62,8 +62,8 @@ export type VarDestination = 'local' | 'github';
  *
  * The second case exists because `ATLASSIAN_URL` is deliberately NOT a local
  * variable: while it sat in `.env`, a stale copy in the process environment
- * shadowed the corrected file (both `bun`'s autoload and `dotenv-cli` skip a
- * var that is already set), and `jira:sync-issues` silently rebuilt the PBI
+ * shadowed the corrected file (both `bun`'s autoload and varlock skip a var
+ * that is already set), and `jira:sync-issues` silently rebuilt the PBI
  * cache from a dead Jira site with exit code 0. The host is project identity,
  * so it is anchored to a versioned file that shows up in a diff.
  *
@@ -479,8 +479,8 @@ export const VAR_MANIFEST: VarSpec[] = [
     usedBy: 'openapi MCP (schema read-only)',
     required: false,
     critical: false,
-    obtainHint: 'path/URL to your project OpenAPI spec — set when adapting the framework.',
-    note: 'Path/URL to the OpenAPI spec for the OpenAPI MCP. Local only.',
+    obtainHint: 'the full spec URL, or a file path relative to the repo root; never the endpoint route alone — set when adapting the framework.',
+    note: 'Full URL or repo-root-relative file of the OpenAPI spec for the OpenAPI MCP. Local only.',
     schema: { example: './api/openapi.json' },
   },
   {

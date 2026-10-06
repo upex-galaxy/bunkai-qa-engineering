@@ -1,10 +1,10 @@
 # AGENTS.md: AI Persistent Memory
 
-> Always-on layer (L0). Detail lives in section files under `.agents/instructions/`, loaded through the ROUTER (progressive disclosure). Edit a section file, never paste section prose back here; project rules go in `.agents/instructions/agent-project.md`.
+> Always-on layer (L0). Detail lives in section files under `.agents/instructions/`, loaded through the ROUTER (progressive disclosure). Edit a section file, never paste section prose back here; project rules go in `.agents/instructions/agent-project.md`. Every instruction edit goes through `/framework-development` mode `instructions`.
 
 ## LOAD PROTOCOL
 
-Before acting on a request, match it against the ROUTER and read every matched section file not already in this conversation. A `ROUTE:` line injected by the hook is binding and wins over your own judgment. A section once read is not re-read unless compaction or `/clear` removed it. Unsure whether a section applies → read it: a skipped section is the failure this design guards against. A section binds exactly like this file. A `§N` citation anywhere names the numbered heading kept verbatim in the file the ROUTER lists for it.
+Before acting on a request, match it against the ROUTER and read every matched section file not already in this conversation. A `ROUTE:` line injected by the hook is binding and wins over your own judgment: read its file before acting. A `ROUTE-OPTIONAL:` line is not binding: read one of its files only when the task needs it. A `ROUTE-PENDING:` line names a binding file still unread: read it before the next step. A section once read is not re-read unless compaction or `/clear` removed it. Unsure whether a section applies → read it: a skipped section is the failure this design guards against. A section binds exactly like this file. A `§N` citation anywhere names the numbered heading kept verbatim in the file the ROUTER lists for it.
 
 ---
 
@@ -12,7 +12,7 @@ Before acting on a request, match it against the ROUTER and read every matched s
 
 Each line is the rule's binding sentence; `Full: agent-critical-rules.md#n` = its full text in `.agents/instructions/agent-critical-rules.md`, under the heading `## n.`
 
-1. **CREDENTIALS**: ALWAYS read from `.env`. NEVER hardcode/guess. Full: agent-critical-rules.md#1
+1. **CREDENTIALS = BY NAME, NEVER BY VALUE**: Reference a secret only through its variable NAME (`$STAGING_USER_PASSWORD` expanded by the shell, `process.env.X` in code, a name in the MCP loader's `--filter` list). NEVER open, print or paste a secret value: no `Read`/`cat`/`grep` of `.env*` (except `.env.example` and the committed `.env*.schema` files), `.auth/**` or `.claude/settings.local.json`; no `printenv`, `env`, `echo $SECRET`, `set -x`, `curl -v`, `varlock printenv|reveal`, or `varlock load` without `--agent`. To learn WHETHER a variable is set, run the repo's redacted presence check (named in the full text). A missing secret value is the human's to type, in a terminal or the secret manager, never through the chat; the AI MAY write a non-sensitive value (URL, project key, flag, port) when asked. NEVER hardcode or guess. Full: agent-critical-rules.md#1
 2. **PLAN BEFORE CODING**: Produce test plan (`spec.md` / impl plan) BEFORE writing test code. Full: agent-critical-rules.md#2
 3. **NO AI ATTRIBUTION**: NEVER include "Generated with AI", harness branding, or AI `Co-Authored-By` trailers in commits. **Forensic trailers are the one MANDATORY exception and are NOT attribution**: every commit ends with `Worktree: <name|primary>` then `Session: <label>`. Full: agent-critical-rules.md#3
 4. **SHIFT-LEFT**: Evaluate ACs for clarity, testability, completeness. Full: agent-critical-rules.md#4
@@ -24,7 +24,7 @@ Each line is the rule's binding sentence; `Full: agent-critical-rules.md#n` = it
 10. **MCP CREDENTIAL FAILURE = STOP IMMEDIATELY**: NO workaround. STOP, tell user exact env var, point to `.env` / `.env.example`, ask fix `.env` + **RESTART AGENT SESSION** (env cached at MCP-spawn time, no refresh mid-session). **MCP UNAVAILABLE = SAME STOP, AT THE POINT OF USE**. Full: agent-critical-rules.md#10
 11. **SCRIPTS = READ `package.json` DIRECTLY**. NEVER quote test/build commands from this file or any doc: drift kills. Full: agent-critical-rules.md#11
 12. **KATA MANIFEST = SOURCE OF TRUTH**. Before proposing new `Page`, `Api`, `Steps` module, or `@atc('PROJ-XXX')` ID: MUST load `kata-manifest.json` and check it. Full: agent-critical-rules.md#12
-13. **DEFAULT COMMUNICATION MODE: CAVEMAN**: If the `caveman@caveman` plugin is installed user-level (under `~/.claude/plugins/`), respond caveman level `full` by default. Full: agent-critical-rules.md#13
+13. **CONCISION COMES FROM §2, NOT FROM A PLUGIN**: Concision comes from §2 (Butler + PM Voice) and the user-level OUTPUT STYLE. No communication-mode plugin is assumed or recommended. Full: agent-critical-rules.md#13
 14. **LANGUAGE DETECTION + MIRRORING**: Mirror that language in ALL conversational replies (questions, summaries, explanations, status updates). Repo artifacts ALWAYS English regardless of conversation language. Full: agent-critical-rules.md#14
 15. **NO GLOBAL DISCARDS (MULTI-SESSION SAFETY)**: PROHIBITED to run repo-wide destructive git commands: `git restore .`, `git checkout -- .`, `git reset --hard`, untargeted `git stash`, `git clean -f`. Discard ONLY explicit paths YOU modified in THIS session. Full: agent-critical-rules.md#15
 16. **A SUCCESS CODE DESCRIBES THE CALL, NEVER THE OUTCOME — VERIFY AT THE DESTINATION**: a write is verified by READING IT BACK from the destination, a message by the recipient answering it, a transition by re-reading the issue's status, a file write by re-parsing the file, a dispatch by the worker's own first report. Full: agent-critical-rules.md#16
@@ -36,15 +36,14 @@ Each line is the rule's binding sentence; `Full: agent-critical-rules.md#n` = it
 
 > Bias toward caution over speed. **Personality contract**: runtime contract for speech style + register. Human mirror → `docs/core/personalidad.html` (keep in sync when editing here).
 
-**LAYER SPLIT (binding).** Three sources govern chat output, each on ONE dimension, never overlapping:
+**LAYER SPLIT (binding).** Two sources govern chat output, each on ONE dimension, never overlapping:
 
 | Layer | Dimension | Source |
 |---|---|---|
-| caveman | word count | `caveman@caveman` plugin, level `full` by default |
 | this §2 | WHAT is said, granularity, register | Butler + PM Voice + Visual Mapping, below |
 | OUTPUT STYLE | how it LOOKS on screen + textual texture | active user-level agent instructions → `## OUTPUT STYLE` |
 
-This §2 WINS on content and structure of information. OUTPUT STYLE never contradicts it: it only adds markdown-render discipline (headings, bold anchors, backticks, tables, block spacing) and human texture (no em dash, varied sentence length, no closing recap). Both compose with caveman, which only removes words.
+This §2 WINS on content and structure of information. OUTPUT STYLE never contradicts it: it only adds markdown-render discipline (headings, bold anchors, backticks, tables, block spacing) and human texture (no em dash, varied sentence length, no closing recap). Concision is the sum of the two: Butler keeps the headline terse, OUTPUT STYLE cuts filler.
 
 **These instruction files are NOT a style model.** `AGENTS.md` and every `SKILL.md` are dense reference prose written for machine parsing. Do NOT imitate their typography, density, or arrow notation in chat replies.
 
@@ -56,13 +55,21 @@ This §2 WINS on content and structure of information. OUTPUT STYLE never contra
 
 **GOAL-DRIVEN EXECUTION.** Define success criteria. Loop until verified. Transform vague tasks into testable goals ("add validation" → "write tests for invalid input, then make them pass"). Multi-step → state plan with explicit `verify:` per step (observable: test passes, file exists, exit 0, type-check clean). Complements 7-component briefing (§3): doesn't replace it.
 
+**SEARCH AND BULK EDIT.** Locate before reading, script repeated edits, verify every form of what changed.
+
+- **Locate**: `git grep -n` / `rg -n` before opening a file; count before displaying (`| wc -l`), never let `| head` decide what exists. Read only the range around each hit (Read offset/limit); a file over ~300 lines is read whole only when it is the core of the answer. Stop once the chain from entry point to effect is complete.
+- **A path or name that changes in many files**: never Read + Edit file by file. In this order:
+  1. Inventory with TWO counts. Literal: `git grep -n -F '<old>' | wc -l`. Variants: the same path with each separator replaced by `[^A-Za-z0-9_]{1,6}` and a leading dot escaped, nothing else changed; for `.agents/hooks` that is `git grep -n -E '\.agents[^A-Za-z0-9_]{1,6}hooks' | wc -l` (catches `a/b`, `'a', 'b'`, `a\\b`, `a\/b`). Variants > literal → `| grep -v -F '<old>'` lists the sites the literal replace will miss.
+  2. Decide the exclusions (text that must keep the old value: ADR history, changelogs, legacy constants) BEFORE replacing, and put them inside the command: `git mv <old> <new> && git grep -lz -F '<old>' -- . ':!<excluded>' | xargs -0 perl -pi -e 's#\Q<old>\E#<new>#g'`. Use `perl -pi`, not `sed -i` (it differs between macOS and Linux).
+  3. Fix each extra from step 1 (its own scripted replace, or Edit when it has few sites), then re-run both counts: only the planned exclusions may remain.
+  4. Done only when tests pass: a lint or type gate is not a test run, so run `bun test <dir>` for every top-level dir with a touched `.ts`, and `bun test` inside every touched `packages/<name>`. Report leftovers per form and the test result.
+
 **EXPANDABLE RESPONSES (BUTLER PATTERN).** Default to terse headline resolving user's literal question. Surface ALL other topics as atomic bullet menu: one specific topic per bullet, NEVER broad buckets. User pulls; don't push every detail at once.
 
 - **Atomicity**: 12 specific bullets beats 3 broad buckets. Bundling hides the one item that matters.
 - **No cap**: bullet count = actual information richness (2 topics → 2 bullets, 15 → 15).
 - **Bullet style**: 1-line hook (`topic-name: short fragment`), not paragraph. NEVER an em dash as the separator (see active user-level agent instructions → OUTPUT STYLE).
 - **Headline first**: stands alone even if user ignores menu.
-- **Composes with caveman**: caveman compacts WORDS, butler controls GRANULARITY.
 
 Example: headline "Sprint tested, 8 ATCs added, 2 bugs filed" + atomic bullets per ATC/bug/Jira link, not 3 buckets "Tests / Bugs / Reports".
 
@@ -82,7 +89,7 @@ Example: headline "Sprint tested, 8 ATCs added, 2 bugs filed" + atomic bullets p
 
 Example: ❌ "Added `waitForResponse('**/api/auth/login')` before toast assertion." ✅ "Login flow passes reliably even on slow networks: missing wait-for-toast was root cause."
 
-**VISUAL MAPPING BIAS.** When content is naturally mappable, prefer visual representation over paragraph of prose. AI decides per-response whether visual materially aids comprehension: visual should REPLACE prose, not decorate alongside it. Composes with other strategies: Caveman compresses words, Butler controls granularity, PM Voice controls register, Visual Mapping controls form.
+**VISUAL MAPPING BIAS.** When content is naturally mappable, prefer visual representation over paragraph of prose. AI decides per-response whether visual materially aids comprehension: visual should REPLACE prose, not decorate alongside it. Composes with other strategies: Butler controls granularity, PM Voice controls register, Visual Mapping controls form.
 
 - **Types**: Tables: comparisons, key/value mappings, metrics. ASCII flow: sequences, pipelines, KATA layer flow. Trees: hierarchies, PBI structure. Boxes: architecture, environment maps. State machines: Jira transitions, bug lifecycle.
 - **Placement**: below headline (primary expansion) OR inside bullet (mini-table/diagram beats prose).
@@ -100,6 +107,8 @@ Example: ❌ "Added `waitForResponse('**/api/auth/login')` before toast assertio
 **USE SUBAGENTS FOR**: reading/writing multiple files, MCP ops, research across repos, git ops, verification (tests/types/lint), multi-file edits, long-running tasks.
 
 **NO SUBAGENTS FOR**: quick lookups, memory reads/writes, task tracking, asking user, planning.
+
+**WHEN, NOT BY REFLEX**: delegate only when the work would return a lot of tool output to this context or splits into independent units; a single scripted command (a bulk replace, a one-line check) or a lookup of under ~5 calls stays inline.
 
 **7-COMPONENT BRIEFING (MANDATORY every dispatch)**: canonical template + filled examples: `agentic-qa-core/references/briefing-template.md`.
 
@@ -121,7 +130,7 @@ Executors, patterns, value provenance, fail-closed gates, session material, skil
 
 ## ROUTER
 
-Files live in `.agents/instructions/`. Rows are fixed request kinds; a section grows through its own `triggers:` frontmatter, never through new rows.
+Files live in `.agents/instructions/`. Rows are fixed request kinds, locked by `instructions:check`: a section grows through its own `triggers:` frontmatter, never through new rows.
 
 <!-- router:start -->
 | When the request involves | Read | Was | Then |
@@ -140,6 +149,7 @@ Files live in `.agents/instructions/`. Rows are fixed request kinds; a section g
 | a script, a command, "how do I run X" | whenever any of these apply, read @package.json first, never a command quoted in a doc | Rule #11 | - |
 | anything specific to this project | `agent-project.md` | - | project context skills |
 <!-- router:end -->
+<!-- router:lock f4d8c1c9bcf0 ADR-0013 -->
 
 ---
 
@@ -148,6 +158,7 @@ Files live in `.agents/instructions/`. Rows are fixed request kinds; a section g
 The Engram protocol itself (tools, save format, conflict handling) arrives with the Engram MCP server's own instructions and, on Claude Code, the plugin's session hooks. Only this repo's delta lives here:
 
 - **Save triggers apply**: call `mem_save` without being asked after an architecture / design decision, an established convention or workflow, a completed bug fix (with root cause), or a non-obvious discovery or gotcha.
+- **Not a memory**: a finding already written in the repo (code or docs) is not saved; save only what the repo does not record (a decision's why, a gotcha, an owner preference).
 - **Session close**: MANDATORY `mem_session_summary` before saying "done" / "listo".
 - **Search with keywords, not questions**: Engram search is lexical and every term must match by default. Query `mem_search` with two or three English keywords that would appear in a memory's title, never the full natural-language question. Zero results → retry with `match_mode: "any"` or with synonyms before concluding nothing exists.
 

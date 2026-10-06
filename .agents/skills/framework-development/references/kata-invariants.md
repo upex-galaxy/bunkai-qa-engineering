@@ -57,7 +57,7 @@ Hard rule: never request `{ ui }` for an API-only test. Never request `{ api }` 
 
 An ATC = Acceptance Test Case = complete mini-flow mapped 1:1 to a TMS ticket via `@atc('TICKET-ID')`. The four ATC sub-rules are non-negotiable — a method violating any of them is not an ATC and must be reclassified or refactored.
 
-- **Atomic mini-flow**: precondition → action → verification → assertions → return. NEVER a single `page.click()` or single `apiGET`. A read-only GET is a Helper (no `@atc`, optional `@step`), not an ATC.
+- **Atomic mini-flow**: precondition → action → verification → assertions → return. NEVER a bare `page.click()` or a bare `apiGET` with no outcome assertion. A GET that only prepares data is a Helper (no `@atc`, optional `@step`); a GET whose response IS the business outcome under test is an ATC (`test-automation/references/kata-architecture.md` Rule 7).
 - **NEVER calls another ATC**: ATCs are atomic. Reusable chains live in the Steps module (Layer 3.5). An ATC calling `this.someOtherAtc(...)` is a CRITICAL reject.
 - **Max 2 positional params; 3+ → object param**: `fn(a, b, c, d)` is FORBIDDEN. Use `fn(args: Args)`. Applies to ATCs and to every Layer 2/3/3.5 method.
 - **Locators inline; extract only if used 2+ times**: locators default inline inside the ATC. Extract to `private readonly someLocator = () => this.page.locator(...)` arrow function on the class only when used in 2+ ATCs of the same component. NEVER extract to a separate `locators/*.ts` file.
@@ -195,7 +195,7 @@ Out-of-scope surfaces. Modifying these from a framework-development task is FORB
 - **Credentials and env**: `.env`, `.env.example` (only the variable list may be appended when adding a new framework env var; never values).
 - **Playwright artifacts (gitignored)**: `test-results/`, `tests/data/downloads/`, `playwright/.auth/`.
 - **Test results / TMS sync state**: outputs of CI runs, not framework code.
-- **Skills / instructions**: a framework change that needs to surface in AI memory patches the section under `.agents/instructions/` that owns the fact (`AGENTS.md` itself only for an L0 rule sentence or a ROUTER row; the skill table is `agent-skills-and-mcps.md`) and the docs in the same PR (the docs follow-through in `SKILL.md` Phase 3), and `bun run docs:check` proves the router and the quoted scripts.
+- **Skills / instructions**: a framework change that needs to surface in AI memory patches the section under `.agents/instructions/` that owns the fact through mode `instructions` and the decision tree in `instructions-doctrine.md` (`AGENTS.md` itself only for an L0 rule sentence or a ROUTER row, and a row only behind an ADR; the skill table is `agent-skills-and-mcps.md`) and the docs in the same PR (the docs follow-through in `SKILL.md` Phase 3), and `bun run docs:check` proves the router and the quoted scripts.
 
 ---
 
@@ -219,6 +219,8 @@ These are POLICY tables, not INVARIANT rules. They can be amended additively wit
 | `package.json` deps + scripts                         | Dependency upgrades, script registry, engines. Not test specs in `tests/`.                                       |
 | `.agents/skills/agentic-qa-core/references/`          | Briefing template, dispatch patterns, orchestration doctrine, skill-composition-strategy.                        |
 | `.agents/skills/framework-development/`               | This skill itself — references, scripts, agents/.                                                                |
+| `AGENTS.md`, `.agents/instructions/` (mode `instructions`) | The instruction layers: L0 sentences, sections, the ROUTER (behind its ADR lock), `triggers:`; placement per `instructions-doctrine.md`. |
+| `cli/lib/fixtures/instruction-router-eval.json`       | The router eval's labelled prompts: grows with every trigger miss, never relabelled to hide one.                 |
 
 ### 10.2 FORBIDDEN paths (redirect map)
 

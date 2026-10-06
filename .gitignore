@@ -44,9 +44,6 @@ node_modules/
 .env.*.local
 .envrc.local
 .direnv/
-# Force-track .envrc (overrides global ~/.gitignore_global, which often
-# blanket-ignores it). Our .envrc has no secrets — it only sources .env.
-!.envrc
 
 # ===== IDE & Editor =====
 .idea/
@@ -198,3 +195,6 @@ storage-state-*.json
 !.context/PBI/
 .agents/skills/skill-creator/
 .agents/skills/diagram-design/
+
+# ----- 2026-10-05 (sync) -----
+!.env.provider.schema

@@ -85,6 +85,73 @@ updater:
 - **It silences, it does not fix.** An exempt block is still absent. `bun run agents:schema --project` prints what is silenced alongside what is missing, so the decision stays visible.
 - **Same carve-out as `protected_paths`**: read directly by the updater, so `vars:check` skips it.
 
+### `updater.declined_denies`
+
+Upstream deny rules this project does not want in `.claude/settings.json`.
+
+```yaml
+updater:
+  protected_paths: []
+  declined_denies: ['Bash(env)'] # exact entries, written as in permissions.deny
+```
+
+`.claude/settings.json` is never overwritten, but two of its lists grow on every `bun run up`: entries upstream has in `permissions.allow` or `permissions.deny` and the project lacks are appended after the project's own, after a backup. Nothing is removed or reordered, and `ask`, `env` and every other key stay as written (`hooks` has its own additive merge, below). That is how a project scaffolded before a deny rule shipped (the secret denies, for one) receives it. An allow entry you do not want is re-expressible in `deny`, which wins; a deny entry has no stronger list, so you decline it here.
+
+- **Exact entries, per rule.** `Bash(env)`, not a pattern over entries. Every other upstream deny, including one a later release adds, still arrives: listing `.claude/settings.json` in `protected_paths` would not opt out (the file is already watched) and would not be the right size anyway.
+- **It never removes.** A declined entry the file already holds stays until you delete it by hand; the list only stops the updater from adding it back.
+- **A malformed value fails toward more denies.** Anything but a list of strings is reported at the run and ignored.
+- **`opencode.jsonc` is never written.** Its `permission` block is JSONC with ordered rules (the last match wins), so the upstream deny rules it lacks become one parity row on the MCP surface with the block to paste in the saved prompt. The block also carries the upstream exceptions that follow a missing deny (`"*.env.example": "allow"` after `"*.env.*": "deny"`), so pasting keeps the order. To decline one there, list the pattern yourself with another action (`"printenv*": "ask"`): a pattern the project lists, whatever its action, is never reported.
+- **Same carve-out as `protected_paths`**: read directly by the updater (`readDeclinedDenies` in `cli/lib/updater-settings.ts`), so `vars:check` skips it.
+
+### `updater.declined_hooks`
+
+Upstream hook commands this project does not want in `.claude/settings.json`.
+
+```yaml
+updater:
+  declined_hooks: ['node "$CLAUDE_PROJECT_DIR/.agents/hooks/doc-contracts.mjs"'] # exact command text
+```
+
+The `hooks` block grows on every `bun run up` too, before the compatibility check runs: an upstream hook command the project lacks under the same event and matcher is appended as a NEW group at the end of that event's list, after a backup. The project's own groups are never edited, reordered or removed. That is how a hook group `agents:compat:check` starts requiring (the route re-surface `PostToolUse` group, ADR-0017) reaches a project scaffolded before it, instead of leaving pre-commit, pre-push and CI red until someone edits the file by hand.
+
+- **Exact command text, every event.** A listed command is left out wherever upstream runs it; the run reports it as declined.
+- **A required hook stays required.** Declining a command `agents:compat:check` asserts on keeps that check red: the opt-out is for hooks the check does not require.
+- **A command whose script you lack is not added.** It is reported instead, because a hook pointing at a missing file fails on every event.
+- **A repeated key is folded, not lost.** A git auto-merge can leave `"PostToolUse"` twice in one object; `JSON.parse` keeps only the last. The merge folds both lists into one and reports it.
+- **Same carve-out as `protected_paths`**: read directly by the updater (`readDeclinedHooks` in `cli/lib/updater-settings.ts`), so `vars:check` skips it.
+
+## `harnesses` (top-level list in `project.yaml`)
+
+Which host harnesses this project uses, any of `claude`, `opencode`, `codex` (ADR-0012).
+
+```yaml
+harnesses: [claude] # e.g. a team on Claude Code only
+```
+
+- **What it decides**: every compatibility gate (`agents:compat:check`, `setup:doctor`, the installer, `bun run up`) checks only the listed harnesses. A harness left out may delete its files (`HARNESS_FILES` in `cli/lib/harness-selection.ts`), and the updater stops delivering them.
+- **Absent or `null`**: detected from the files present. A harness is in use while ANY of its files exists, so deleting one file of a harness still fails its contract; nothing found at all checks all three.
+- **Who writes it**: `bun run setup` adds the agents you select (union only, it never removes one) and then offers to delete the files of each harness left out (default keep). Edit the list by hand to drop one.
+- **The boilerplate itself** checks all three, whatever its own yaml says.
+- Read directly by `cli/lib/harness-selection.ts`, so `vars:check` skips it.
+
+## `secrets` (block inside `project.yaml`)
+
+Where secret VALUES come from (ADR-0010). `.env` / `.env.local` is the default; a secret manager is the advanced option.
+
+```yaml
+secrets:
+  provider: local # local | 1password
+  onepassword:
+    vault: null # the vault the op:// references point at
+    account: null # sign-in shorthand from `op account list`; null = the CLI default account
+    auth: app # app (desktop app locally, service account in CI) | service-account (token only)
+```
+
+- **What it decides**: with a manager selected, `bun run setup` writes the committed overlay `.env.provider.schema`, which holds references only (`op(op://vault/item/field)`), never values. A non-empty `.env` / `.env.local` value still wins over the vault.
+- **Validation**: an unknown `provider` or `auth` throws (`cli/lib/secret-providers.ts`) rather than guess a source; a missing block reads as `local`.
+- **Steps and CI**: `INSTALLER.md` ("Secret manager (advanced)").
+- Read directly by the installer, not a `{{VAR}}` source.
+
 ## `orchestration` (block inside `project.yaml`)
 
 Default settings for **supervised multi-session worker fleets** — one conductor session coordinating N persistent workers through the Orca runtime (or, without Orca, the same launch lines pasted by hand). Owned and read by the `orca-orchestration` skill. Unlike `git_strategy` and `updater`, this block is a **flat, top-level section like `project:` or `testing:`** — its scalar leaves ARE `{{VAR}}` template variables, resolved lexically by their bare leaf name (no `ORCHESTRATION_` prefix), per the flat-key rule in §"Variable syntax conventions" below.

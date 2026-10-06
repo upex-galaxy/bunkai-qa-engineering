@@ -48,7 +48,8 @@ import { compatibilityErrorGroup, HARNESS_COMMAND_DIRS, RETIRED_COMMAND_ALIAS_OV
 import { hasDeepWalk, walkGovernedFile } from './agents-schema.ts';
 import { contextMapAdvice, contextMapStatuses, mapRelPath } from './context-maps.ts';
 import { HARNESS_LEVEL_MCPS } from './harness-level-mcps.ts';
-import { CLAUDE_SETTINGS_FILE } from './updater-settings';
+import { declaredHarnesses } from './harness-selection.ts';
+import { CLAUDE_SETTINGS_FILE, DECLINED_DENIES_KEY, DECLINED_HOOKS_KEY, OPENCODE_SETTINGS_FILE, opencodeDenyGap } from './updater-settings';
 
 // ============================================================================
 // TYPES
@@ -171,6 +172,18 @@ export interface ParityInput {
   envNewKeys: string[]
   /** Permission allow-list entries the additive merge added to `.claude/settings.json`. */
   allowListAdded?: string[]
+  /** `permissions.deny` entries the same merge appended this run. */
+  denyListAdded?: string[]
+  /** Upstream deny entries the project lacks and declined through `updater.declined_denies`. */
+  denyListDeclined?: string[]
+  /** Hook commands the additive hook merge appended to `.claude/settings.json` (`formatHookCommand`). */
+  hooksAdded?: string[]
+  /** Upstream hook commands the project lacks and declined through `updater.declined_hooks`. */
+  hooksDeclined?: string[]
+  /** Upstream hook commands not appended because the script they run is missing in the project. */
+  hooksSkipped?: string[]
+  /** Keys `.claude/settings.json` repeated, folded into one list by the hook merge. */
+  settingsDuplicatesFolded?: string[]
   /** Evidence for the unresolved-doctrine ledger row (`runDoctrineLedger`), when there is debt. */
   doctrineDebt?: string | null
   /** The file that row is about. Defaults to `AGENTS.md` (`DOCTRINE_FILE`). */
@@ -1131,6 +1144,43 @@ function compatErrorPath(message: string): string {
 export const PLAYWRIGHT_CLI_CONFIG = '.playwright/cli.config.json';
 
 /**
+ * The direnv file upstream shipped until it retired direnv: every MCP server,
+ * launcher and script loads `.env` itself, so nothing reads this file. A
+ * project's copy is left alone (it may hold the developer's own lines) and
+ * reported once per run as removable.
+ */
+export const RETIRED_ENVRC = '.envrc';
+
+/**
+ * The `package.json` scripts upstream shipped to open a harness through a
+ * loader (`dotenv -- claude`, then `scripts/launch.ts claude`). They exported
+ * every `.env` value into the AI's own process, so upstream retired them
+ * (ADR-0014): a harness opens bare and every MCP server loads `.env` itself.
+ * The package.json sync never re-adds them (it only appends keys upstream
+ * has); a project's copy is left alone and reported once per run as removable.
+ */
+export const RETIRED_HARNESS_SCRIPTS: readonly string[] = ['claude', 'codex', 'opencode'];
+
+/**
+ * The retired harness scripts this project still declares: a key named after a
+ * harness whose command loads `.env` before starting it (every shape upstream
+ * ever shipped). A project's own script with that name and another job is not
+ * reported. Empty when `package.json` is absent or unparseable.
+ */
+export function retiredHarnessScripts(root: string): string[] {
+  let scripts: unknown;
+  try {
+    scripts = (JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')) as { scripts?: unknown }).scripts;
+  }
+  catch { return []; }
+  if (scripts === null || typeof scripts !== 'object') { return []; }
+  return RETIRED_HARNESS_SCRIPTS.filter((name) => {
+    const cmd = (scripts as Record<string, unknown>)[name];
+    return typeof cmd === 'string' && /launch\.ts|varlock|dotenv|\.env\b/.test(cmd);
+  });
+}
+
+/**
  * The keys in the project's playwright-cli config that pin every session to
  * one shared on-disk profile: `browser.isolated: false` and any
  * `browser.userDataDir` (ADR-0008 removed both). Empty when the file is
@@ -1442,6 +1492,31 @@ export function collectParityFindings(input: ParityInput): ParityFinding[] {
     });
   }
 
+  // 3b. A leftover `.envrc` (direnv retired upstream): one informational row,
+  //     the file itself is never touched.
+  if (fs.existsSync(path.join(input.root, RETIRED_ENVRC))) {
+    findings.push({
+      surface: 'components',
+      path: RETIRED_ENVRC,
+      evidence: 'informational: upstream retired direnv and no longer ships or reads this file; every MCP server and each script load .env themselves, so secrets never need exporting into the shell. Left untouched: delete it (and `!.envrc` in .gitignore) when convenient, after moving any line of your own elsewhere',
+      suggested: 'keep project',
+      blocking: false,
+    });
+  }
+
+  // 3c. The retired harness launch scripts (ADR-0014): one informational row,
+  //     package.json itself is never touched.
+  const harnessScripts = retiredHarnessScripts(input.root);
+  if (harnessScripts.length > 0) {
+    findings.push({
+      surface: 'package',
+      path: 'package.json',
+      evidence: `informational: upstream retired the harness launch scripts ${harnessScripts.map(name => `\`${name}\``).join(', ')}: they export every .env value into the AI's own process, where any command it runs can read them. Open the harness directly (\`claude\`, \`codex\`, \`opencode\` or the desktop app); every MCP server and the test scripts load .env themselves, and the synced scripts/launch.ts refuses a harness binary. Left untouched: delete the scripts (and any doc of yours that names them) when convenient`,
+      suggested: 'keep project',
+      blocking: false,
+    });
+  }
+
   // 4. Harness commands. The alias layer is retired: a skill is invoked by its
   //    own name plus a mode, and nothing generates command files any more. A
   //    project that declared its own aliases keeps its wrapper files as plain
@@ -1542,20 +1617,64 @@ export function collectParityFindings(input: ParityInput): ParityFinding[] {
     });
   }
 
-  // The allow-list merge is additive and already decided: it ran, and this row
-  // says what it added so nothing is a surprise. Informational, never blocking
-  // — `deny` is untouched and wins, so an entry a project does not want is
-  // re-expressible there without this row asking anything of it.
+  // The permission-list and hook merges are additive and already decided:
+  // they ran, and this row says what they added so nothing is a surprise.
+  // Informational, never blocking: an allow entry a project does not want is
+  // re-expressible in `deny`, a deny entry in `updater.declined_denies` and a
+  // hook command in `updater.declined_hooks`, so the row asks nothing of it.
+  // A hook left out because its script is missing is news (the compat check
+  // may still name it), so it raises the row on its own; a declined entry
+  // alone is the project's standing decision and does not.
   const allowAdded = input.allowListAdded ?? [];
-  if (allowAdded.length > 0) {
+  const denyAdded = input.denyListAdded ?? [];
+  const denyDeclined = input.denyListDeclined ?? [];
+  const hooksAdded = input.hooksAdded ?? [];
+  const hooksDeclined = input.hooksDeclined ?? [];
+  const hooksSkipped = input.hooksSkipped ?? [];
+  const folded = input.settingsDuplicatesFolded ?? [];
+  if (allowAdded.length > 0 || denyAdded.length > 0 || hooksAdded.length > 0 || hooksSkipped.length > 0 || folded.length > 0) {
+    const parts: string[] = [];
+    if (allowAdded.length > 0) { parts.push(`${allowAdded.length} permission(s) added to permissions.allow: ${allowAdded.join(', ')}`); }
+    if (denyAdded.length > 0) { parts.push(`${denyAdded.length} rule(s) added to permissions.deny: ${denyAdded.join(', ')}`); }
+    if (denyDeclined.length > 0) { parts.push(`declined via ${DECLINED_DENIES_KEY}: ${denyDeclined.join(', ')}`); }
+    if (hooksAdded.length > 0) { parts.push(`${hooksAdded.length} hook command(s) added as new groups: ${hooksAdded.join(', ')}`); }
+    if (hooksDeclined.length > 0) { parts.push(`declined via ${DECLINED_HOOKS_KEY}: ${hooksDeclined.join(', ')}`); }
+    if (hooksSkipped.length > 0) { parts.push(`not added, the script they run is missing: ${hooksSkipped.join(', ')}`); }
+    if (folded.length > 0) { parts.push(`repeated key(s) folded into one list (JSON keeps only the last): ${folded.join(', ')}`); }
+    const foldedUnder = (key: string): boolean => folded.some(at => at === key || at.startsWith(`${key}.`) || at.startsWith(`permissions.${key}`));
+    const touched = (key: string): boolean => (key === 'deny' && denyAdded.length > 0) || (key === 'hooks' && hooksAdded.length > 0) || foldedUnder(key);
+    const untouched = `${['deny', 'ask', 'hooks', 'env'].filter(key => !touched(key)).join('/')} untouched`;
     findings.push({
       surface: 'components',
       path: CLAUDE_SETTINGS_FILE,
-      evidence: `informational: ${allowAdded.length} permission(s) added to permissions.allow (set-union with upstream; deny/ask/hooks/env untouched): ${allowAdded.join(', ')}`,
+      evidence: `informational: ${parts.join('; ')} (set-union with upstream, appended after the project's entries; ${untouched})`,
       suggested: 'keep project',
       blocking: false,
       side: 'kept',
     });
+  }
+
+  // `opencode.jsonc` is never merged (JSONC with comments, ordered rules where
+  // the last match wins): the upstream deny rules it lacks become one row with
+  // the block to paste. A pattern the project lists with any action is its
+  // decision and never reported. Folds onto the file's drift or MCP row when
+  // one exists: one row per path.
+  // Not for a project that dropped OpenCode (ADR-0012), even when it kept the file.
+  const opencodeGap = declaredHarnesses(input.root).harnesses.includes('opencode') ? opencodeDenyGap(input.root, input.upstreamDir) : null;
+  if (opencodeGap !== null) {
+    const count = opencodeGap.missing.reduce((n, m) => n + m.patterns.length, 0);
+    const rules = opencodeGap.missing.map(m => `${m.tool}: ${m.patterns.join(', ')}`).join('; ');
+    const evidence = `permission lacks ${count} upstream deny rule(s) (${rules}); never rewritten: paste the block from the saved prompt, or list a pattern yourself with another action to decline it`;
+    const note = [`Deny rules to paste into ${OPENCODE_SETTINGS_FILE}:`, '', '```jsonc', opencodeGap.block, '```'].join('\n');
+    const prior = findings.find(f => f.path === OPENCODE_SETTINGS_FILE);
+    if (prior) {
+      prior.evidence = `${prior.evidence}; ${evidence}`;
+      prior.suggested = 'merge';
+      prior.note = [prior.note, note].filter(Boolean).join('\n\n');
+    }
+    else {
+      findings.push({ surface: watchedSurface(OPENCODE_SETTINGS_FILE), path: OPENCODE_SETTINGS_FILE, evidence, suggested: 'merge', blocking: false, side: 'kept', note });
+    }
   }
 
   // 7. Synced files the project had edited and this run overwrote: the edit

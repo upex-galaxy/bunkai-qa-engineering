@@ -1,6 +1,6 @@
 # Skill Registry (auto-generated)
 
-> Generated: `2026-10-05T03:47:39.069Z`
+> Generated: `2026-10-06T10:35:50.557Z`
 > Generator: `bun scripts/build-skill-registry.ts`
 > Protocol: `.agents/skills/agentic-qa-core/references/skill-resolver.md`
 
@@ -8,7 +8,7 @@ This file is the per-session compact-rules cache for the Skill Resolver protocol
 The orchestrator copies one or more `## Skill: <slug>` blocks below into every subagent briefing under `## Project Standards (auto-resolved)`.
 Subagents trust those compact rules and only read the full SKILL.md when explicitly instructed.
 
-Skills indexed: 29
+Skills indexed: 26
 
 ---
 ## Skill: acli
@@ -30,6 +30,7 @@ Skills indexed: 29
 - WHEN creating an issue link: `--out` / `--in` are empirically INVERTED against Jira's semantics — `--out` takes the prerequisite, `--in` the dependent. Verify the direction by listing the link afterwards, and recreate with swapped flags if it landed backwards.
 - DO: capture and surface the trace id from any backend failure. It is the only debug signal, and Atlassian Support needs it.
 - WHEN the operation is a known blind spot (enumerate custom fields, edit custom-field values, manage workflows / issue types / versions / components, attachments, watchers, add an item to a sprint): route through REST or the opt-in Atlassian MCP rather than forcing the CLI.
+- WHEN a REST fallback needs `ATLASSIAN_EMAIL` / `ATLASSIAN_API_TOKEN`: run it inside the `.env` loader (`bunx varlock run --filter ATLASSIAN_EMAIL,ATLASSIAN_API_TOKEN -- sh -c '...'`) or through a bundled script that loads `.env` itself (`scripts/jira-attach-media.ts`). NEVER export them, `source .env` or print them in the agent's shell.
 - DO: prefer API-token auth in scripted contexts, and pin the binary to an explicit version in production pipelines — tracking `latest` has caused same-day mass failures.
 
 **Read full SKILL.md when**: composing a specific command, publishing rich text, running the REST PUT workaround, or working any surface outside Jira work items.
@@ -49,6 +50,7 @@ Skills indexed: 29
 - WHEN a workflow skill cites `agentic-qa-core/references/*.md`: load ONLY the files that skill's `## Dependencies` block names. Never preload the whole reference set.
 - WHEN deriving test cases or coverage from acceptance criteria in ANY testing skill: `references/test-design-doctrine.md` is mandatory reading first.
 - WHEN filing any bug / defect / improvement: `references/defect-management-doctrine.md` is mandatory reading first.
+- DO use every credential, token or session file by NAME only (Critical Rule #1): NEVER open `.env*` (except `.env.example` and the committed `.env*.schema` files), `.auth/**` or `.claude/settings.local.json`, NEVER run `printenv` / `env` / `echo $SECRET` / `set -x` / `curl -v`, check presence with `bunx varlock load --agent` and only against the committed schemas (`vars:schema:check` green; a scratch schema is banned, since `--agent` redacts only `@sensitive` items), write a non-sensitive value the human asked for ONLY with `bun run env:set KEY=value` (never by editing `.env`), and leave every secret value for the human to type. Forms, presence check and leak protocol: `references/secret-hygiene.md`.
 - WHEN dispatching a subagent: use the 7-component briefing in `references/briefing-template.md` and pick the pattern via `references/dispatch-patterns.md`. A subagent that must answer the user directly also loads `references/behavioral-layer.md` — it inherits no register from the orchestrator.
 - WHEN closing a workflow stage: verify that stage's Definition of Done in `references/stage-gates.md` BEFORE advancing.
 - WHEN about to ask a person to decide, or to pick between defensible options: run `references/decision-protocol.md` first. Search the record (session plan, `.session/decisions/`, ADRs, the synced ticket comments, Engram) and follow what is settled; decide a technical call inside the approved plan and report it as decided; escalate only product behaviour, a new security posture, an irreversible or outward action, and what the stage's "The person signs" column lists. An unattended routine parks those four, never assumes them.
@@ -68,7 +70,7 @@ Skills indexed: 29
 **Compact Rules**:
 - DO: act as a guided tour, not an executor. The tour ends the moment the user knows which skill to call; hand off there and step back.
 - DO NOT: do the downstream work yourself. Pre-sprint refinement is `/shift-left-testing`, per-ticket QA `/sprint-testing`, TMS authoring `/test-documentation`, automated tests `/test-automation`, suite runs `/regression-testing`, a new target repo `/project-discovery`, KATA adaptation `/test-framework-adaptation`.
-- WHEN someone is lost or asks how a skill works: suspend the compressed / caveman register for the whole explanation — full sentences, warm tone, and each technical term defined the first time it appears. Resume the normal register once they are oriented.
+- WHEN someone is lost or asks how a skill works: suspend the terse working register for the whole explanation — full sentences, warm tone, and each technical term defined the first time it appears. Resume the normal register once they are oriented.
 - DO: mirror the user's language in the explanation. The visual decks ship in Spanish only (technical terms stay English) — say so before opening one for an English speaker.
 - WHEN the goal is unclear: ask ONE question first (testing a ticket, or understanding the whole flow?). Never dump every stage on someone who asked about one.
 - DO: name a stage by its word (Shift-Left, Planning, Execution, Reporting, Documentation, Automation, Regression, Observation), never by number. A "Stage N" in an older doc resolves through `agentic-qa-core/references/stage-gates.md`; the why behind the stages is `iql-context`.
@@ -194,7 +196,7 @@ Skills indexed: 29
 - DO: clear the readiness preflight, then run the Phase 0 path self-check against `references/kata-invariants.md` §10 before dispatching anything. A FORBIDDEN path aborts and redirects to the skill named in the row; a path in neither table is ASKED about, never assumed.
 - WHEN one change spans both ALLOWED and FORBIDDEN paths: split it. This skill changes the base; `/test-automation` migrates the consuming specs in a follow-up.
 - DO: run Plan → Code → Verify → Archive in order for every non-trivial framework change. The pipeline IS the gate; "it's a quick refactor" is not an exemption.
-- DO NOT: edit `tests/components/` from a framework-development session — those L2/L3 KATA components are per-ticket surface.
+- DO NOT: edit per-ticket tests from a framework-development session: the specs under `tests/e2e/` and `tests/integration/` and the per-module Page / Api / Steps components are `/test-automation` surface. The KATA bases (`TestContext.ts`, `ApiBase.ts`, `UiBase.ts`) and the fixture files ARE yours (`references/kata-invariants.md` §10.1).
 - DO NOT: collapse the KATA layers (TestContext / Base / Domain / Fixture) under a simplicity argument. They are framework architecture, not speculative abstraction.
 - DO NOT: add a new fixture API without updating the matching fixture file AND `kata-manifest.json` AND citing at least one existing test that consumes it. Orphan fixtures rot, and the manifest is the anti-duplication gate.
 - DO NOT: bump a major version of Playwright / Bun / TypeScript without a regression run on a representative E2E suite — lockstep upgrades hide breaks in fixture lifecycle, locator engines, and type emit.
@@ -203,10 +205,14 @@ Skills indexed: 29
 - DO: verify with all four checks (test, types, lint, skills) and treat any non-zero exit as REJECT — present retry / skip-and-document / abort, never auto-fix. A skill that itself broke (a wrong step, a missing verifier, a stale rule) is reported upstream per `../agentic-qa-core/references/upstream-feedback.md`: drafted and redacted locally, filed only on explicit OK, verified with `gh issue view`.
 - WHEN the change IS a skill (a new or restructured `.agents/skills/<slug>/`): scaffold it per `../agentic-qa-core/references/skill-scaffold.md` (frontmatter incl. `metadata.kind`, per-kind files and sections, Definition of Done). `skill-creator` (T3, installed at project level) is ALWAYS the builder: load it for the draft, the test prompts, the evals and the description pass; the scaffold contract stays this repo's. Missing on the machine → scaffold from the reference's template and say so. Consumer SUT context skills are NOT this skill's job: `project-context` mode `context-skill` owns them.
 - DO NOT: let a subagent write `progress.md`; it is orchestrator-only. Code subagents return one-line summaries per task, and the orchestrator does not read their diffs.
-- DO: close every change that adds, renames or retires a skill, a `package.json` script or a doc path with the docs follow-through (Phase 3): patch `.agents/instructions/agent-context-map.md` and `.agents/instructions/agent-skills-and-mcps.md`, `README.md`, `INSTALLER.md`, `CONTEXT.md` and the `docs/core/` pages in the same PR. `bun run docs:check` proves the router and the quoted scripts; the prose is judgment.
+- DO: close every change that adds, renames or retires a skill, a `package.json` script or a doc path, OR changes a behaviour a page describes, with the docs follow-through (Phase 3): patch `.agents/instructions/agent-context-map.md` and `.agents/instructions/agent-skills-and-mcps.md`, `README.md`, `INSTALLER.md`, `CONTEXT.md`, the `docs/core/` pages, the decks (`packages/decks/**`) and the Pages home (`packages/pages-home/**`) in the same PR. `bun run docs:check` proves the router and the quoted scripts; the prose is judgment.
+- WHEN an edit lands inside a `LINT.IfChange(<label>)` region (the hook prints a `DOCS:` line; ADR-0016): update EVERY page its `LINT.ThenChange(...)` names in the same push. Only when the documented behaviour did not change, add `Docs-Checked: <label> <reason>` to a commit message; NEVER add it by reflex or without a reason. Pre-push and CI block otherwise. A drift found later gets a new marker.
+- WHEN the change touches `cli/`, `scripts/`, `.husky/`, `AGENTS.md` or `.agents/instructions/`: run the V5 drift sweep after the four verifiers, report-only (Phase 3). It greps the doc surface for prose that describes the OLD behaviour and counts the `Docs-Checked:` trailers the change used.
 - DO: archive the session directory only after all four verifiers pass. On REJECT it stays in place so the run can be debugged or resumed.
+- DO: route every change to `AGENTS.md`, a section under `.agents/instructions/`, the ROUTER or a `triggers:` list through mode `instructions`: place each sentence with `references/instructions-doctrine.md` §2, close with `bun run instructions:check`. NEVER paste section prose into `AGENTS.md`, and NEVER add a ROUTER row without the ADR that decides it (`--accept-router ADR-NNNN`, ADR-0013).
+- WHEN a trigger misses or over-fires: fix the section's `triggers:` and add the prompts to `cli/lib/fixtures/instruction-router-eval.json`; NEVER relabel a prompt to hide a miss.
 
-**Read full SKILL.md when**: writing the plan artifact, batching Code-phase tasks, resuming an interrupted session, or reading the ALLOWED/FORBIDDEN path tables themselves.
+**Read full SKILL.md when**: writing the plan artifact, batching Code-phase tasks, resuming an interrupted session, running mode `instructions`, or reading the ALLOWED/FORBIDDEN path tables themselves.
 
 > Source: `.agents/skills/framework-development/SKILL.md` · phase: `unknown` · kind: `workflow` · stage owner · extraction strategy: A
 
@@ -226,6 +232,7 @@ Skills indexed: 29
 - DO NOT: `git add -A` or `git add .`. List explicit paths, so a secret or another session's work cannot ride along.
 - DO: keep one commit to one responsibility, in conventional format (`{type}({ISSUE-KEY}): {description}`). Commit messages, branch names and PR bodies are English and carry NO AI attribution.
 - DO: close EVERY commit message, in every strategy, with the two forensic trailers `Worktree: <name|primary>` then `Session: <label>`, copied from the `AGENT IDENTITY:` line in session context (`unknown` when a value cannot be resolved). They are forensics, not attribution — a harness-branded trailer (`Claude-Session:`, an AI `Co-Authored-By:`) stays forbidden.
+- WHEN the pre-push or CI documentation-contract gate names a region (ADR-0016): update every page it lists in the same push; only if they still hold, add `Docs-Checked: <label> <reason>` above the forensic trailers. NEVER add it by reflex or without the reason.
 - WHEN a pre-commit hook rejects a commit: stop, fix the underlying issue, and create a NEW commit. Never `--amend` the rejected one.
 - DO: propose every branch name, commit set, and PR body and wait for an explicit OK before executing.
 - DO: stop at PR creation — merging is the user's next step, never automatic. If the `gh` transport is missing or unauthenticated, surface the blocker instead of implying a PR was opened.
@@ -308,9 +315,9 @@ Skills indexed: 29
 **Purpose**: Trigger: judgment day, dual review, adversarial review, juzgar.
 
 **Compact Rules**:
-- `/test-automation` — Review phase for high-risk test changes
-- `/git-flow-master` — pre-PR gate when the diff is large or touches shared fixtures / base classes
-- `/framework-development` — pre-archive review of framework evolution diffs
+- `/test-automation` — Review phase, as one of the two ways to satisfy its MANDATORY separate verifier (this skill OR `/pr-review-lead`), for every change, not only high-risk ones. That Review step counts as the explicit request above.
+- `/git-flow-master` — OPTIONAL pre-PR gate when the diff is large or touches shared fixtures / base classes
+- `/framework-development` — OPTIONAL pre-archive review of framework evolution diffs
 - The diff / files / PR / architecture slice under review — the literal target the user named.
 - `AGENTS.md` — repo conventions, Critical Rules, behavioral layer (the judges must score against these, not generic best-practice).
 - `.agents/skills/REGISTRY.md` — skill registry; resolve which project skills apply to the target's file paths + task type, and inject the same `Skills to load before work` block into both judge prompts.
@@ -345,7 +352,7 @@ Skills indexed: 29
 - DO treat the channel as an ASSIGNMENT, not a preference: `orchestration send` carries every message between sessions and is byte-intact; anything longer than a couple of sentences goes in a FILE with a one-line pointer; `terminal send` drives a terminal (commands, CLI calls, harness slash-commands, keystrokes) and nothing else, because it truncates silently, keeps only the TAIL and still reports success. The one exception is the launch handoff prompt of a supervised worker, which has no argv to travel in: keep it short and point it at a file. And read every send result as a statement about the CALL, never about the outcome.
 - DO acknowledge every mailbox batch, verified, in the SAME command that re-arms the wait, and never inside a compound command whose exit code can be swallowed. An unacknowledged batch replays forever and hides everything queued behind it, and the runtime does not re-notify. Roll the wait in windows of at most 540 s, because the harness kills a foreground command at 600 s. One waiter per Run, never a shell background job, never a self-built monitor: the runtime notifies the conductor on its own.
 - DO launch a supervised worker NATIVELY (the runtime starts the agent: task, worktree, agent, model, effort) and then send its prompt as the immediate next step. A terminal created with our own command line can NEVER be supervised — the runtime recognizes only agents it started, and adoption is refused on a terminal whose agent is demonstrably alive. Custom argv is the human-paste shape and the deliberately-unsupervised shape, nothing more.
-- DO verify credentials on the worker's own screen before dispatching work to it. The native launch has no argv: a Claude Code worker reads the `env` block of `.claude/settings.local.json` and an OpenCode worker reads `.auth/opencode/*` via `{file:}` (both generated from `.env` by `bun run harness:env`), while a Codex worker, and anything reading a shell-exported variable, depends on a per-machine direnv hook in the runtime's interactive shell: without it that worker starts clean, unsupervisedly broken, and fails much later at its first authenticated call.
+- DO verify credentials on the worker's own screen before dispatching work to it. The native launch has no argv: every MCP server, on any harness, reads the worktree's own `.env` through the `.env` loader in the MCP configs, so a provisioned `.env` is what reaches it, and every other process loads its own config (Bun autoload, `acli` stored auth, `varlock run` for a raw `curl`); no secret is ever exported into the worker's shell. Evidence is its MCP servers connected (`/mcp` on Claude Code) and its worktree holding `.env`: without them that worker starts clean and fails much later at its first authenticated call.
 - DO tell every worker, in the prompt AND in the brief, to run every stage without returning to the prompt until `worker_done` is sent: a stage boundary is not a checkpoint. And DO name the one `ask` that is mandatory: when a worker's own measurement contradicts a conductor instruction, it stops and asks with both readings and the evidence — never silent compliance, never silent deviation.
 - DO treat create + launch + brief as ONE indivisible operation, and verify a few minutes later that the brief actually landed (a created terminal reports success when the text was DELIVERED, not when it ran). Readiness is not completion.
 - DO close a finished worker in the same turn, and read its cost footer off its screen BEFORE closing: a worker's token and context usage exists nowhere else and dies with the terminal. Release the supervised worker by its dispatch; without a dispatch, COUNT the terminals in that worktree before closing anything, because the stop verb's radius is the whole worktree. Remove a worktree only after the orphan audit, because everything gitignored inside it (env file, evidence, session scope) dies with it.
@@ -360,53 +367,6 @@ Skills indexed: 29
 **Read full SKILL.md when**: starting a fleet cold, arbitrating a claim, choosing a topology, recovering a Run from a previous session, or writing an unattended automation.
 
 > Source: `.agents/skills/orca-orchestration/SKILL.md` · phase: `unknown` · kind: `workflow` · source: frontmatter `compact_rules` (verbatim)
-
----
-
-## Skill: playwright-best-practices
-
-> ⚠ LOW-CONFIDENCE (extraction strategy B): bullets scraped without context — read the full SKILL.md before relying on any rule below.
-
-**Purpose**: Use when writing Playwright tests, fixing flaky tests, debugging failures, implementing Page Object Model, configuring CI/CD, optimizing...
-
-**Compact Rules**:
-- **Run tests**: `npx playwright test --reporter=list`
-- **If tests fail**:
-- Review error output and trace (`npx playwright show-trace`)
-- Fix locators, waits, or assertions
-- Re-run tests
-- **Only proceed when all tests pass**
-- **Run multiple times** for critical tests: `npx playwright test --repeat-each=5`
-
-**Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
-
-> Source: `.agents/skills/playwright-best-practices/SKILL.md` · phase: `unknown` · kind: `unknown` · extraction strategy: B
-
----
-
-## Skill: playwright-cli
-
-> ⚠ LOW-CONFIDENCE (extraction strategy B): bullets scraped without context — read the full SKILL.md before relying on any rule below.
-
-**Purpose**: Automate browser interactions, test web pages and work with Playwright tests.
-
-**Compact Rules**:
-- Page URL: https://example.com/
-- Page Title: Example Domain
-- **Running and Debugging Playwright tests** [references/playwright-tests.md](references/playwright-tests.md)
-- **Request mocking** [references/request-mocking.md](references/request-mocking.md)
-- **Running Playwright code** [references/running-code.md](references/running-code.md)
-- **Browser session management** [references/session-management.md](references/session-management.md)
-- **Spec-driven testing (plan / generate / heal)** [references/spec-driven-testing.md](references/spec-driven-testing.md)
-- **Storage state (cookies, localStorage)** [references/storage-state.md](references/storage-state.md)
-- **Test generation** [references/test-generation.md](references/test-generation.md)
-- **Tracing** [references/tracing.md](references/tracing.md)
-- **Video recording** [references/video-recording.md](references/video-recording.md)
-- **Inspecting element attributes** [references/element-attributes.md](references/element-attributes.md)
-
-**Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
-
-> Source: `.agents/skills/playwright-cli/SKILL.md` · phase: `unknown` · kind: `unknown` · extraction strategy: B
 
 ---
 
@@ -448,7 +408,7 @@ Skills indexed: 29
 - Artifact missing (or a placeholder map) = CREATE mode: may write once the analysis completes. Artifact exists = UPDATE mode: generate a candidate (for a map: only its stale sections), show the diff summary, WAIT for explicit approval. NEVER overwrite an existing artifact without that approval, and NEVER regenerate a whole generated map.
 - Stop the run on a hard dependency failure or a rejected overwrite. A missing SOFT dependency is not a stop: record it as a Discovery Gap and continue, exactly as the selected reference defines.
 - NEVER invent business facts. Read every source the selected reference requires; anything unverified belongs under the output's mandatory discovery-gaps section, not asserted in the body.
-- After a successful artifact write, add the pointer to `.agents/instructions/agent-project.md` ONLY when that pointer is missing. NEVER write it into `AGENTS.md` (boilerplate-owned, size-budgeted) or add operational prose to `CLAUDE.md`.
+- After a successful artifact write, add the pointer to `.agents/instructions/agent-project.md` ONLY when that pointer is missing. NEVER write it into `AGENTS.md` (boilerplate-owned, size-budgeted) or add operational prose to `CLAUDE.md`. Placement per `framework-development/references/instructions-doctrine.md` §4, then `bun run instructions:check`; any other instruction change is `/framework-development` mode `instructions`.
 - Mode from `$ARGUMENTS`: when its first token matches a mode in the Mode routing table, that token IS the mode and the rest is forwarded to it unchanged (`/project-context data` on Claude Code, "project-context mode data" in prose on OpenCode and Codex). No matching first token → ASK which mode.
 - Before any step that uses a declared capability (`metadata.requires_capabilities`: `db`, `api-schema`, `diagrams` for the maps' figures), run the point-of-use check in `agentic-qa-core/references/preflight-gate.md` §8: resolve by tool-name suffix, and when no available tool provides it STOP and name the capability + how to enable it, never a silent fallback.
 
@@ -475,7 +435,7 @@ Skills indexed: 29
 - DO NOT: fill the `business-data-context`, `business-api-context` or `business-e2e-context` maps, and do not write personas, journeys, the feature catalog or the master test plan here. Those are `project-context` modes, which own their diff and overwrite approval. Exact API types are `bun run api:sync`.
 - DO NOT: create per-ticket PBI content or copy the backlog. Phase 4 is a connection check and writes no file; the committed `README.md` and `templates/` under `.context/PBI/` stay untouched.
 - DO NOT: paste credentials or a detected secret into any discovery output. Reference the `.env` key or the file path only; a hardcoded-secret hit is recorded as a HIGH risk (path only) in the Phase 1 assessment.
-- WHEN Phase 2 or 3 settles a test-architecture decision that is architectural AND hard to reverse (runner, isolation/parallelization, fixture and test-data strategy, auth-in-tests, selector contract, CI sharding): record it as an append-only ADR under `.context/ADR/`, drafted `Proposed` for the human to accept.
+- WHEN Phase 2 or 3 settles a test-architecture decision that is architectural AND hard to reverse (runner, isolation/parallelization, fixture and test-data strategy, auth-in-tests, selector contract, CI sharding): record it as an append-only ADR under `.context/ADR/`, drafted `Proposed` for the human to accept. In a brownfield repo the decision was DISCOVERED, not made here: write it `Proposed`, mark it discovered (where it was found), and have the human confirm it at that phase's completion checkpoint, which flips it to `Accepted`.
 - DO NOT: mix a discovery session with `test-framework-adaptation`, and do not use this skill for incremental map refreshes — the write boundaries differ.
 - DO NOT: skip Phase 1 or its domain glossary on a fresh start. Downstream skills load `business-domain-context` as a precondition for ATP authoring and TC naming.
 - WHEN both a DB schema/migrations and ORM models exist: prefer the schema or migrations. ORM definitions drift from the live schema.
@@ -514,36 +474,6 @@ Skills indexed: 29
 **Read full SKILL.md when**: driving the CI commands, applying the GO/CAUTION/NO-GO scoring table, resolving a borderline classification, wiring the TMS artifacts, or writing the report.
 
 > Source: `.agents/skills/regression-testing/SKILL.md` · phase: `unknown` · kind: `workflow` · stage owner · extraction strategy: A
-
----
-
-## Skill: resend-cli
-
-> ⚠ LOW-CONFIDENCE (extraction strategy B): bullets scraped without context — read the full SKILL.md before relying on any rule below.
-
-**Purpose**: Operate the Resend platform from the terminal — send emails (including React Email .tsx templates via --react-email), manage domains, con...
-
-**Compact Rules**:
-- Supply ALL required flags. The CLI will NOT prompt when stdin is not a TTY.
-- Pass `--quiet` (or `-q`) to suppress spinners and status messages.
-- Exit `0` = success, `1` = error.
-- Error JSON goes to stderr, success JSON goes to stdout:
-- Use `--api-key` or `RESEND_API_KEY` env var. Never rely on interactive login.
-- All `delete`/`rm` commands require `--yes` in non-interactive mode.
-- **Sending or reading emails** → [references/emails.md](references/emails.md)
-- **Setting up or verifying a domain** → [references/domains.md](references/domains.md)
-- **Managing API keys** → [references/api-keys.md](references/api-keys.md)
-- **Creating or sending broadcasts** → [references/broadcasts.md](references/broadcasts.md)
-- **Managing contacts, segments, or topics** → [references/contacts.md](references/contacts.md), [references/segments.md](references/segments.md), [references/topics.md](references/topics.md)
-- **Defining contact properties** → [references/contact-properties.md](references/contact-properties.md)
-- **Working with templates** → [references/templates.md](references/templates.md)
-- **Viewing API request logs** → [references/logs.md](references/logs.md)
-- **Creating automations or sending events** → [references/automations.md](references/automations.md)
-- (truncated — read full SKILL.md for the rest)
-
-**Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
-
-> Source: `.agents/skills/resend-cli/SKILL.md` · phase: `unknown` · kind: `unknown` · extraction strategy: B
 
 ---
 

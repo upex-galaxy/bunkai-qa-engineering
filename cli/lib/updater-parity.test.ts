@@ -1,5 +1,5 @@
 import type { ParityFinding, ParityInput, ParityMeta } from './updater-parity.ts';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import { dirname, join } from 'node:path';
@@ -35,6 +35,8 @@ import {
   renderParityReport,
   RESOLVED_BY_APPLY_MARK,
   resolvedByApply,
+  RETIRED_ENVRC,
+  retiredHarnessScripts,
   retiredMcpNote,
   runVerdict,
   strictVerdict,
@@ -419,6 +421,66 @@ describe('collectParityFindings', () => {
     expect(folded[0].evidence).toBe(`${error}; informational: ${warning}`);
   });
 
+  test('a leftover .envrc gets one informational row and is never touched; none without it', () => {
+    const root = temporaryRoot();
+    const upstream = temporaryRoot();
+    write(root, '.agents/project.yaml', 'git_strategy:\n  strategy: solo-main\n  meta:\n    strategy_source: chosen\n');
+    const findings = (): ReturnType<typeof collectParityFindings> => collectParityFindings({
+      root,
+      upstreamDir: upstream,
+      drift: [],
+      compatErrors: [],
+      archivedSkills: [],
+      archivedSkillsDir: join(root, '.template/pre-agents-migration/skills'),
+      heldBack: [],
+      envNewKeys: [],
+    });
+
+    expect(findings()).toEqual([]);
+
+    write(root, RETIRED_ENVRC, 'dotenv_if_exists .env\nexport MY_OWN_PATH=/opt/tool\n');
+    const rows = findings();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ surface: 'components', path: '.envrc', blocking: false, suggested: 'keep project' });
+    expect(rows[0].evidence).toStartWith('informational: upstream retired direnv');
+    expect(rows[0].evidence).toContain('Left untouched');
+    expect(readFileSync(join(root, RETIRED_ENVRC), 'utf8')).toBe('dotenv_if_exists .env\nexport MY_OWN_PATH=/opt/tool\n');
+  });
+
+  test('a retired harness launch script gets one informational row and package.json is never touched', () => {
+    const root = temporaryRoot();
+    const upstream = temporaryRoot();
+    write(root, '.agents/project.yaml', 'git_strategy:\n  strategy: solo-main\n  meta:\n    strategy_source: chosen\n');
+    const findings = (): ReturnType<typeof collectParityFindings> => collectParityFindings({
+      root,
+      upstreamDir: upstream,
+      drift: [],
+      compatErrors: [],
+      archivedSkills: [],
+      archivedSkillsDir: join(root, '.template/pre-agents-migration/skills'),
+      heldBack: [],
+      envNewKeys: [],
+    });
+
+    // A project's own `claude` script with another job is not the retired one.
+    write(root, 'package.json', `${JSON.stringify({ scripts: { claude: 'echo hi', test: 'playwright test' } })}\n`);
+    expect(findings()).toEqual([]);
+
+    const pkg = `${JSON.stringify({ scripts: {
+      claude: 'bun --no-env-file scripts/launch.ts claude',
+      codex: 'dotenv -o -e .env -- codex',
+      opencode: 'opencode',
+    } })}\n`;
+    write(root, 'package.json', pkg);
+    expect(retiredHarnessScripts(root)).toEqual(['claude', 'codex']);
+    const rows = findings();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ surface: 'package', path: 'package.json', blocking: false, suggested: 'keep project' });
+    expect(rows[0].evidence).toStartWith('informational: upstream retired the harness launch scripts `claude`, `codex`');
+    expect(rows[0].evidence).toContain('Left untouched');
+    expect(readFileSync(join(root, 'package.json'), 'utf8')).toBe(pkg);
+  });
+
   test('a playwright-cli config with the old shared profile gets one informational row; a clean, absent or broken one gets none', () => {
     const root = temporaryRoot();
     const upstream = temporaryRoot();
@@ -731,6 +793,106 @@ describe('the allow-list merge is reported, never silent', () => {
       allowListAdded: [],
     });
     expect(findings.find(f => f.path === '.claude/settings.json')).toBeUndefined();
+    // A declined deny alone is the project's standing decision, not news.
+    expect(collectParityFindings({ ...permissionInput(root, temporaryRoot()), denyListDeclined: ['Bash(env)'] })
+      .find(f => f.path === '.claude/settings.json')).toBeUndefined();
+  });
+
+  test('deny additions share the one settings row, with the declined entries named', () => {
+    const root = temporaryRoot();
+    const rows = collectParityFindings({
+      ...permissionInput(root, temporaryRoot()),
+      allowListAdded: ['Skill(pr-review-lead)'],
+      denyListAdded: ['Read(.env)', 'Bash(printenv*)'],
+      denyListDeclined: ['Bash(env)'],
+    }).filter(f => f.path === '.claude/settings.json');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].blocking).toBe(false);
+    expect(rows[0].evidence).toContain('1 permission(s) added to permissions.allow: Skill(pr-review-lead)');
+    expect(rows[0].evidence).toContain('2 rule(s) added to permissions.deny: Read(.env), Bash(printenv*)');
+    expect(rows[0].evidence).toContain('declined via updater.declined_denies: Bash(env)');
+    expect(rows[0].evidence).toContain('ask/hooks/env untouched');
+    expect(rows[0].evidence).not.toContain('deny/ask');
+  });
+
+  test('hook additions, skips and a folded key share the one settings row', () => {
+    const root = temporaryRoot();
+    const rows = collectParityFindings({
+      ...permissionInput(root, temporaryRoot()),
+      hooksAdded: ['PostToolUse(*) node "$CLAUDE_PROJECT_DIR/.agents/hooks/personality-reinject.mjs"'],
+      hooksDeclined: ['PostToolUse(Edit|Write|MultiEdit) node "$CLAUDE_PROJECT_DIR/.agents/hooks/doc-contracts.mjs"'],
+      settingsDuplicatesFolded: ['hooks.PostToolUse'],
+    }).filter(f => f.path === '.claude/settings.json');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].blocking).toBe(false);
+    expect(rows[0].evidence).toContain('1 hook command(s) added as new groups: PostToolUse(*)');
+    expect(rows[0].evidence).toContain('declined via updater.declined_hooks: PostToolUse(Edit|Write|MultiEdit)');
+    expect(rows[0].evidence).toContain('repeated key(s) folded into one list (JSON keeps only the last): hooks.PostToolUse');
+    expect(rows[0].evidence).toContain('deny/ask/env untouched');
+  });
+
+  test('a hook skipped for a missing script raises the row alone; a declined hook alone does not', () => {
+    const root = temporaryRoot();
+    const skipped = collectParityFindings({ ...permissionInput(root, temporaryRoot()), hooksSkipped: ['PostToolUse(*) node "$CLAUDE_PROJECT_DIR/.agents/hooks/gone.mjs"'] })
+      .filter(f => f.path === '.claude/settings.json');
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0].evidence).toContain('not added, the script they run is missing: PostToolUse(*)');
+    expect(collectParityFindings({ ...permissionInput(root, temporaryRoot()), hooksDeclined: ['PostToolUse(*) node x.mjs'] })
+      .find(f => f.path === '.claude/settings.json')).toBeUndefined();
+  });
+});
+
+/** The minimum `collectParityFindings` input for the permission rows. */
+function permissionInput(root: string, upstreamDir: string): Parameters<typeof collectParityFindings>[0] {
+  return {
+    root,
+    upstreamDir,
+    drift: [],
+    compatErrors: [],
+    archivedSkills: [],
+    archivedSkillsDir: join(root, '.template/pre-agents-migration/skills'),
+    heldBack: [],
+    envNewKeys: [],
+  };
+}
+
+describe('the opencode.jsonc deny gap is one paste row, never a rewrite', () => {
+  const upstreamOpencode = '{\n  "permission": {\n    "bash": { "*": "ask", "printenv*": "deny", },\n    "read": { "*.env": "deny" },\n  },\n}\n';
+
+  test('a project lacking upstream denies gets one mcp row with the block in its note', () => {
+    const root = temporaryRoot();
+    const upstream = temporaryRoot();
+    write(upstream, 'opencode.jsonc', upstreamOpencode);
+    write(root, 'opencode.jsonc', '{ "permission": { "bash": { "*": "ask" } } }\n');
+    const rows = collectParityFindings(permissionInput(root, upstream)).filter(f => f.path === 'opencode.jsonc');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].surface).toBe('mcp');
+    expect(rows[0].blocking).toBe(false);
+    expect(rows[0].suggested).toBe('merge');
+    expect(rows[0].side).toBe('kept');
+    expect(rows[0].evidence).toContain('lacks 2 upstream deny rule(s) (bash: printenv*; read: *.env)');
+    expect(rows[0].note).toContain('```jsonc');
+    expect(rows[0].note).toContain('"printenv*": "deny",');
+  });
+
+  test('folds onto the file\'s existing drift row', () => {
+    const root = temporaryRoot();
+    const upstream = temporaryRoot();
+    write(upstream, 'opencode.jsonc', upstreamOpencode);
+    write(root, 'opencode.jsonc', '{ "permission": {} }\n');
+    const rows = collectParityFindings({ ...permissionInput(root, upstream), drift: [{ path: 'opencode.jsonc', reason: 'watched' }] })
+      .filter(f => f.path === 'opencode.jsonc');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].evidence).toContain('upstream deny rule(s)');
+    expect(rows[0].suggested).toBe('merge');
+  });
+
+  test('no gap, no row', () => {
+    const root = temporaryRoot();
+    const upstream = temporaryRoot();
+    write(upstream, 'opencode.jsonc', upstreamOpencode);
+    write(root, 'opencode.jsonc', upstreamOpencode);
+    expect(collectParityFindings(permissionInput(root, upstream)).find(f => f.path === 'opencode.jsonc')).toBeUndefined();
   });
 });
 

@@ -48,7 +48,7 @@ orca terminal rename --terminal "$ORCA_TERMINAL_HANDLE" --title "conductor · <s
 #     sentence, and anything that has to be right from the first action — the session-title
 #     token and the no-stopping clause included. Which is why the briefs are written first:
 #     the spec cites them by path.
-orca orchestration task-create --display-name '<KEY>' --spec '/<workflow-skill> <KEY> fleet worker. Read <ABS>/.session/orchestration/<slug>/COMMON.md then <ABS>/.session/orchestration/<slug>/W-<label>.md and execute your brief. Run every stage without returning to the prompt until worker_done is sent; stage boundaries are not checkpoints. Channel: orca orchestration. No heartbeats.' --json </dev/null
+orca orchestration task-create --display-name '<KEY>' --spec '/<workflow-skill> <KEY> fleet worker. Read <ABS>/.session/orchestration/<slug>/COMMON.md then <ABS>/.session/orchestration/<slug>/W-<label>.md and execute your brief. Run every stage without returning to the prompt until worker_done is sent; stage boundaries are not checkpoints. Channel: orca orchestration. No heartbeats. ROUTE-SCOPE: <section ids>' --json </dev/null
 #     <KEY> is the worker's ROSTER NAME, one value everywhere: the ticket key (or <KEY>-<slug>) for a
 #       ticket, a kebab slug for anything else (`volatile-impl`). It is the session name, the tab title
 #       prefix, the task display name and the `Session:` trailer. One token, no extra words between it
@@ -85,15 +85,16 @@ orca terminal rename --terminal <handle> --title "<KEY> · task_<first 4 of the 
 #     --effort requires --model; neither combines with --terminal. --name names a NEW WORKTREE,
 #       not the session: there is no session-name flag on this path (see §1b).
 #     Prerequisites, both invisible from here: the agent's per-machine default arguments must carry
-#       an auto permission mode, and credentials must reach the worker: Claude reads
-#       `.claude/settings.local.json`, OpenCode reads `.auth/opencode/*` (both from `bun run harness:env`),
-#       Codex needs direnv in the interactive shell (G45). references/orca-machine-setup.md §3.
+#       an auto permission mode, and credentials must reach the worker: every MCP server reads the
+#       worktree's own `.env` through the `.env` loader in the MCP configs, and every other process
+#       loads its own config; nothing is exported into the shell. references/orca-machine-setup.md §3.
 
 # 5 · verify readiness AND credentials on the worker's screen, before sending it any work
 orca terminal read --terminal <handle> --screen --json </dev/null
 #     want: the agent's status footer (model, effort) AND evidence credentials loaded
-#     (an MCP tool listed as connected, a direnv export line on Codex, or the worker's own
-#     first probe). No credentials → fix the machine, do not dispatch work to it.
+#     (its MCP servers listed as connected, e.g. `/mcp` on Claude Code, or the worker's own
+#     first probe). No credentials → provision the worktree's `.env` and restart the session, do
+#     not dispatch work to it.
 #     Also the SESSION NAME in the status bar. Claude Code: the identity hook named it from the
 #     prompt token; the bar reads `<KEY>`. OpenCode and Codex have no hook that can: drive the TUI
 #     with `terminal send --enter --text '/rename <KEY>'` once the screen shows it ready, then read
@@ -106,12 +107,13 @@ orca terminal read --terminal <handle> --screen --json </dev/null
 #     Anything longer than a couple of sentences goes in a FILE with a one-line pointer here:
 #     a long --text is truncated and still reports accepted:true with a byte count (G60).
 orca terminal send --terminal <handle> --enter \
-  --text '/sprint-testing <KEY> fleet worker. Read <ABS>/.session/orchestration/<slug>/COMMON.md then <ABS>/.session/orchestration/<slug>/W-<label>.md and execute your brief. Run every stage without returning to the prompt until worker_done is sent; stage boundaries are not checkpoints. Channel: orca orchestration. No heartbeats.' \
+  --text '/sprint-testing <KEY> fleet worker. Read <ABS>/.session/orchestration/<slug>/COMMON.md then <ABS>/.session/orchestration/<slug>/W-<label>.md and execute your brief. Run every stage without returning to the prompt until worker_done is sent; stage boundaries are not checkpoints. Channel: orca orchestration. No heartbeats. ROUTE-SCOPE: <section ids>' \
   --json </dev/null
 #     The prompt MUST OPEN with `/<workflow-skill> <KEY> fleet worker`: that token is what the
 #     identity hook turns into the session name `<KEY>` on Claude Code (there is no name flag here),
 #     and what the workflow skill reads to know it is a fleet worker. Everything after it is the
-#     brief pointer plus the continuation sentence.
+#     brief pointer, the continuation sentence and, LAST, the `ROUTE-SCOPE:` sentence that tells the
+#     prompt hook which instruction sections to route (launch-seam.md §2.1b).
 #     On `agent_prompt_stalled`: the text is usually ALREADY queued. Read the screen or
 #     `worktree ps` before resending, or the worker gets the message twice (G52).
 
@@ -154,7 +156,7 @@ about each:
 | the session-name flag, and any say over the tab title | the roster, the board card and the `Session:` commit trailer all key off the label, and the runtime titles the tab `worker-<task id>` (G71) | the prompt opens with `/<workflow-skill> <KEY> fleet worker` and the identity hook names a Claude Code session `<KEY>` from it; the conductor sends `/rename <KEY>` to the other harnesses (step 5) and renames the tab (step 4b). `references/session-identity.md` §2b |
 | environment variables in the launch line | a worker cannot be marked as a fleet worker by an exported variable | the brief and the prompt token carry it. `sprint-testing` detects worker mode from them, not from the environment |
 | the prompt in the launch itself | the worker starts idle at its prompt | step 6: `terminal send` immediately after readiness. Until it lands, the worker has nothing to do |
-| a launch line that also loads the env file | Claude and OpenCode workers read the surfaces `bun run harness:env` generated; a Codex worker, or any shell-exported variable, depends on the MACHINE having direnv, and nothing reports its absence | step 5: verify credentials on screen BEFORE dispatching work (G45) |
+| a launch line that also loads the env file | every MCP server reads the worktree's own `.env` through the `.env` loader on any harness, and every other process loads its own config; a worktree without `.env` hands every server empty values | step 5: verify credentials on screen BEFORE dispatching work (`references/orca-machine-setup.md` §3.2) |
 
 **The custom-argv path** (`terminal create --command '<the line from launch.txt>'` plus
 `terminal wait --for tui-idle`) keeps exactly one role: it is the shape of the line a HUMAN pastes
@@ -405,7 +407,6 @@ dependencies. Before `worktree rm`:
    remove it, mark the roster row `resume: gone (worktree removed)` so nobody tries.
 5. Only then remove, and `git worktree prune`. From the CLI that is `orca worktree rm --run-hooks`:
    without the flag Orca skips the committed `orca.yaml` archive hook (which runs the same rescue).
-   A worktree provisioned with direnv leaves an allow entry behind; `direnv prune` clears it.
 
 Mechanics and the untracked-files gotcha: `git-flow-master/references/worktrees.md`.
 

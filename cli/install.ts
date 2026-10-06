@@ -18,7 +18,7 @@
  *     9-skills-community Install community skills via `bunx skills add`
  *
  *   PHASE 3 — CONFIGURATION
- *     10-mcp-env        Wire `.env` for MCP servers + offer direnv autoload
+ *     10-mcp-env        Wire `.env` for MCP servers
  *     13-github-repo    GitHub repository (optional)
  *
  *   PHASE 4 — VERIFICATION
@@ -65,16 +65,19 @@
  *   INSTALL_SKIP_COMMUNITY=1              Skip `bunx skills add` step
  *   INSTALL_SKIP_JIRA=1                   Skip optional Jira bootstrap
  *   INSTALL_SKIP_API=1                    Skip optional API auth bootstrap
- *   INSTALL_SKIP_DIRENV=1                 Skip direnv autoload setup
+ *   INSTALL_SECRETS_PROVIDER=1password    Opt in to a secret manager (default: .env); with
+ *   INSTALL_SECRETS_VAULT=<vault>         the vault its references point at
  */
 
+import type { Harness } from './lib/harness-selection.ts';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import { chmod, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
 import { checkbox, password } from '@inquirer/prompts';
+import { parse as parseYaml } from 'yaml';
 import {
   checkAgentCompatibility,
   removeShadowingCommands,
@@ -88,7 +91,24 @@ import {
 } from './lib/atlassian-instance.ts';
 import { removeRetiredEnvLines, retiredEnvKeysIn } from './lib/env-schema.ts';
 import { CLI_LOGINS, HARNESS_LEVEL_HOWTO, HARNESS_LEVEL_MCPS } from './lib/harness-level-mcps.ts';
+import {
+  declaredHarnesses,
+  explicitHarnesses,
+  HARNESS_FILES,
+  HARNESS_LABEL,
+  HARNESSES,
+  HARNESSES_KEY,
+  withHarnesses,
+} from './lib/harness-selection.ts';
 import { playwrightBrowsersInstalled } from './lib/playwright-cache.ts';
+import {
+  ADAPTERS,
+  applySecretsChoice,
+  isValidVaultName,
+  PROVIDER_SCHEMA_FILE,
+  readSecretsConfig,
+  SECRET_PROVIDERS,
+} from './lib/secret-providers.ts';
 import * as tui from './lib/tui.ts';
 import { runVariablesFlow } from './lib/variables-flow.ts';
 import { criticalVars, nonCriticalVars, valueSourceOf, VAR_MANIFEST, varsFor } from './lib/variables-manifest.ts';
@@ -211,6 +231,7 @@ const OPENCODE_CONFIG_PATH = join(REPO_ROOT, 'opencode.jsonc');
 const CODEX_CONFIG_PATH = join(REPO_ROOT, '.codex', 'config.toml');
 const ENV_PATH = join(REPO_ROOT, '.env');
 const ENV_EXAMPLE_PATH = join(REPO_ROOT, '.env.example');
+const PROJECT_YAML_FILE = join(REPO_ROOT, '.agents', 'project.yaml');
 
 const REPO_NAME = 'agentic-qa-boilerplate';
 
@@ -304,8 +325,8 @@ const EXTERNAL_CLIS: ReadonlyArray<{ name: string, install?: string, docs: strin
     // which is what `bun run vars:schema:check`, the pre-push warning and
     // `setup:doctor` run through `bunx`; that copy is NOT on the PATH a
     // harness gives an MCP server (measured: `bunx varlock` resolves from the
-    // project, a bare `varlock` does not). The binary is optional until the
-    // MCP wrapping phase makes it the server command on every host.
+    // project, a bare `varlock` does not). The binary stays optional: the MCP
+    // `.env` loader runs `bunx -p varlock@<pin>`, which needs only bun.
     //
     // Install paths, per varlock.dev and the 1.20.0 release assets:
     //   macOS        brew install dmno-dev/tap/varlock
@@ -436,6 +457,11 @@ const USER_LEVEL_SKILLS: ReadonlyArray<CommunitySkill> = [
 export const MCP_VAR_PATTERN = /\$\{([A-Z][A-Z0-9_]*)(?::-[^}]*)?\}/g;
 // Matches OpenCode {env:VAR} placeholders in opencode.jsonc.
 export const OPENCODE_VAR_PATTERN = /\{env:([A-Z][A-Z0-9_]*)\}/g;
+// Matches the `.env` loader's `"--filter", "A,B"` pair, spelled the same in the
+// three MCP configs (JSON, JSONC and TOML arrays). The names it lists are what
+// the server reads from `.env` (MCP_ENV_LOADER_* in
+// cli/lib/agent-compatibility-contracts.ts).
+export const MCP_FILTER_PATTERN = /"--filter"\s*,\s*"([A-Z][A-Z0-9_,]*)"/g;
 const SECRET_NAME_HINTS = ['TOKEN', 'KEY', 'SECRET', 'PASSWORD'];
 
 // Map MCP server → env vars its secrets depend on. Servers with empty arrays
@@ -518,7 +544,6 @@ const FORCE_GITHUB = process.env.INSTALL_FORCE_GITHUB === '1';
 const SKIP_JIRA = process.env.INSTALL_SKIP_JIRA === '1';
 const SKIP_API = process.env.INSTALL_SKIP_API === '1';
 const SKIP_COMMUNITY = process.env.INSTALL_SKIP_COMMUNITY === '1';
-const SKIP_DIRENV = process.env.INSTALL_SKIP_DIRENV === '1';
 
 // ============================================================================
 // Logger (wraps tui + keeps inline COLORS for printClosingSummary)
@@ -904,6 +929,7 @@ async function runPlaywrightInstall(state: InstallState, forceKeys: Set<string>)
 // Phase 2 — Step 8 (8-skills-gentle-ai): wire Engram per agent
 // ============================================================================
 
+// LINT.IfChange(engram-setup)
 /**
  * `engram setup` argument list per agent. The agent slugs this installer
  * uses (claude-code / opencode / codex) are the slugs `engram setup` accepts.
@@ -914,6 +940,53 @@ export function engramSetupArgs(agent: AgentId): string[] {
     ? ['setup', agent, '--protocol=slim']
     : ['setup', agent];
 }
+
+/** The Engram Claude Code plugin ships the session hooks `engram setup` does not write. */
+export const ENGRAM_PLUGIN_COMMANDS: string[][] = [
+  ['plugin', 'marketplace', 'add', 'Gentleman-Programming/engram'],
+  ['plugin', 'install', 'engram@engram'],
+];
+const ENGRAM_PLUGIN_MANUAL = 'claude plugin marketplace add Gentleman-Programming/engram && claude plugin install engram@engram';
+
+export interface EngramPluginDeps {
+  nonInteractive: boolean
+  hasClaude: () => boolean
+  confirm: (message: string) => Promise<boolean>
+  run: (args: string[]) => { ok: boolean, stderr: string }
+}
+
+export type EngramPluginOutcome = 'installed' | 'declined' | 'skipped-non-interactive' | 'no-claude-cli' | 'failed';
+
+/**
+ * Offer to install the Engram Claude Code plugin. Never fatal: every path that
+ * does not install it prints the manual command and returns. Non-interactive
+ * runs never install it, because it writes user-level Claude Code config.
+ */
+export async function offerEngramClaudePlugin(deps: EngramPluginDeps): Promise<EngramPluginOutcome> {
+  const printManual = (): void => {
+    log.dim('  For Engram session hooks in Claude Code, install the plugin once:');
+    log.dim(`    ${ENGRAM_PLUGIN_MANUAL}`);
+  };
+  if (deps.nonInteractive) { printManual(); return 'skipped-non-interactive'; }
+  if (!deps.hasClaude()) { printManual(); return 'no-claude-cli'; }
+  if (!(await deps.confirm('Install the Engram Claude Code plugin (session hooks) now?'))) {
+    printManual();
+    return 'declined';
+  }
+  const [marketplaceAdd, pluginInstall] = ENGRAM_PLUGIN_COMMANDS;
+  // A marketplace that is already registered makes `add` fail; the install
+  // below is what decides the outcome.
+  deps.run(marketplaceAdd);
+  const result = deps.run(pluginInstall);
+  if (!result.ok) {
+    log.warn(`  Engram plugin install failed: ${result.stderr.trim() || 'unknown error'}`);
+    printManual();
+    return 'failed';
+  }
+  log.success('  Engram Claude Code plugin installed.');
+  return 'installed';
+}
+// LINT.ThenChange(README.md, INSTALLER.md, docs/core/empezar-aqui.html)
 
 function runEngramSetup(agent: AgentId): { ok: boolean, reason?: string } {
   const result = tryRun('engram', engramSetupArgs(agent));
@@ -969,9 +1042,13 @@ async function installEngramPerAgent(
     }
     if (result.ok && agent === 'claude-code') {
       // `engram setup` registers the MCP server only; the session hooks ship
-      // in the Claude Code plugin, which the user installs once per machine.
-      log.dim('  For Engram session hooks in Claude Code, install the plugin once:');
-      log.dim('    claude plugin marketplace add Gentleman-Programming/engram && claude plugin install engram@engram');
+      // in the Claude Code plugin, installed once per machine.
+      await offerEngramClaudePlugin({
+        nonInteractive: NON_INTERACTIVE,
+        hasClaude: () => which('claude') !== null,
+        confirm: async message => maybeConfirm(message, true),
+        run: args => tryRun('claude', args),
+      });
     }
 
     state.skills[`${ENGRAM_COMPONENT}::${agent}`] = status;
@@ -1065,12 +1142,13 @@ async function installCommunitySkills(
 
 // ============================================================================
 // Phase 3 — CONFIGURATION
-// Step 10 (10-mcp-env): Wire .env for MCP servers (+ direnv autoload offer)
+// Step 10 (10-mcp-env): Wire .env for MCP servers
 // ============================================================================
 //
 // `.mcp.json` and `opencode.jsonc` are committed with `${VAR}` / `{env:VAR}`
 // expansion. The installer no longer rewrites those files — it only ensures
-// `.env` contains the required values, then optionally enables direnv.
+// `.env` contains the required values. Nothing is exported into the shell:
+// every MCP server reads `.env` itself through the `.env` loader.
 
 export function isSecretName(name: string): boolean {
   return SECRET_NAME_HINTS.some(hint => name.endsWith(hint) || name.endsWith(`_${hint}`));
@@ -1083,6 +1161,13 @@ function stripJsoncComments(input: string): string {
   return input
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/^\s*\/\/.*$/gm, '');
+}
+
+/** Every name a `.env` loader `--filter` lists in `content`. */
+function collectFilterNames(content: string, seen: Set<string>): void {
+  for (const m of content.matchAll(MCP_FILTER_PATTERN)) {
+    for (const name of m[1].split(',')) { if (name.length > 0) { seen.add(name); } }
+  }
 }
 
 function collectCodexMcpEnvVars(value: unknown, seen: Set<string>): void {
@@ -1111,15 +1196,18 @@ export async function discoverRequiredEnvVars(
   if (agents.includes('claude-code') && existsSync(claudeMcpPath)) {
     const content = await readFile(claudeMcpPath, 'utf8');
     for (const m of content.matchAll(MCP_VAR_PATTERN)) { seen.add(m[1]); }
+    collectFilterNames(content, seen);
   }
   if (agents.includes('opencode') && existsSync(openCodeConfigPath)) {
     const raw = await readFile(openCodeConfigPath, 'utf8');
     const content = stripJsoncComments(raw);
     for (const m of content.matchAll(OPENCODE_VAR_PATTERN)) { seen.add(m[1]); }
+    collectFilterNames(content, seen);
   }
   if (agents.includes('codex') && existsSync(codexConfigPath)) {
-    const parsed = Bun.TOML.parse(await readFile(codexConfigPath, 'utf8'));
-    collectCodexMcpEnvVars(parsed, seen);
+    const raw = await readFile(codexConfigPath, 'utf8');
+    collectCodexMcpEnvVars(Bun.TOML.parse(raw), seen);
+    collectFilterNames(raw.replace(/^\s*#.*$/gm, ''), seen);
   }
   return [...seen].sort();
 }
@@ -1482,104 +1570,118 @@ async function configureDayZeroCredentials(state: InstallState): Promise<void> {
 }
 
 // ----------------------------------------------------------------------------
-// direnv autoload sub-step (still part of Step 10 / 10-mcp-env)
+// Step 10a: where SECRET values live. `.env` is the default and stays first
+// (ADR-0010); a secret manager is the advanced opt-in. Choosing one writes the
+// committed overlay `.env.provider.schema` (references only) and records the
+// choice in `.agents/project.yaml` `secrets:`. Logic: cli/lib/secret-providers.ts.
 // ----------------------------------------------------------------------------
 
-interface DirenvInfo {
-  installed: boolean
-  version?: string
-  supportsDotenvIfExists: boolean
-  supportsPwshHook: boolean
-  platform: NodeJS.Platform
+function suggestedVault(): string {
+  try {
+    const name = (parseYaml(readFileSync(PROJECT_YAML_FILE, 'utf8')) as { project?: { project_name?: unknown } })?.project?.project_name;
+    const slug = typeof name === 'string' ? name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : '';
+    return `${slug || 'myproject'}-dev`;
+  }
+  catch { return 'myproject-dev'; }
 }
 
-function detectDirenv(): DirenvInfo {
-  const platform = process.platform;
-  const result = tryRun('direnv', ['version']);
-  if (!result.ok) {
-    return { installed: false, supportsDotenvIfExists: false, supportsPwshHook: false, platform };
-  }
-  const version = result.stdout.trim();
-  const parts = version.split('.').map(n => Number.parseInt(n, 10));
-  const maj = parts[0] ?? 0;
-  const min = parts[1] ?? 0;
-  const supportsDotenvIfExists = maj > 2 || (maj === 2 && min >= 30);
-  const supportsPwshHook = maj > 2 || (maj === 2 && min >= 37);
-  return { installed: true, version, supportsDotenvIfExists, supportsPwshHook, platform };
+/**
+ * A project whose `.gitignore` predates the overlay denies every `.env*`, so the
+ * new file would be ignored in silence and never reach the team. `.gitignore`
+ * is the project's (the updater does not sync it): re-include the one file,
+ * which holds references only, and say so.
+ */
+function ensureOverlayTracked(): void {
+  const ignored = spawnSync('git', ['check-ignore', '-q', PROVIDER_SCHEMA_FILE], { cwd: REPO_ROOT }).status === 0;
+  if (!ignored) { return; }
+  const gitignore = join(REPO_ROOT, '.gitignore');
+  const before = existsSync(gitignore) ? readFileSync(gitignore, 'utf8') : '';
+  const sep = before === '' || before.endsWith('\n') ? '' : '\n';
+  writeFileSync(gitignore, `${before}${sep}# The secret-manager overlay holds references only (ADR-0010): it travels.\n!${PROVIDER_SCHEMA_FILE}\n`, 'utf8');
+  log.success(`Re-included ${PROVIDER_SCHEMA_FILE} in .gitignore (it was ignored by an .env* rule).`);
 }
 
-function installHintForPlatform(): string {
-  if (process.platform === 'win32') {
-    return 'winget install direnv  (then restart Git Bash or PowerShell)';
+async function offerSecretManager(): Promise<void> {
+  if (existsSync(join(REPO_ROOT, PROVIDER_SCHEMA_FILE))) {
+    log.info(`Secret manager overlay present (${PROVIDER_SCHEMA_FILE}): uncommented keys resolve from the manager; a non-empty .env value still wins.`);
+    return;
   }
-  if (process.platform === 'darwin') {
-    return 'brew install direnv';
+  let config;
+  try { config = readSecretsConfig(PROJECT_YAML_FILE); }
+  catch (err) {
+    log.warn(`${(err as Error).message} Keeping secrets in .env.`);
+    return;
   }
-  return 'sudo apt install direnv  (or: dnf install direnv  /  pacman -S direnv)';
-}
 
-function shellHookHint(info: DirenvInfo): string {
-  const shell = (process.env.SHELL ?? '').toLowerCase();
-  if (process.platform === 'win32' && shell.length === 0) {
-    if (info.supportsPwshHook) {
-      return 'Invoke-Expression "$(direnv hook pwsh)"  →  add to $PROFILE  (PowerShell)';
+  const requested = process.env.INSTALL_SECRETS_PROVIDER?.trim();
+  if (requested) {
+    if (!(SECRET_PROVIDERS as readonly string[]).includes(requested)) {
+      log.warn(`INSTALL_SECRETS_PROVIDER=${requested} is not one of ${SECRET_PROVIDERS.join(' | ')}; keeping secrets in .env.`);
+      return;
     }
-    return 'eval "$(direnv hook bash)"  →  add to ~/.bashrc  (Git Bash; PowerShell needs direnv 2.37+)';
+    config.provider = requested as typeof config.provider;
   }
-  if (shell.endsWith('zsh')) {
-    return 'eval "$(direnv hook zsh)"  →  add to ~/.zshrc';
-  }
-  if (shell.endsWith('fish')) {
-    return 'direnv hook fish | source  →  add to ~/.config/fish/config.fish';
-  }
-  if (shell.endsWith('bash')) {
-    return 'eval "$(direnv hook bash)"  →  add to ~/.bashrc';
-  }
-  return 'eval "$(direnv hook <your-shell>)"  →  see https://direnv.net/docs/hook.html';
-}
+  const vaultFromEnv = process.env.INSTALL_SECRETS_VAULT?.trim();
+  if (vaultFromEnv) { config.onepassword.vault = vaultFromEnv; }
 
-async function offerDirenvAutoload(): Promise<void> {
-  if (SKIP_DIRENV) {
-    log.dim('  INSTALL_SKIP_DIRENV=1, skipping direnv setup.');
+  if (!NON_INTERACTIVE) {
+    const choice = await tui.select({
+      message: 'Where will this project keep its SECRET values?',
+      options: [
+        { label: '.env file (default: no account needed, works offline)', value: 'local' as const },
+        { label: '1Password (advanced: shared vault for the team, service account for CI)', value: '1password' as const },
+      ],
+      initialValue: config.provider,
+    });
+    if (tui.isCancel(choice)) { throw Object.assign(new Error('Aborted by user.'), { name: 'ExitPromptError' }); }
+    config.provider = choice;
+    if (config.provider === '1password') {
+      const vault = await tui.text({
+        message: '1Password vault the references point at (team: <project>-dev; personal plan: Private)',
+        initialValue: config.onepassword.vault ?? suggestedVault(),
+        validate: v => (v && isValidVaultName(v.trim()) ? undefined : 'Letters, digits, ".", "_" or "-" only.'),
+      });
+      if (tui.isCancel(vault)) { throw Object.assign(new Error('Aborted by user.'), { name: 'ExitPromptError' }); }
+      config.onepassword.vault = vault.trim();
+      const account = await tui.text({
+        message: 'Account shorthand from `op account list` (Enter = the CLI default account)',
+        initialValue: config.onepassword.account ?? '',
+      });
+      if (tui.isCancel(account)) { throw Object.assign(new Error('Aborted by user.'), { name: 'ExitPromptError' }); }
+      config.onepassword.account = account.trim() === '' ? null : account.trim();
+      const auth = await tui.select({
+        message: 'How does a laptop authenticate?',
+        options: [
+          { label: 'Desktop app (biometric; CI uses the service-account token)', value: 'app' as const },
+          { label: 'Service-account token only (no desktop app)', value: 'service-account' as const },
+        ],
+        initialValue: config.onepassword.auth,
+      });
+      if (tui.isCancel(auth)) { throw Object.assign(new Error('Aborted by user.'), { name: 'ExitPromptError' }); }
+      config.onepassword.auth = auth;
+    }
+  }
+
+  if (config.provider === 'local') {
+    applySecretsChoice(REPO_ROOT, PROJECT_YAML_FILE, config);
+    log.dim('  Secrets: .env (default). A secret manager is optional: docs/core/variables-de-entorno.html, "Gestores de secretos".');
     return;
   }
-  const info = detectDirenv();
 
-  if (!info.installed) {
-    log.info('direnv not installed (optional).');
-    log.dim('  Launch agents with: bun claude  /  bun opencode  /  bun codex  (dotenv-cli loads .env automatically).');
-    log.dim(`  Or install direnv for shell autoload: ${installHintForPlatform()}`);
-    return;
+  try {
+    const result = applySecretsChoice(REPO_ROOT, PROJECT_YAML_FILE, config);
+    const adapter = ADAPTERS[config.provider];
+    if (result.overlayWritten) {
+      log.success(`Wrote ${PROVIDER_SCHEMA_FILE} (${adapter.label} references only; commit it).`);
+      ensureOverlayTracked();
+    }
+    if (result.yamlWritten) { log.success(`Recorded secrets.provider: ${config.provider} in .agents/project.yaml.`); }
+    log.info(`${adapter.label} setup, once per person:`);
+    for (const line of adapter.setupSteps(config)) { log.dim(`  ${line}`); }
+    log.dim('  The next prompts may still offer .env: skip (Enter) every value the vault holds.');
   }
-  log.info(`direnv ${info.version} detected.`);
-  if (info.platform === 'win32') {
-    log.dim('  Tip: direnv on Windows works best in Git Bash. PowerShell support is experimental and requires direnv 2.37+.');
-  }
-
-  // `direnv allow` approves a file that EXECUTES on every `cd`. An unattended
-  // run (an AI agent, CI) must not grant that on the human's behalf: skip and
-  // say so, instead of letting `maybeConfirm`'s default-yes approve it silently.
-  if (NON_INTERACTIVE) {
-    log.dim('  skipped (non-interactive): run `direnv allow` yourself if you want shell autoload.');
-    return;
-  }
-
-  const proceed = await maybeConfirm(
-    'Run `direnv allow` so the repo\'s .envrc auto-loads .env into your shell?',
-    true,
-  );
-  if (!proceed) {
-    log.dim('  Skipped. Launch agents with: bun claude  /  bun opencode  /  bun codex.');
-    return;
-  }
-  const result = tryRun('direnv', ['allow', REPO_ROOT]);
-  if (result.ok) {
-    log.success('direnv allow succeeded — .envrc will auto-load .env on cd.');
-    log.dim(`  Reminder: add this to your shell rc if not already done: ${shellHookHint(info)}`);
-  }
-  else {
-    log.warn('direnv allow failed. Launch agents with: bun claude  /  bun opencode  /  bun codex.');
-    log.dim(`  ${(result.stderr || result.stdout).trim().slice(0, 200)}`);
+  catch (err) {
+    log.warn(`Secret manager not configured: ${(err as Error).message} Secrets stay in .env.`);
   }
 }
 
@@ -2014,10 +2116,6 @@ export function buildInitialState(prior: InstallState | null): InstallState {
   };
 }
 
-export function launchCommandsForAgents(agents: AgentId[]): string[] {
-  return agents.map(agent => agent === 'claude-code' ? 'bun claude' : `bun ${agent}`);
-}
-
 function describeAgentDetection(detected: AgentDetection): string {
   const codex = detected.codexCli
     ? 'CLI found; Desktop uses repository config'
@@ -2027,17 +2125,96 @@ function describeAgentDetection(detected: AgentDetection): string {
   return `Claude Code: ${detected.claudeCode ? 'found' : 'not found'} | OpenCode: ${detected.opencode ? 'found' : 'not found'} | Codex: ${codex}`;
 }
 
+/**
+ * Repair the generated surfaces and run the check. Only the harnesses in use
+ * (`declaredHarnesses`, ADR-0012) count: a harness the project dropped is
+ * never a reason to throw, and without Claude Code there is no alias to make
+ * (`alias: null`).
+ */
 export function repairRepositoryCompatibility(
   root = REPO_ROOT,
   platform: NodeJS.Platform = process.platform,
-): { alias: ReturnType<typeof repairClaudeSkillsAlias>, shadowingCommandsMoved: string[] } {
-  const alias = repairClaudeSkillsAlias(root, platform);
+): { alias: ReturnType<typeof repairClaudeSkillsAlias> | null, shadowingCommandsMoved: string[] } {
+  const alias = declaredHarnesses(root).harnesses.includes('claude') ? repairClaudeSkillsAlias(root, platform) : null;
   const shadowingCommandsMoved = removeShadowingCommands(root);
   const check = checkAgentCompatibility(root, platform);
   if (!check.ok) {
     throw new Error(`Agent compatibility repair incomplete:\n${check.errors.join('\n')}`);
   }
   return { alias, shadowingCommandsMoved };
+}
+
+/** The `harnesses:` entry of each installer agent id. */
+export function harnessOfAgent(agent: AgentId): Harness {
+  return agent === 'claude-code' ? 'claude' : agent;
+}
+
+/**
+ * The `harnesses:` list after an agent selection: the declared list plus the
+ * agents just selected, never fewer. A re-run that selects one agent must not
+ * silently drop a harness a teammate declared; dropping one is an edit to
+ * `.agents/project.yaml`.
+ */
+export function mergedHarnesses(existing: readonly Harness[], agents: readonly AgentId[]): Harness[] {
+  const out = [...existing];
+  for (const harness of agents.map(harnessOfAgent)) {
+    if (!out.includes(harness)) { out.push(harness); }
+  }
+  return out;
+}
+
+/**
+ * Write the agent selection to `harnesses:` in `.agents/project.yaml`, then
+ * OFFER to delete the files of every harness left out (default keep). The
+ * boilerplate itself checks all three and is left alone.
+ */
+export async function recordHarnessSelection(agents: readonly AgentId[], root = REPO_ROOT): Promise<void> {
+  const selection = declaredHarnesses(root);
+  if (selection.source === 'boilerplate' || agents.length === 0) { return; }
+  const yamlPath = join(root, '.agents', 'project.yaml');
+  if (!existsSync(yamlPath)) {
+    log.dim(`  .agents/project.yaml not found: ${HARNESSES_KEY} not recorded (the gates detect the harnesses from the files present).`);
+    return;
+  }
+  const existing = explicitHarnesses(root);
+  const next = mergedHarnesses(existing, agents);
+  if (next.join(',') !== existing.join(',')) {
+    const before = readFileSync(yamlPath, 'utf8');
+    writeFileSync(yamlPath, withHarnesses(before, next));
+    // Read back from the destination, not from the value just computed.
+    const written = explicitHarnesses(root);
+    if (written.join(',') !== next.join(',')) {
+      throw new Error(`${HARNESSES_KEY} in .agents/project.yaml reads [${written.join(', ')}] after writing [${next.join(', ')}]`);
+    }
+    log.success(`Harnesses in use recorded in .agents/project.yaml: ${HARNESSES_KEY}: [${next.join(', ')}]`);
+  }
+
+  for (const harness of HARNESSES.filter(h => !next.includes(h))) {
+    const present = HARNESS_FILES[harness].filter(file => existsSync(join(root, file)));
+    if (present.length === 0) { continue; }
+    const remove = await maybeConfirm(
+      `${HARNESS_LABEL[harness]} is not a harness this project uses. Delete its files (${present.join(', ')})?`,
+      false,
+    );
+    if (!remove) {
+      log.dim(`  Kept ${present.join(', ')}: not checked while ${HARNESSES_KEY} leaves out ${harness}.`);
+      continue;
+    }
+    for (const file of present) {
+      rmSync(join(root, file), { force: true });
+      removeEmptyParents(root, file);
+    }
+    log.success(`Deleted the ${HARNESS_LABEL[harness]} files: ${present.join(', ')}`);
+  }
+}
+
+/** Remove the now-empty directories above a deleted file, never the root itself. */
+function removeEmptyParents(root: string, file: string): void {
+  let dir = dirname(join(root, file));
+  while (dir !== root && dir.startsWith(root) && existsSync(dir) && readdirSync(dir).length === 0) {
+    rmdirSync(dir);
+    dir = dirname(dir);
+  }
 }
 
 // ============================================================================
@@ -2137,7 +2314,7 @@ async function jiraAuthLoop(): Promise<'authenticated' | 'skipped'> {
           '     ATLASSIAN_EMAIL=your-email@example.com',
           '     ATLASSIAN_API_TOKEN=...',
           '     (Get a token at https://id.atlassian.com/manage-profile/security/api-tokens)',
-          '3. Save the file. dotenv auto-loads on the next probe — no shell reload needed.',
+          '3. Save the file. The installer re-reads .env on the next probe — no shell reload needed.',
         ].join('\n'),
         'Fix Atlassian credentials',
       );
@@ -2756,7 +2933,6 @@ function printClosingSummary(state: InstallState): void {
       process.stdout.write(`    ${COLORS.cyan}Edit .env → set: ${state.pendingEnvVars.join(', ')}${COLORS.reset}\n`);
     }
     process.stdout.write(`    ${COLORS.dim}Without these, MCP servers will 401/403 silently.${COLORS.reset}\n`);
-    process.stdout.write(`    ${COLORS.cyan}Then: bun run harness:env${COLORS.reset}  ${COLORS.dim}(regenerates the credential files Claude and OpenCode read at startup)${COLORS.reset}\n`);
     process.stdout.write(`    ${COLORS.cyan}Then restart the agent session${COLORS.reset}  ${COLORS.dim}(MCP servers read credentials at startup, not later)${COLORS.reset}\n\n`);
     stepNum++;
   }
@@ -2797,10 +2973,10 @@ function printClosingSummary(state: InstallState): void {
   }
 
   process.stdout.write(`${circled[stepNum]}  ${COLORS.bold}Open the agent${COLORS.reset}\n`);
-  process.stdout.write(`    ${COLORS.cyan}bun claude${COLORS.reset}       ${COLORS.dim}(dotenv-cli loads .env)${COLORS.reset}\n`);
-  process.stdout.write(`    ${COLORS.cyan}bun opencode${COLORS.reset}     ${COLORS.dim}(dotenv-cli loads .env)${COLORS.reset}\n`);
-  process.stdout.write(`    ${COLORS.cyan}bun codex${COLORS.reset}        ${COLORS.dim}(CLI; Codex Desktop opens this same repository)${COLORS.reset}\n`);
-  process.stdout.write(`    ${COLORS.dim}Or use the executable directly if direnv autoload is set up. Codex Desktop needs repository trust before hooks run.${COLORS.reset}\n\n`);
+  process.stdout.write(`    ${COLORS.cyan}claude${COLORS.reset}           ${COLORS.dim}(or Claude Desktop)${COLORS.reset}\n`);
+  process.stdout.write(`    ${COLORS.cyan}opencode${COLORS.reset}         ${COLORS.dim}(or the OpenCode desktop app)${COLORS.reset}\n`);
+  process.stdout.write(`    ${COLORS.cyan}codex${COLORS.reset}            ${COLORS.dim}(CLI; Codex Desktop opens this same repository)${COLORS.reset}\n`);
+  process.stdout.write(`    ${COLORS.dim}No wrapper: every MCP server loads .env itself, so no value reaches the agent's shell. Codex Desktop needs repository trust before hooks run.${COLORS.reset}\n\n`);
   stepNum++;
 
   process.stdout.write(`${circled[stepNum]}  ${COLORS.bold}Tour the stack${COLORS.reset}\n`);
@@ -2882,25 +3058,6 @@ function printClosingSummary(state: InstallState): void {
 
   // Optional UX upgrades
   tui.section('OPTIONAL — install when you have time');
-
-  process.stdout.write('→  caveman — token compression skill (recommended)\n');
-  process.stdout.write(`   ${COLORS.dim}Cuts ~65-75% output tokens. Levels: lite | full (default) | ultra | wenyan.${COLORS.reset}\n`);
-  process.stdout.write(`   ${COLORS.dim}Stop with: "normal mode" / "habla normal".${COLORS.reset}\n`);
-  // `--no-hooks` is deliberate. The installer defaults to `--all`, which installs
-  // the Claude Code plugin AND writes a second copy of the same two hooks into
-  // ~/.claude/settings.json — both fire every turn, injecting caveman twice per
-  // prompt. The flag keeps the plugin (it registers those hooks in its own
-  // plugin.json), the multi-agent coverage this repo needs for OpenCode, and the
-  // caveman-shrink MCP proxy. On Windows `irm | iex` cannot receive arguments
-  // (caveman #565), so we call the Node installer the script delegates to anyway.
-  if (process.platform === 'win32') {
-    process.stdout.write('   npx -y github:JuliusBrussee/caveman --no-hooks\n');
-  }
-  else {
-    process.stdout.write('   curl -fsSL https://raw.githubusercontent.com/JuliusBrussee/caveman/main/install.sh | bash -s -- --no-hooks\n');
-  }
-  process.stdout.write(`   ${COLORS.dim}--no-hooks avoids a duplicate hook registration — see INSTALLER.md.${COLORS.reset}\n`);
-  process.stdout.write(`   ${COLORS.dim}Docs: https://github.com/JuliusBrussee/caveman${COLORS.reset}\n\n`);
 
   process.stdout.write('→  ccstatusline — Claude Code statusline TUI configurator (cosmetic)\n');
   process.stdout.write(`   ${COLORS.dim}Customize the bottom statusline (model, tokens, git branch, usage, etc.).${COLORS.reset}\n`);
@@ -3071,13 +3228,14 @@ async function main(): Promise<void> {
       log.warn('No agents selected — nothing to sync.');
       process.exit(0);
     }
+    await recordHarnessSelection(agents);
     const state = buildInitialState(await loadPriorState());
     state.agents = agents;
     const syncForceKeys = new Set<string>();
     await installCommunitySkills(agents, state, 'project', syncForceKeys);
     await installCommunitySkills(agents, state, 'global', syncForceKeys);
     const compatibility = repairRepositoryCompatibility();
-    log.success(`Repository compatibility ready (Claude alias ${compatibility.alias.status}${compatibility.shadowingCommandsMoved.length > 0 ? `; moved ${compatibility.shadowingCommandsMoved.join(', ')} to ${SHADOWING_COMMANDS_BACKUP_DIR}/ because each shadowed a skill` : ''}).`);
+    log.success(`Repository compatibility ready (Claude alias ${compatibility.alias?.status ?? 'not used'}${compatibility.shadowingCommandsMoved.length > 0 ? `; moved ${compatibility.shadowingCommandsMoved.join(', ')} to ${SHADOWING_COMMANDS_BACKUP_DIR}/ because each shadowed a skill` : ''}).`);
     await writeInstallState(state);
     log.success(`Community skills synced to: ${agents.join(', ')}.`);
     process.exit(0);
@@ -3182,6 +3340,7 @@ async function main(): Promise<void> {
     await writeInstallState(state);
     process.exit(0);
   }
+  await recordHarnessSelection(agents);
 
   // ── PHASE 2 — INSTALLATION ───────────────────────────────────────────────
   tui.phaseHeader(2, 'INSTALLATION');
@@ -3220,15 +3379,15 @@ async function main(): Promise<void> {
   }
 
   const compatibility = repairRepositoryCompatibility();
-  log.success(`Repository compatibility ready (Claude alias ${compatibility.alias.status}${compatibility.shadowingCommandsMoved.length > 0 ? `; moved ${compatibility.shadowingCommandsMoved.join(', ')} to ${SHADOWING_COMMANDS_BACKUP_DIR}/ because each shadowed a skill` : ''}).`);
+  log.success(`Repository compatibility ready (Claude alias ${compatibility.alias?.status ?? 'not used'}${compatibility.shadowingCommandsMoved.length > 0 ? `; moved ${compatibility.shadowingCommandsMoved.join(', ')} to ${SHADOWING_COMMANDS_BACKUP_DIR}/ because each shadowed a skill` : ''}).`);
 
   // ── PHASE 3 — CONFIGURATION ──────────────────────────────────────────────
   tui.phaseHeader(3, 'CONFIGURATION');
 
   tui.section('Step 10: Wiring .env for MCP servers');
   await cleanRetiredEnvKeys();
+  await offerSecretManager();
   await configureMcps(agents, state);
-  await offerDirenvAutoload();
 
   tui.section('Step 10b: Day-0 credentials (Atlassian, Resend, test users)');
   await configureDayZeroCredentials(state);
@@ -3253,22 +3412,15 @@ async function main(): Promise<void> {
   await runInitialConfigurationPhase(state);
   await writeInstallState(state);
 
-  // Per-harness credential surfaces. LAST, because it reads the `.env` every
-  // step above may have written to.
+  // Retire the plaintext MCP credential copies an older install generated
+  // (`.claude/settings.local.json` env block, `.auth/opencode/`). LAST, because
+  // it compares them with the `.env` every step above may have written to. MCP
+  // servers read `.env` themselves now, through the `.env` loader in the three
+  // MCP configs (ADR-0011), so a fresh clone has nothing to retire.
   //
-  // Why the installer has to do this at all: a harness reads its config and
-  // spawns its MCP servers BEFORE any hook runs, so the only thing that reaches
-  // a server on a launch with no command line (a desktop harness, a natively
-  // launched supervised worker) is a file the harness reads at startup. And
-  // `opencode.jsonc` now points at `.auth/opencode/<VAR>` value files: measured
-  // on OpenCode 1.18.30, a MISSING `{file:}` target invalidates the WHOLE config
-  // and not just that one server, so those files have to exist before anyone
-  // runs `opencode`. This call is what guarantees they do on a fresh clone.
-  //
-  // DYNAMIC import on purpose: `cli/lib/harness-env.ts` imports the placeholder
-  // patterns from THIS file, and a static import here would close that cycle.
-  // Same pattern `cli/doctor.ts` already uses to reach this module.
-  await generateHarnessEnv();
+  // DYNAMIC import on purpose: `cli/lib/harness-env.ts` imports from THIS file,
+  // and a static import here would close that cycle.
+  await retireHarnessCopies();
 
   // Closing summary
   tui.section('Installation summary');
@@ -3276,35 +3428,33 @@ async function main(): Promise<void> {
 }
 
 /**
- * Generate the per-harness credential surfaces. Never fatal: a failure here
+ * Retire the stale plaintext MCP credential copies. Never fatal: a failure
  * leaves the repo exactly as it was and the installer still finishes, because
- * `bun run setup:doctor` reports the same drift and `bun run harness:env` fixes
- * it. Prints variable NAMES only, never a value.
+ * `bun run setup:doctor` reports the same copies and `bun run harness:env`
+ * retires them. Prints variable NAMES only, never a value.
  */
-async function generateHarnessEnv(): Promise<void> {
-  tui.section('Step 15: Harness credential surfaces');
+async function retireHarnessCopies(): Promise<void> {
+  tui.section('Step 15: Plaintext MCP credential copies');
   try {
-    const { generate } = await import('./lib/harness-env.ts');
-    const result = generate();
-    if (result.refused !== undefined) {
-      log.warn(`Harness credential surfaces NOT written: ${result.refused}`);
+    const { retire } = await import('./lib/harness-env.ts');
+    const result = retire();
+    if (result.errors.length > 0) {
+      log.warn(`Copies NOT retired, an MCP config could not be parsed: ${result.errors.join('; ')}`);
       return;
     }
-    log.success(
-      `${result.changed ? 'Wrote' : 'Already in sync:'} ${result.emitted.length} of `
-      + `${result.declared.length} declared variables `
-      + `(${result.excluded.length} not referenced by any MCP config, so not copied).`,
-    );
-    if (result.emitted.length > 0) {
-      process.stdout.write(`  emitted: ${result.emitted.join(', ')}\n`);
+    if (!result.changed) {
+      log.success('None on disk: every MCP server reads .env itself through the .env loader.');
+      return;
     }
-    if (result.claude.skipped.length > 0) {
-      process.stdout.write(`  empty in .env, left out of the Claude env block: ${result.claude.skipped.join(', ')}\n`);
+    const surfaces = [...result.claude, ...(result.opencode === null ? [] : [result.opencode])];
+    log.success(`Retired: ${surfaces.flatMap(s => [...s.removed, ...s.backedUp]).join(', ')}`);
+    if (result.backupDirs.length > 0) {
+      log.warn(`.env did not reproduce some of them; they wait in ${result.backupDirs.join(', ')}. Put the right value in .env yourself, then delete that directory.`);
     }
   }
   catch (err) {
-    log.warn(`Could not generate the harness credential surfaces: ${(err as Error).message}`);
-    process.stdout.write('  Run `bun run harness:env` once .env is in place; `bun run setup:doctor` reports the same gap.\n');
+    log.warn(`Could not check for plaintext MCP credential copies: ${(err as Error).message}`);
+    process.stdout.write('  `bun run setup:doctor` reports them; `bun run harness:env` retires them.\n');
   }
 }
 
