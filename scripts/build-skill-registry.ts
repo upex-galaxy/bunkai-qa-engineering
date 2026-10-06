@@ -170,8 +170,18 @@ function listSkillDirs(): string[] {
     const skillPath = join(SKILLS_DIR, e.name, 'SKILL.md');
     if (existsSync(skillPath)) { dirs.push(e.name); }
   }
-  dirs.sort();
-  return dirs;
+  // A gitignored community install (T3) is machine-local: indexing it makes the
+  // committed registry depend on what this machine installed, and its relative
+  // links fail docs:check. Same rule as lint-docs: a gitignored skill does not count.
+  const ignored = gitIgnoredSkills(dirs);
+  return dirs.filter(slug => !ignored.has(slug)).sort();
+}
+
+function gitIgnoredSkills(slugs: string[]): Set<string> {
+  const paths = slugs.map(slug => relative(REPO_ROOT, join(SKILLS_DIR, slug, 'SKILL.md')));
+  const result = Bun.spawnSync(['git', 'check-ignore', '--stdin'], { cwd: REPO_ROOT, stdin: Buffer.from(paths.join('\n')), stdout: 'pipe', stderr: 'ignore' });
+  const hits = new Set(result.stdout.toString().split('\n').filter(Boolean));
+  return new Set(slugs.filter((_slug, i) => hits.has(paths[i])));
 }
 
 // -----------------------------------------------------------------------------

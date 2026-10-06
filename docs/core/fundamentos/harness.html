@@ -129,9 +129,14 @@
 
       <h2 id="una-fuente">Una fuente, adaptadores finos</h2>
       <p>
-        Este repo funciona en tres harnesses. La tentación obvia sería mantener tres copias de todo
-        (un <code>CLAUDE.md</code> con las reglas, otras en la configuración de OpenCode, otras para
-        Codex). Cada copia empezaría igual y a la tercera semana diría algo distinto.
+        Este repo funciona en tres harnesses. Un proyecto puede declarar solo los que usa en
+        <code>harnesses:</code> (<code>.agents/project.yaml</code>): los gates revisan solo esos, y
+        el boilerplate siempre revisa los tres
+        (<code>.context/ADR/ADR-0012-declared-harnesses.md</code>,
+        <code>.agents/instructions/agent-harnesses.md</code>). La tentación obvia sería mantener
+        tres copias de todo (un <code>CLAUDE.md</code> con las reglas, otras en la configuración de
+        OpenCode, otras para Codex). Cada copia empezaría igual y a la tercera semana diría algo
+        distinto.
       </p>
       <p>
         La alternativa es tener un solo cuerpo de instrucciones y skills, y dejar en cada host un
@@ -433,12 +438,25 @@
         que luego terminan en los trailers de cada commit), avisa si falta el <code>.env</code> y
         clasifica el pedido contra el router de <code>AGENTS.md</code>: por cada sección que el
         pedido necesita y la sesión todavía no leyó, suma una línea
-        <code>ROUTE: read &lt;archivo&gt;</code>. Claude Code y Codex lo ejecutan como hook de
-        comando en el evento <code>UserPromptSubmit</code>, y un <code>SessionStart</code> con
-        matcher <code>compact</code> o <code>clear</code> re-arma las rutas después de compactar o
-        de un <code>/clear</code>. OpenCode no tiene hooks de comando, así que su plugin importa las
-        mismas funciones y las empuja al prompt de sistema; en OpenCode 2, que no le pasa el texto
-        del pedido, queda solo el router.
+        <code>ROUTE: read &lt;archivo&gt;</code>, con un tope de pocas por pedido: el resto va en
+        una sola línea <code>ROUTE-OPTIONAL:</code> que no obliga. Claude Code y Codex lo ejecutan
+        como hook de comando en el evento <code>UserPromptSubmit</code>, y un
+        <code>SessionStart</code> con matcher <code>compact</code> o <code>clear</code> re-arma las
+        rutas después de compactar o de un <code>/clear</code>. En Claude Code, un
+        <code>PostToolUse</code> corre el mismo archivo y, si el agente usa una herramienta sin
+        haber leído lo ruteado, le recuerda una sola vez qué falta (<code>ROUTE-PENDING:</code>).
+        OpenCode no tiene hooks de comando, así que su plugin importa las mismas funciones y las
+        empuja al prompt de sistema; en OpenCode 2, que no le pasa el texto del pedido, queda solo
+        el router.
+      </p>
+      <p>
+        Hay un segundo hook, aparte y mucho más chico: <code>.agents/hooks/doc-contracts.mjs</code>.
+        Claude Code y Codex lo corren después de cada edición de archivo (evento
+        <code>PostToolUse</code>). Si la edición cae dentro de una región marcada con
+        <code>LINT.IfChange</code>, suma una línea <code>DOCS:</code> con las páginas que describen
+        ese código, una vez por sesión. Es el aviso; el gate que lo hace cumplir corre en el
+        pre-push y en CI (ver la tabla de abajo). OpenCode no lo registra y depende solo del gate.
+        Vale únicamente en el repo del boilerplate: en un proyecto queda en silencio (ADR-0016).
       </p>
 
       <h3 id="aliases">Una skill, un modo</h3>
@@ -494,7 +512,7 @@
               <td>
                 El shim de <code>CLAUDE.md</code>, el alias de skills, los comandos del proyecto que
                 tapan una skill, los adaptadores de hooks y la paridad de servidores MCP entre los
-                tres formatos
+                formatos de los harnesses en uso
               </td>
             </tr>
             <tr>
@@ -506,16 +524,51 @@
               </td>
             </tr>
             <tr>
+              <td><code>instructions:check</code></td>
+              <td><code>scripts/lint-instructions.ts</code></td>
+              <td>
+                El cuerpo de instrucciones: presupuesto de <code>AGENTS.md</code>, el ROUTER
+                bloqueado detrás de un ADR, el eval del router con pisos de recall y precisión en
+                cada corrida y que cada sección nueva llegue completa
+              </td>
+            </tr>
+            <tr>
+              <td><code>vars:schema:check</code></td>
+              <td><code>scripts/env-schema.ts</code></td>
+              <td>
+                Que <code>.env.core.schema</code> esté al día con el manifiesto y que toda clave con
+                nombre de secreto (TOKEN, SECRET, PASSWORD, API_KEY...) esté marcada
+                <code>@sensitive</code>
+              </td>
+            </tr>
+            <tr>
               <td><code>docs:check</code></td>
               <td><code>scripts/lint-docs.ts</code></td>
               <td>
-                Links relativos rotos, rutas citadas en <code>docs/</code> que no existen y páginas
-                sin <code>&lt;title&gt;</code> o descripción
+                Links relativos rotos (también los links markdown de los <code>.md</code> de
+                <code>.agents/</code>, <code>.context/</code> y <code>.claude/</code>), rutas
+                citadas en <code>docs/</code> que no existen y páginas sin
+                <code>&lt;title&gt;</code> o descripción. Corre en cada push y en CI
+              </td>
+            </tr>
+            <tr>
+              <td>contratos de docs</td>
+              <td><code>scripts/lint-doc-contracts.ts</code></td>
+              <td>
+                Que un cambio dentro de una región <code>LINT.IfChange</code> llegue con todas las
+                páginas que nombra su <code>LINT.ThenChange</code>, o con un commit que diga
+                <code>Docs-Checked: &lt;label&gt; &lt;motivo&gt;</code>. Avisa en el commit, bloquea
+                en el push y en CI. Solo en el repo del boilerplate (ADR-0016)
               </td>
             </tr>
           </tbody>
         </table>
       </div>
+      <p>
+        Aparte de los gates, <code>bun run instructions:audit</code> mide en las transcripciones
+        locales de Claude Code cuántas de las secciones que el hook ruteó leyó de verdad el agente
+        (solo nombres y conteos, nunca contenido).
+      </p>
       <p>
         No todos corren en todos lados. Qué corre en cada hook está en
         <code>.husky/framework-gates.sh</code>: el pre-push corre un subconjunto amplio, el

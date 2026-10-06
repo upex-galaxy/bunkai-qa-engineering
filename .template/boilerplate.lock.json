@@ -4,25 +4,25 @@
   "templateCommit": "fb5c9f275ba413ca6cb43b9065de338e07f6a934",
   "perComponentCommit": {
     "claude-config": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
-    "scripts": "cc38ad028bcdaef5f31b5a9716737f4246447bb8",
-    "docs": "cc38ad028bcdaef5f31b5a9716737f4246447bb8",
-    "cli": "cc38ad028bcdaef5f31b5a9716737f4246447bb8",
+    "scripts": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
+    "docs": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
+    "cli": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
     "vscode": "4f3fd69690ec3141dbae890b06d9d3a547327524",
-    "husky": "4f3fd69690ec3141dbae890b06d9d3a547327524",
-    "agents-docs": "4f3fd69690ec3141dbae890b06d9d3a547327524",
+    "husky": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
+    "agents-docs": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
     "tooling": "fa79100d98af3e61b350276b0a91c476938474f2",
     "commands": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
-    "skills": "cc38ad028bcdaef5f31b5a9716737f4246447bb8",
-    "env-template": "cc38ad028bcdaef5f31b5a9716737f4246447bb8",
-    "agent-compatibility": "4f3fd69690ec3141dbae890b06d9d3a547327524",
-    "codex-config": "090c7b73244d70e2f59467d92ddfc50e32b8c9f7",
+    "skills": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
+    "env-template": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
+    "agent-compatibility": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
+    "codex-config": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
     "agent-root-config": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
     "config-core": "fa79100d98af3e61b350276b0a91c476938474f2",
-    "env-schema": "4f3fd69690ec3141dbae890b06d9d3a547327524",
+    "env-schema": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
     "worktree-include": "fb5c9f275ba413ca6cb43b9065de338e07f6a934",
     "orca-config": "fb5c9f275ba413ca6cb43b9065de338e07f6a934",
     "playwright-cli-config": "fb5c9f275ba413ca6cb43b9065de338e07f6a934",
-    "instructions": "cc38ad028bcdaef5f31b5a9716737f4246447bb8"
+    "instructions": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5"
   },
   "syncedComponents": [],
   "ignoreFileSync": {
@@ -143,6 +143,6 @@
     }
   },
   "cliVersion": "8.5",
-  "lastSyncedAt": "2026-10-05T11:16:54.717Z",
+  "lastSyncedAt": "2026-10-06T10:31:05.007Z",
   "variableSystemVersion": 1
 }

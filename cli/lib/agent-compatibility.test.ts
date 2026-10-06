@@ -24,7 +24,9 @@ import {
   CODEX_PROJECT_DOC_MAX_BYTES,
   CODEX_STARTUP_TIMEOUT_SEC,
   declaredMcpIds,
+  DOC_CONTRACTS_HOOK,
   EXPECTED_MCP,
+  HOOK_GROUP_FIX,
   HOOK_IDENTITY_MARKER,
   HOOK_ORCA_MARKER,
   hookScriptPath,
@@ -35,6 +37,7 @@ import {
   mcpEnvLoaderArgs,
   stripJsonComments,
   unwrapEnvLoader,
+  validateDocContractHooks,
   validateEslintBlockWiring,
   validateHookCompatibility,
   validateInstructionRouterHooks,
@@ -937,7 +940,7 @@ describe.skipIf(!HAS_OPENCODE)('instruction router hooks', () => {
     const hook: Record<string, unknown> = { type: 'command', command, timeout: 5 };
     if (windows) { hook.commandWindows = windows; }
     const sessionStart = rearmOn.map(matcher => ({ matcher, hooks: [hook] }));
-    return `${JSON.stringify({ hooks: { UserPromptSubmit: [{ hooks: [hook] }], SessionStart: sessionStart } }, null, 2)}\n`;
+    return `${JSON.stringify({ hooks: { UserPromptSubmit: [{ hooks: [hook] }], PostToolUse: [{ hooks: [hook] }], SessionStart: sessionStart } }, null, 2)}\n`;
   }
 
   function routerFixture(): string {
@@ -975,8 +978,29 @@ describe.skipIf(!HAS_OPENCODE)('instruction router hooks', () => {
     write(root, '.claude/settings.json', rearmSettings(CLAUDE_HOOK_COMMAND, undefined, ['compact']));
     write(root, '.codex/hooks.json', rearmSettings(CODEX_HOOK_COMMAND, CODEX_HOOK_COMMAND_WINDOWS, ['compact']));
     expect(validateInstructionRouterHooks(root)).toEqual([
-      `claude must re-arm the routes after /clear: a SessionStart group with matcher "clear" running ${CLAUDE_HOOK_COMMAND}`,
-      'codex must re-arm the routes after /clear: a SessionStart group with matcher "clear" running the Codex hook command (and its Windows variant).',
+      `claude must re-arm the routes after /clear: a SessionStart group with matcher "clear" running ${CLAUDE_HOOK_COMMAND}. Fix: ${HOOK_GROUP_FIX}`,
+      `codex must re-arm the routes after /clear: a SessionStart group with matcher "clear" running the Codex hook command (and its Windows variant). Fix: ${HOOK_GROUP_FIX}.`,
+    ]);
+  });
+
+  test('rejects a Claude Code config that does not re-surface unread routes after a tool call', () => {
+    const root = routerFixture();
+    const settings = JSON.parse(rearmSettings(CLAUDE_HOOK_COMMAND));
+    delete settings.hooks.PostToolUse;
+    write(root, '.claude/settings.json', `${JSON.stringify(settings)}\n`);
+    expect(validateInstructionRouterHooks(root)).toEqual([
+      `claude must re-surface unread routes: a PostToolUse group with no matcher running ${CLAUDE_HOOK_COMMAND}. Fix: ${HOOK_GROUP_FIX}`,
+    ]);
+  });
+
+  test('names the fix downstream only: the boilerplate itself has no upstream to merge from', () => {
+    const root = routerFixture();
+    const settings = JSON.parse(rearmSettings(CLAUDE_HOOK_COMMAND));
+    delete settings.hooks.PostToolUse;
+    write(root, '.claude/settings.json', `${JSON.stringify(settings)}\n`);
+    write(root, 'package.json', JSON.stringify({ name: 'agentic-qa-boilerplate' }));
+    expect(validateInstructionRouterHooks(root)).toEqual([
+      `claude must re-surface unread routes: a PostToolUse group with no matcher running ${CLAUDE_HOOK_COMMAND}`,
     ]);
   });
 
@@ -1016,10 +1040,11 @@ describe.skipIf(!HAS_OPENCODE)('instruction router hooks', () => {
       return output.system.filter(line => line.startsWith(ROUTE_PREFIX));
     };
     try {
-      expect(await turn('commit and push')).toEqual([`${ROUTE_PREFIX} .agents/instructions/agent-git.md (git)`]);
+      const gitRoute = expect.stringMatching(/^ROUTE: read \.agents\/instructions\/agent-git\.md \(git, \d+ lines\) before acting on this prompt$/);
+      expect(await turn('commit and push')).toEqual([gitRoute]);
       expect(await turn('push again')).toEqual([]);
       await plugin['experimental.session.compacting']({ sessionID });
-      expect(await turn('push again')).toEqual([`${ROUTE_PREFIX} .agents/instructions/agent-git.md (git)`]);
+      expect(await turn('push again')).toEqual([gitRoute]);
     }
     finally {
       rmSync(routeStatePath(REPO_ROOT, sessionID), { force: true });
@@ -1728,5 +1753,22 @@ describe('compatibility report grouping', () => {
     expect(describeAliasStatus({ ...alias, status: 'valid' })).toContain('OK');
     expect(describeAliasStatus({ ...alias, status: 'missing' })).toContain('bun run agents:compat');
     expect(describeAliasStatus({ ...alias, status: 'invalid' })).toContain('not the generated symlink');
+  });
+});
+
+describe('documentation-contract hook (ADR-0016)', () => {
+  test('the real repository registers it on both command hosts', () => {
+    expect(validateDocContractHooks(REPO_ROOT)).toEqual([]);
+  });
+
+  test('binds only in the boilerplate itself', () => {
+    const root = contractFixture();
+    expect(validateDocContractHooks(root, ['claude', 'codex'], false)).toEqual([]);
+    expect(validateDocContractHooks(root, ['claude', 'codex'], true)).toEqual([`Documentation-contract hook missing: ${DOC_CONTRACTS_HOOK}`]);
+    copyFromRepo(root, DOC_CONTRACTS_HOOK);
+    const errors = validateDocContractHooks(root, ['claude', 'codex'], true);
+    expect(errors.some(e => e.startsWith('claude must register the documentation-contract hook'))).toBe(true);
+    expect(errors.some(e => e.startsWith('codex must register the documentation-contract hook'))).toBe(true);
+    expect(validateDocContractHooks(root, ['opencode'], true)).toEqual([]);
   });
 });
