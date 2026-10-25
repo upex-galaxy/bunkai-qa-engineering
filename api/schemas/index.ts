@@ -12,6 +12,9 @@
 
 export type * from './atc.types';
 export type * from './auth.types';
+export type * from './project.types';
+export type * from './run.types';
+export type * from './workspace.types';
 
 // Add new domain facades here:
 // export type * from './bookings.types';
