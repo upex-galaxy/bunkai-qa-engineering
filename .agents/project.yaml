@@ -153,7 +153,7 @@ board:
     tests:
       PASSED: [PASSED, passed]
       FAILED: [FAILED, failed]
-      NOT RUN: [TODO, EXECUTING, ABORTED, n_r]
+      NOT RUN: [TODO, TO DO, EXECUTING, ABORTED, n_r]
       BLOCKED: [blocked]
       DEFERRED: []
   people: null # who the board names: e.g. [{ name: Jane Doe, role: qa, language: en, jira: Jane Doe }]
