@@ -9,8 +9,8 @@
  *   - GET /workspaces/{id}/coverage  → the same rollup summed over the workspace, plus the
  *                                      clamped percentages (`clampedPercent`, fix PR #250) the
  *                                      Home card and the project Metrics tiles print.
- *                                      Memoized up to 60s per server instance; the key changes only
- *                                      when the project set does.
+ *                                      Memoized up to 60s per server instance: the ATC re-reads
+ *                                      it until its counts match the seed.
  *
  * The project endpoint carries no percentage, so the tile values are read from
  * the workspace endpoint of a throwaway sandbox workspace holding exactly one
@@ -84,28 +84,6 @@ export class CoverageApi extends ApiBase {
     return [response, body];
   }
 
-  /**
-   * Helper: wait until the memoized workspace rollup reflects the seeded counts.
-   *
-   * The memo is in-process per server instance with a 60s TTL, and its key only
-   * changes when the project set does (capped at 3 projects on the Free plan), so
-   * after seeding the read is polled until its counts match, never slept on.
-   */
-  @step
-  async waitForWorkspaceCoverage(
-    workspaceId: string,
-    counts: Pick<CoverageKpiExpectation, 'total' | 'bound' | 'executed'>,
-  ): Promise<void> {
-    await expect.poll(async () => {
-      const [, workspace] = await this.getWorkspaceCoverage(workspaceId);
-      return { total: workspace.ac_total, bound: workspace.ac_bound, executed: workspace.ac_executed };
-    }, { timeout: 90_000, intervals: [2_000, 5_000, 10_000] }).toEqual({
-      total: counts.total,
-      bound: counts.bound,
-      executed: counts.executed,
-    });
-  }
-
   // ============================================
   // ATCs - Complete Test Cases (ACTION + VERIFICATION)
   // ============================================
@@ -115,8 +93,10 @@ export class CoverageApi extends ApiBase {
    *
    * Reads the project rollup (authoritative counts) and the sandbox workspace
    * rollup (the tile percentages). Verifies the kpis echo bound / executed /
-   * total, the no-coverage list holds `gap` criteria, the workspace read is
-   * fresh (same counts), and each tile reads the literal expected value: 100
+   * total and the no-coverage list holds `gap` criteria. The workspace rollup is
+   * memoized per server instance for up to 60s, so it is re-read until its counts
+   * match the seed (90s ceiling, never a sleep); the tiles are then asserted on
+   * that same fresh response. Each tile must read the literal expected value: 100
    * only when n = d, 0 only when n = 0, otherwise 1-99; null (no tile) when the
    * project has no criteria.
    *
@@ -131,7 +111,6 @@ export class CoverageApi extends ApiBase {
     expected: CoverageKpiExpectation,
   ): Promise<[ProjectCoverage, WorkspaceCoverage]> {
     const [, project] = await this.getProjectCoverage(target.projectId);
-    const [, workspace] = await this.getWorkspaceCoverage(target.workspaceId);
 
     // Fixed assertions - the counts the tiles are computed from
     expect(project.kpis).toMatchObject({
@@ -142,12 +121,16 @@ export class CoverageApi extends ApiBase {
     expect(project.no_coverage).toHaveLength(expected.gap);
 
     // The workspace read is fresh and covers exactly this project's criteria
-    expect(workspace).toMatchObject({
-      ac_total: expected.total,
-      ac_bound: expected.bound,
-      ac_executed: expected.executed,
-      ac_uncovered: expected.gap,
-    });
+    let workspace = {} as WorkspaceCoverage;
+    await expect(async () => {
+      [, workspace] = await this.getWorkspaceCoverage(target.workspaceId);
+      expect(workspace).toMatchObject({
+        ac_total: expected.total,
+        ac_bound: expected.bound,
+        ac_executed: expected.executed,
+        ac_uncovered: expected.gap,
+      });
+    }).toPass({ timeout: 90_000, intervals: [2_000, 5_000, 10_000] });
 
     // The tiles: clamped percentages, null for the empty state
     expect(workspace.ac_coverage_percent).toBe(expected.acTile);

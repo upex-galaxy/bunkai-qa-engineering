@@ -62,9 +62,16 @@ Run statuses map: skipped = `abort`, blocked = `mark blocked` then finish, pendi
 | Sandbox delete | Cookie session via `api.auth.openSession()`, then `DELETE /workspaces/{id}` with no Bearer; session PAT to the teardown ledger | A PAT gets 403 "Workspace deletion is available to the Owner via a browser session only" |
 | S3 | One ATC create binds 199 criteria (`acceptance_criterion_ids`), no chunking needed | 201 on staging |
 | BK-1070 tile values | Read from `GET /workspaces/{id}/coverage` (`ac_coverage_percent`, `executed_coverage_percent`) of the sandbox, which holds exactly one seeded project; counts from `GET /projects/{id}/coverage`. The ATC asserts the workspace counts equal the project kpis before trusting a percentage | The project endpoint returns counts only. Both the project Metrics tiles (`lib/coverage/coverage-view.ts`) and the workspace rollup (`lib/home/coverage.ts`) call `lib/coverage/clamped-percent.ts` |
-| BK-1070 freshness | `CoverageApi.waitForWorkspaceCoverage` polls the workspace rollup until its counts match the seed (90s ceiling), then the ATC reads | The rollup is memoized in process per server instance (60s TTL) and keyed by the project set; refreshing by adding projects hits the Free plan's 3-project cap (`project_limit_reached`, 422, measured) |
+| BK-1070 freshness | The ATC re-reads the workspace rollup (`expect().toPass`, 90s ceiling) until its counts match the seed, then asserts the tiles on that same response | The rollup is memoized in process per server instance (60s TTL) and keyed by the project set; refreshing by adding projects hits the Free plan's 3-project cap (`project_limit_reached`, 422, measured) |
 | BK-1070 walk | One project walked through the Examples as states: empty, 200/199/199, 201/200/0, 201/201/0, 201/201/1, 201/201/200, 201/201/201. A new run of an ATC resets it to pending | Gherkin rows of BK-1070 |
 | BK-1070 empty state | API proxy: zeroed kpis and `null` percentages (the UI "No acceptance criteria yet" copy stays manual) | `WorkspaceCoverage` contract: null when `ac_total` is 0 |
 | BK-1071 rows | One module per Examples row (one AC, one ATC, one Test); runs of a row created strictly in sequence (BK-1220) | 7 rows |
+| Seeding ATCs | `AtcApi.seedAtc` (helper, no `@atc`), so seeding records no BK-149 results in Xray | Separate verifier, PR #19 |
+| Cleanup | `open()` deletes a half-built sandbox; a failing `close()` is logged and never replaces the test's own error; the orphan sweep is best-effort | Separate verifier, PR #19 |
 | Run outcomes | `RunApi.closeRunAs`: passed / failed / blocked = mark every step then finish (failed verdict for blocked); skipped = abort; pending = run left open. Verified on the ATC status the run returns | Run contract |
 | Runtime | BK-1071 about 30s; BK-1070 several minutes (memo polling between states) | |
+
+## 9. Known limits
+
+- BK-1070 guards the clamping rule through its API proxy (the workspace rollup, which calls the same `clampedPercent`). A change that stopped the project Metrics screen (`ProjectCoverageView.tsx`) from calling `percentLabel` would not fail this suite; the UI tile stays a manual check.
+- BK-1070 takes about 5.5 minutes (60s memo between states). Its cadence (every PR or nightly) is the owner's call.

@@ -16,8 +16,8 @@
  * A new run of an ATC resets it to pending, which is how executed falls back to
  * 0 between states. Expected tile values are literals from the Gherkin, never
  * recomputed here. The workspace rollup is memoized up to 60s per server
- * instance, so each read first polls it until its counts match the seed (the
- * walk takes a few minutes for that reason).
+ * instance, so the ATC re-reads it until its counts match the seed (the walk
+ * takes a few minutes for that reason).
  */
 
 import type { CoverageKpiExpectation } from '@api/CoverageApi';
@@ -28,7 +28,7 @@ import { test } from '@TestFixture';
 
 test.describe('BK-1082: Coverage KPIs never round to 100% or 0%', { tag: ['@regression'] }, () => {
   test('BK-1070: should not round a coverage KPI to 100% or 0% while its numerator differs from the total or from zero', async ({ api }) => {
-    test.setTimeout(600_000);
+    test.setTimeout(720_000);
     const sandboxSteps = new SandboxSteps(api);
     let sandbox: Sandbox | undefined;
 
@@ -37,7 +37,6 @@ test.describe('BK-1082: Coverage KPIs never round to 100% or 0%', { tag: ['@regr
       sandbox = opened;
       const { projectId, environmentId } = opened;
       const readKpis = async (expected: CoverageKpiExpectation): Promise<void> => {
-        await api.coverage.waitForWorkspaceCoverage(opened.workspaceId, expected);
         await api.coverage.readCoverageKpis({ workspaceId: opened.workspaceId, projectId }, expected);
       };
 
@@ -91,8 +90,10 @@ test.describe('BK-1082: Coverage KPIs never round to 100% or 0%', { tag: ['@regr
       });
     }
     finally {
+      // A cleanup failure must not replace the test's own error; the sweep retries later.
       if (sandbox) {
-        await sandboxSteps.close(sandbox);
+        await sandboxSteps.close(sandbox).catch((error: unknown) =>
+          console.warn(`[SandboxSteps] sandbox ${sandbox?.workspaceId} not closed:`, error));
       }
     }
   });

@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-10-25T21:33:49.273Z",
+  "generatedAt": "2026-10-25T21:55:48.740Z",
   "components": {
     "api": [
       {
@@ -11,17 +11,17 @@
           {
             "id": "BK-1090",
             "method": "searchAtcs",
-            "line": 147
+            "line": 167
           },
           {
             "id": "BK-149",
             "method": "createAtc",
-            "line": 72
+            "line": 92
           },
           {
             "id": "BK-156",
             "method": "updateAtc",
-            "line": 111
+            "line": 131
           }
         ]
       },
@@ -50,12 +50,12 @@
           {
             "id": "BK-1070",
             "method": "readCoverageKpis",
-            "line": 128
+            "line": 108
           },
           {
             "id": "BK-1071",
             "method": "readAcceptanceCriterionState",
-            "line": 169
+            "line": 152
           }
         ]
       },

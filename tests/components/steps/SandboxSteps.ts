@@ -45,6 +45,8 @@ export class SandboxSteps extends TestContext {
 
   /**
    * Open a sandbox: a fresh workspace, one project and one run environment.
+   * If the project or the environment cannot be created, the half-built
+   * workspace is deleted before the error is rethrown.
    *
    * @param label - short kebab label naming the suite (at most 20 chars, e.g. `cov-kpi`)
    */
@@ -54,19 +56,26 @@ export class SandboxSteps extends TestContext {
       name: `qa sandbox ${label} ${suffix}`,
       slug: `${SANDBOX_SLUG_PREFIX}${label.slice(0, 20)}-${suffix}`,
     });
-    const project = await this.api.workspace.createProject(workspace.id, `qa sandbox ${label}`);
-    const environmentId = await this.api.project.createEnvironment(project.id, 'staging');
-    return { workspaceId: workspace.id, projectId: project.id, environmentId };
+    try {
+      const project = await this.api.workspace.createProject(workspace.id, `qa sandbox ${label}`);
+      const environmentId = await this.api.project.createEnvironment(project.id, 'staging');
+      return { workspaceId: workspace.id, projectId: project.id, environmentId };
+    }
+    catch (error) {
+      await this.deleteThroughSession(workspace.id).catch((cleanupError: unknown) =>
+        console.warn(`[SandboxSteps] could not delete half-built sandbox ${workspace.id}:`, cleanupError));
+      throw error;
+    }
   }
 
   /**
-   * Bind one new ATC (one step) to the given acceptance criteria.
-   * Reuses the BK-149 create ATC as seeding: the coverage suites never assert on it.
+   * Bind one new ATC (one step) to the given acceptance criteria. Seeds through
+   * `AtcApi.seedAtc`, a helper, so no BK-149 result is recorded.
    *
    * @returns the new ATC's id
    */
   async bindAtc(args: { title: string, moduleId: string, userStoryId: string, acceptanceCriterionIds: string[] }): Promise<string> {
-    const [, created] = await this.api.atc.createAtc({
+    const seeded = await this.api.atc.seedAtc({
       title: args.title,
       module_id: args.moduleId,
       user_story_id: args.userStoryId,
@@ -75,7 +84,7 @@ export class SandboxSteps extends TestContext {
       steps: [{ position: 1, content: 'Exercise the bound acceptance criteria' }],
       assertions: [{ content: 'The bound acceptance criteria hold' }],
     });
-    return created.atc.id;
+    return seeded.id;
   }
 
   /** Create a Test chaining one ATC, in the sandbox workspace. Returns the test id. */
@@ -88,15 +97,13 @@ export class SandboxSteps extends TestContext {
   }
 
   /**
-   * Close a sandbox: delete its workspace through a cookie session, verify it is
-   * gone from the caller's list, then sweep sandbox orphans older than two hours.
-   * Never touches a workspace whose slug lacks the sandbox prefix.
+   * Close a sandbox: delete its workspace through a cookie session and verify it
+   * is gone from the caller's list, then sweep sandbox orphans older than two
+   * hours. The sweep is best-effort (another spec may delete the same orphan
+   * first) and never touches a workspace whose slug lacks the sandbox prefix.
    */
   async close(sandbox: Sandbox): Promise<void> {
-    const sessionPatId = await this.api.auth.openSession(this.config.testUser.email, this.config.testUser.password);
-    recordMintedPat(sessionPatId);
-
-    await this.api.workspace.deleteWorkspace(sandbox.workspaceId);
+    await this.deleteThroughSession(sandbox.workspaceId);
 
     const remaining = await this.api.workspace.listWorkspaces();
     expect(remaining.map(workspace => workspace.id)).not.toContain(sandbox.workspaceId);
@@ -107,7 +114,22 @@ export class SandboxSteps extends TestContext {
       && workspace.role === 'owner'
       && Date.parse(workspace.created_at) < cutoff);
     for (const orphan of orphans) {
-      await this.api.workspace.deleteWorkspace(orphan.id);
+      try {
+        await this.api.workspace.deleteWorkspace(orphan.id);
+      }
+      catch (error) {
+        console.warn(`[SandboxSteps] orphan sandbox ${orphan.slug} not swept:`, error);
+      }
     }
+  }
+
+  /**
+   * Open a cookie session on the request context (workspace DELETE refuses a
+   * PAT) and delete the workspace. The session's PAT goes to the teardown ledger.
+   */
+  private async deleteThroughSession(workspaceId: string): Promise<void> {
+    const sessionPatId = await this.api.auth.openSession(this.config.testUser.email, this.config.testUser.password);
+    recordMintedPat(sessionPatId);
+    await this.api.workspace.deleteWorkspace(workspaceId);
   }
 }

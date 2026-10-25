@@ -30,7 +30,7 @@ import type { TestContextOptions } from '@TestContext';
 
 import { ApiBase } from '@api/ApiBase';
 import { expect } from '@playwright/test';
-import { atc } from '@utils/decorators';
+import { atc, step } from '@utils/decorators';
 
 // Re-export types for consumers that import from AtcApi
 export type {
@@ -49,6 +49,26 @@ export type {
 export class AtcApi extends ApiBase {
   constructor(options: TestContextOptions) {
     super(options);
+  }
+
+  // ============================================
+  // Helpers (no @atc)
+  // ============================================
+
+  /**
+   * Helper: create an ATC as seed data for another suite - not a test case.
+   *
+   * Same POST /atcs as the BK-149 ATC, without its outcome assertions, so a suite
+   * that only needs an ATC to exist never records BK-149 results in the TMS.
+   *
+   * @param body - Full create payload (atc + steps + assertions + AC links)
+   * @returns the created ATC
+   */
+  @step
+  async seedAtc(body: AtcCreateRequest): Promise<Atc> {
+    const [response, parsed] = await this.apiPOST<AtcCreateResponse, AtcCreateRequest>('/atcs', body);
+    expect(response.status()).toBe(201);
+    return parsed.atc;
   }
 
   // ============================================

@@ -77,8 +77,10 @@ test.describe('BK-1081: Executed coverage follows the latest run', { tag: ['@reg
       }
     }
     finally {
+      // A cleanup failure must not replace the test's own error; the sweep retries later.
       if (sandbox) {
-        await sandboxSteps.close(sandbox);
+        await sandboxSteps.close(sandbox).catch((error: unknown) =>
+          console.warn(`[SandboxSteps] sandbox ${sandbox?.workspaceId} not closed:`, error));
       }
     }
   });
