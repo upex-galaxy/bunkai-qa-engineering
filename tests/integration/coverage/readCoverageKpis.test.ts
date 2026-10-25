@@ -18,6 +18,10 @@
  * recomputed here. The workspace rollup is memoized up to 60s per server
  * instance, so the ATC re-reads it until its counts match the seed (the walk
  * takes a few minutes for that reason).
+ *
+ * Tagged @slow (~6 min): it runs in the nightly regression and before a release,
+ * and a quick local run skips it with `--grep-invert @slow` (owner decision,
+ * same cadence rule as plan D2a).
  */
 
 import type { CoverageKpiExpectation } from '@api/CoverageApi';
@@ -26,7 +30,7 @@ import type { Sandbox } from '@steps/SandboxSteps';
 import { SandboxSteps } from '@steps/SandboxSteps';
 import { test } from '@TestFixture';
 
-test.describe('BK-1082: Coverage KPIs never round to 100% or 0%', { tag: ['@regression'] }, () => {
+test.describe('BK-1082: Coverage KPIs never round to 100% or 0%', { tag: ['@regression', '@slow'] }, () => {
   test('BK-1070: should not round a coverage KPI to 100% or 0% while its numerator differs from the total or from zero', async ({ api }) => {
     test.setTimeout(720_000);
     const sandboxSteps = new SandboxSteps(api);
