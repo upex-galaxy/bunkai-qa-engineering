@@ -127,7 +127,7 @@ Jira moved `upexgalaxy72` → `upexgalaxy74`, a third restore with the same shap
 
 - **It started half-migrated**: the machine-global `acli` session had already been re-logged to the new site while `issue_tracker.atlassian_url` still named the old one, so `acli` and the REST scripts read different instances with no error. Phase 0 of the migration is the only place that shows it: compare the yaml, `bun run --silent jira:url` and `acli jira auth status` before assuming which side is "before".
 - **`test_status` moved again**, with new option ids, and the old id resolves to an unrelated field on the new site. The `.env` `JIRA_TEST_STATUS_FIELD` pin was re-set with `bun run env:set` to the `test_status` id in `.agents/jira-fields.json`; the known gap in `syncToJiraDirect()` still makes that pin load-bearing.
-- **`jira:sync-workflows --force` was needed again** (dry run first, stdin closed): every work type's status ids moved, transition ids moved none. The synced `instance-migration.md` still says the opposite; this overlay is the measured rule for this repo.
+- **`jira:sync-workflows --force` was needed again** (dry run first, stdin closed): every work type's status ids moved, transition ids moved none. `jira-administration` `instance-migration.md` now carries the same rule.
 - **`.agents/jira-required.yaml` was adopted from upstream verbatim** before the regeneration (it gained the `test_plan` and `test_execution` required statuses); it is `bootstrapOnly`, so re-check it at the next migration too.
 
 ---
