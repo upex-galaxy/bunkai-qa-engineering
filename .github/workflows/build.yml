@@ -8,9 +8,11 @@ name: TestBuild Checks
 run-name: ${{ github.actor }} triggered TestBuild Checks on ${{ github.ref_name }}
 
 on:
+  # Every pull request, whatever its base. This repo runs the `sdet` strategy:
+  # ticket and Plus Branch PRs target an ephemeral `test/<module>-suite` trunk
+  # and stacked PRs target another work branch, so a `branches: [main]` filter
+  # left all of them without a single check until the final PR into main.
   pull_request:
-    branches:
-      - main
 
 concurrency:
   # One build per PR branch: a force-push supersedes the run already in flight.
