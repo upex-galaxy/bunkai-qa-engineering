@@ -8,9 +8,11 @@ name: TestBuild Checks
 run-name: ${{ github.actor }} triggered TestBuild Checks on ${{ github.ref_name }}
 
 on:
+  # Every pull request, whatever its base. This repo runs the `sdet` strategy:
+  # ticket and Plus Branch PRs target an ephemeral `test/<module>-suite` trunk
+  # and stacked PRs target another work branch, so a `branches: [main]` filter
+  # left all of them without a single check until the final PR into main.
   pull_request:
-    branches:
-      - main
 
 concurrency:
   # One build per PR branch: a force-push supersedes the run already in flight.
@@ -81,6 +83,26 @@ jobs:
         # scripts package.json does not declare, Critical Rule #17 facts, the
         # skill router, and (skills:check) the instruction layer with its locks
         # and router eval. Before this step no CI job ran any doc check.
+
+      - name: Project Config Gates
+        run: |
+          bun run vars:check
+          bun run board:check
+          bun run shared:check
+          bun run kata:manifest:check
+        # The offline subset of `repo:check` that guards project configuration:
+        # every {{jira.*}} reference against the regenerated Jira catalogs, the
+        # `board:` block (each workflow status in exactly one bucket), the
+        # shared files the boilerplate ships byte-identical, and the KATA
+        # manifest. A boilerplate sync or a Jira instance migration changes
+        # exactly these files, and no other step of this job read them.
+
+      - name: Project Unit Tests
+        run: bun test tests/utils scripts/api-login.test.ts
+        # The unit tests of the code this project runs at test time (the outcome
+        # classes, the Xray payload, the adapted auth CLI). Bare `bun test` is
+        # not used: it also runs the boilerplate maintainers' own tests, several
+        # of which assert the boilerplate's files and fail in a consumer.
 
       - name: Documentation Contracts
         env:
