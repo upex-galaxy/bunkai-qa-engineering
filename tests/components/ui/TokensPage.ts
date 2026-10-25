@@ -48,10 +48,14 @@ export class TokensPage extends UiBase {
   @step
   async goto(): Promise<void> {
     await this.page.goto(this.buildUrl('/settings/tokens'));
-    // The streamed token list briefly renders the button twice while Suspense
-    // swaps its content in (measured on staging): wait for the settled single one.
-    await expect(this.page.getByTestId('issue-token-open')).toHaveCount(1);
-    await expect(this.page.getByTestId('issue-token-open')).toBeVisible();
+    // The token list streams in through Suspense (measured on staging): its
+    // button first sits alone inside React's hidden `<div hidden id="S:0">`
+    // segment, then for a few ms a visible copy and that hidden one coexist.
+    // A count of 1 alone can match the hidden copy, so wait for a visible
+    // button first, then for the hidden copy to go away.
+    const open = this.page.getByTestId('issue-token-open');
+    await expect(open.filter({ visible: true })).toBeVisible();
+    await expect(open).toHaveCount(1);
   }
 
   // ============================================
