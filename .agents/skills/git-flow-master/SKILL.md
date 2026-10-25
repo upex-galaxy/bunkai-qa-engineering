@@ -34,6 +34,7 @@ It does not assume one branching model. The project may run on `main` only, on `
 - DO: stop at PR creation — merging is the user's next step, never automatic. If the `gh` transport is missing or unauthenticated, surface the blocker instead of implying a PR was opened.
 - WHEN reconciling declared policy against the host: run the policy-verify tool once at the first push / PR / merge intent, never hand-query protection endpoints. A `404` on the classic protection endpoint does not mean unprotected, and a push that succeeded may have been a documented bypass, not permission. Report drift; never auto-correct it.
 - WHEN a planned change exceeds ~400 changed lines: run the chained-PR decision (single-pr / stacked-to-main / feature-branch-chain / size-exception) before coding, and re-run it if the real diff outgrows the estimate rather than silently up-budgeting. Return it with its trace, never as a bare label: `Chain strategy: <leaf>`, each tree question answered with the reason drawn from THIS change (`Q1=No (…) · Q2=… · Q3=…`, `n/a` past the leaf), `Decided by: /git-flow-master`. Answers that do not lead to the stated leaf, or a trace that only restates the conclusion, count as no decision; a re-run replaces the trace.
+- WHEN a promotion PR into the production branch merges: hand off the post-promotion `merged` pass as `/test-documentation post-promotion` ("Promotion landed on `<production>`: run `/test-documentation post-promotion`"). Never touch the TMS from this skill. Canon: `agentic-qa-core/references/discovery-driven-doctrine.md` §6.
 - WHEN a conflict fires: diagnose and classify it first, present options ranked by safety, and prefer a safe abort over a guess. Never pick a destructive option silently.
 
 **Read full SKILL.md when**: running Strategy Setup, resolving a specific conflict type, picking a base branch or branch prefix for an unfamiliar strategy, or setting up an isolated worktree.
@@ -109,7 +110,7 @@ Run this ONCE per session, at the first push / PR / merge intent (not on read-on
 **Run the tool; do not perform the queries by hand:**
 
 ```bash
-bun run git:policy verify          # read-only; exit 1 on drift
+bun run git:policy verify          # read-only; exit 1 on drift of a chosen strategy (inherited: warnings)
 bun run git:policy verify --stamp  # same, and records the reconciliation when clean
 ```
 
@@ -475,6 +476,7 @@ The branch plan that comes out of the decision is the **contract** for execution
 | Test case authoring + ROI in TMS                       | `/test-documentation`                                |
 | KATA-compliant automated test authoring                | `/test-automation`                                   |
 | Regression suite execution + GO/NO-GO                  | `/regression-testing`                                |
+| A promotion PR (integration → production) merged       | `/test-documentation post-promotion`: the `merged` pass for every TC at `pull_request` whose spec is on `origin/<production>` (`agentic-qa-core/references/discovery-driven-doctrine.md` §6) |
 | Atlassian (Jira) operations triggered by a commit / PR | `/acli`                                              |
 | First-time orientation                                 | `/agentic-qa-onboard`                                |
 
@@ -565,5 +567,6 @@ lifecycle, multi-session safety rules, and the decision guide: `references/workt
 | `references/pr-templating.md`        | PR body template, placeholder rules, label / reviewer / draft conventions, multi-strategy base-branch table. Read when opening a PR.                   |
 | `references/conflict-resolution.md`  | Per-conflict-type playbooks (merge / rebase / push-rejected / detached-HEAD / stash / unrelated histories / hook rejection). Read when Step 3.5 fires. |
 | `references/worktrees.md`            | Git worktrees for isolated/parallel work — manual git, Claude Code `EnterWorktree`/`ExitWorktree`, orchestrated worktrees, the untracked-files gotcha, gitignored-file provisioning, multi-session safety, the orphan audit before removal, cleanup, decision guide. Read when isolating work or running parallel sessions. |
+| `references/observer.md`             | Merge Line, the read-only PR view of the Sprint Board: the observer rule (never acts on GitHub), lanes, order, approval and tracker parity, the collector (`cli/sprint-board/merge-collect.ts`), its state and gotchas. Read when reading, operating or changing Merge Line. |
 
 Read references on demand — do not load them all upfront. Each file is self-contained.

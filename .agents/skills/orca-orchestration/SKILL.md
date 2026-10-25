@@ -9,7 +9,7 @@ metadata:
 # compact_rules is consumed VERBATIM by scripts/build-skill-registry.ts (frontmatter-first,
 # no truncation). Keep in sync with the doctrine below and in references/.
 compact_rules: |
-  - DO gate on the BINARY plus a reachable RUNTIME, never on "is a vendor skill installed". Three states: A no binary, B binary with unreachable runtime, C ready. In a workflow skill, states A and B are TOTAL SILENCE: never name the orchestrator, never list it as a prerequisite, never mention it in an ATR or a blocked-token sweep. The one-line install recommendation belongs to THIS skill and fires only because the user asked for orchestration.
+  - DO gate on the BINARY plus a reachable RUNTIME, never on "is a vendor skill installed". Three states: A no binary, B binary with unreachable runtime, C ready. In a workflow skill, states A and B are TOTAL SILENCE: never name the orchestrator, never list it as a prerequisite, never mention it in an ATR or a blocked-token sweep. The one-line install recommendation belongs to THIS skill and fires only because the user asked for orchestration. One workflow skill is the declared exception: `/sprint-conductor` exists to run on Orca, so when the gate fails it stops with one line naming it (owner decision); every other workflow skill keeps the silence.
   - DO write the launch file ALWAYS, with or without a runtime, and keep the PROMPT identical on both paths, byte for byte, opening with `/<workflow-skill> <KEY> fleet worker` and carrying the no-stopping sentence. The launch line itself is for a human to paste or for a deliberately unsupervised terminal; the prompt is the payload both paths share, and a paraphrased prompt is the exact failure this rule exists to prevent.
   - DO NOT copy the vendor command grammar into this repo. LOAD the stubs listed in `orchestration.orchestrator_skills` (`.agents/project.yaml`) alongside this skill — conductor AND worker, they are small — and ask the binary only for the DEEP topics a stub points at. A copied grammar goes stale in silence on the next release; a grammar nobody loaded produces invented flags.
   - DO treat one-shot subagents as the DEFAULT executor (AGENTS.md §3, unchanged) and a supervised worker as the declared exception: persistent, addressable, owns a scope end to end. The conductor still uses subagents for its OWN reads.
@@ -21,7 +21,7 @@ compact_rules: |
   - DO verify credentials on the worker's own screen before dispatching work to it. The native launch has no argv: every MCP server, on any harness, reads the worktree's own `.env` through the `.env` loader in the MCP configs, so a provisioned `.env` is what reaches it, and every other process loads its own config (Bun autoload, `acli` stored auth, `varlock run` for a raw `curl`); no secret is ever exported into the worker's shell. Evidence is its MCP servers connected (`/mcp` on Claude Code) and its worktree holding `.env`: without them that worker starts clean and fails much later at its first authenticated call.
   - DO tell every worker, in the prompt AND in the brief, to run every stage without returning to the prompt until `worker_done` is sent: a stage boundary is not a checkpoint. And DO name the one `ask` that is mandatory: when a worker's own measurement contradicts a conductor instruction, it stops and asks with both readings and the evidence — never silent compliance, never silent deviation.
   - DO treat create + launch + brief as ONE indivisible operation, and verify a few minutes later that the brief actually landed (a created terminal reports success when the text was DELIVERED, not when it ran). Readiness is not completion.
-  - DO close a finished worker in the same turn, and read its cost footer off its screen BEFORE closing: a worker's token and context usage exists nowhere else and dies with the terminal. Release the supervised worker by its dispatch; without a dispatch, COUNT the terminals in that worktree before closing anything, because the stop verb's radius is the whole worktree. Remove a worktree only after the orphan audit, because everything gitignored inside it (env file, evidence, session scope) dies with it.
+  - DO close a finished worker in the same turn, and read its cost footer off its screen BEFORE closing: a worker's token and context usage exists nowhere else and dies with the terminal. Release the supervised worker by its dispatch; without a dispatch, COUNT the terminals in that worktree before closing anything, because the stop verb's radius is the whole worktree. `worker-release` closes the agent terminal ONLY: the worktree, its `Setup` terminal and its local branch survive it and pile up on disk. So after the orphan audit (everything gitignored inside the worktree dies with it) the conductor removes the worktree in the same turn (`orca worktree rm --run-hooks`) and confirms with `git worktree list`. A worktree stays only with a written reason and an owner in `roster.md` (a worker session that may still be resumed is such a reason).
   - DO pick the topology by what the work writes: manual QA and backlog grooming run as a fleet in the SAME checkout (state lives in the tracker); anything that writes code gets one Orca worktree per worker, because two sessions in one checkout collide on the git index even when they never touch the same file. Never two workers owning the same module.
   - DO declare a claim before touching shared fixture data or a shared credential, with one of three intents (`read` / `write` / `enumerate` — a listing that exposes siblings' entities is never an assertion target). A claim already listed in the brief is PRE-GRANTED: the worker announces it and works. Only a claim discovered mid-run waits, and the conductor arbitrates it: first message wins, it keeps the ledger and broadcasts the grant. Conductor-only operations (login / token minting, schema sync, tracker pull-push) are never delegated.
   - DO provision a fresh worktree BEFORE launching. A missing provisioning step disguises itself as something else: an absent env file reads as "the tool does not exist", absent dependencies as "a broken import", an absent tracker cache as a worker that simply cannot see the story.
@@ -71,7 +71,7 @@ It is **optional by construction**. Everything here has a path that works with n
 4. Create the scope `.session/orchestration/<slug>/`, seed `run.md`, `roster.md`, `COMMON.md`, `launch.txt` from `templates/`.
 5. Run the cycle in `references/coordinator-playbook.md` §1, in that order: Run → Tasks → placement → NATIVE launch → verify readiness and credentials on screen → send the prompt. Those last three are not separable.
 6. Wait inside the turn, one waiter, rolling windows of at most 540 s, ack verified in the same command that re-arms.
-7. Close each finished worker in the same turn; orphan audit before removing any worktree.
+7. Close each finished worker AND its worktree in the same turn: orphan audit first, then remove (`references/coordinator-playbook.md` §6).
 8. Harvest `learnings.md` and `skill-improvements.md`, write `kickoff.md`, then report to the owner.
 
 ---
@@ -84,7 +84,7 @@ LAYER 3 · REPO DOCTRINE      .agents/skills/orca-orchestration/   (T1, versione
         ^ points at v
 LAYER 2 · GRAMMAR + MACHINE  orca skills get orchestration      (mailbox, Run, Task, worker lifecycle)
                              orca skills get orca-cli           (terminals, worktrees, board, browser)
-   served BY THE BINARY, versioned with it. The user-level stubs teach nothing: they say "ask the binary".
+   served BY THE BINARY, versioned with it. The user-level stubs carry the command grammar and load alongside this skill; the binary serves the DEEP topics a stub points at.
         ^ operates on v
 LAYER 1 · APP                the app running · runtime reachable · board · phone
 ```
@@ -114,8 +114,8 @@ The reachability flag is NESTED (`.result.runtime.reachable`). A gate that looks
 
 | State | In a workflow skill (`sprint-testing`, `test-automation`, …) | In this skill |
 |---|---|---|
-| **A · no binary** | **total silence**. Not named, not recommended, not a prerequisite, not in the ATR, not in the blocked-token sweep. The flow writes its launch file and the human pastes the lines | **one line**, and only because the user ASKED for orchestration (see the exact text below), then continue on the fallback |
-| **B · binary, runtime unreachable** | silence (same fallback) | `orca open --json` once, re-check once; still unreachable → treat as state A |
+| **A · no binary** | **total silence**. Not named, not recommended, not a prerequisite, not in the ATR, not in the blocked-token sweep. The flow writes its launch file and the human pastes the lines. The one exception is `/sprint-conductor`, which runs only on Orca: one line, then it stops | **one line**, and only because the user ASKED for orchestration (see the exact text below), then continue on the fallback |
+| **B · binary, runtime unreachable** | silence (same fallback). `/sprint-conductor` opens the app once and re-checks once, as this skill does; still unreachable → its state-A line | `orca open --json` once, re-check once; still unreachable → treat as state A |
 | **C · ready** | the reinforcement activates without announcing itself: the runtime launches the workers and delivers the identical prompt, and they report to the mailbox IN ADDITION to the file tokens | full mode: conductor / worker / automation |
 
 **The exact recommendation (state A or B, this skill only)**, adapted to the user's language:
@@ -195,7 +195,7 @@ The owner speaks natural language to the conductor; the conductor translates. Th
 7. **Do not build a monitor**, and roll the wait instead. The runtime notifies the conductor when mail arrives; a homemade monitor competes with that notice, arrives late by construction, and triggers on echoes of the conductor's own messages. The harness kills a foreground command at 600 s, so a realistic round is covered by successive waits of at most 540 s, each re-armed with the verified ack in the same command — not by one long block, and never by a shell background job.
 8. **The stop verb has worktree radius: count first.** To close one terminal, close that terminal (and its tab).
 9. **A base-ref flag resolves LOCAL refs**: verify the new worktree's SHA against the remote base, with no `|| true` to hide the failure.
-10. **Never name the orchestrator to the user from a workflow skill when the gate fails**, and never put it in prerequisites, in a non-bypassable probe, in the ATR environment block, or in a blocked-token sweep.
+10. **Never name the orchestrator to the user from a workflow skill when the gate fails**, and never put it in prerequisites, in a non-bypassable probe, in the ATR environment block, or in a blocked-token sweep. The single exception is `/sprint-conductor`, which the owner invokes to run ON Orca: its gate failure is one line and a stop, never a prerequisite list or a recommendation.
 11. **Text typed into a terminal and not sent is not an instruction.**
 12. **One dev server and one browser per worktree**; close every browser-automation session before reporting (orphaned headless browsers, measured: G37).
 13. **Critical Rule #15 counts double** in a same-checkout fleet: no global discards, another session shares the tree.
@@ -256,7 +256,7 @@ behaviour.
 
 | Frequent confusion | What is actually true |
 |---|---|
-| "installing the vendor skill" enables orchestration | No. The binary already carries the commands. The stub only teaches when. The gate is on the binary |
+| "installing the vendor skill" enables orchestration | No. The binary already carries the commands, so a machine without the stubs is still capable. The stubs are the loaded grammar, not a precondition. The gate is on the binary |
 | a harness worktree equals an Orca worktree | No. The harness one lives inside the repo, invisible to the board and the phone, with no managed terminal. The Orca one has a card, terminals, a browser, and is reachable from the phone. To orchestrate: always the Orca one |
 | a context-only injection leaves a supervised worker | No: deliberately unsupervised, and the release verb does not close it. Supervised = the native launch |
 | a custom-argv terminal can be supervised | **No.** The runtime decides "is this an agent" from the argv IT launched, never from the running process, so adoption is refused on a terminal whose agent is alive on screen. Measured (`references/gotchas.md` G44). Supervision is the native launch or nothing |

@@ -8,26 +8,28 @@
  */
 
 import type { CompatibilityCheck } from './lib/agent-compatibility.ts';
+import type { UpdaterUi } from './lib/ui/updater-run.ts';
 import type { ProtectedWatchEntry } from './lib/updater-drift';
 import type { HarnessMigrationResult } from './lib/updater-harness-migration.ts';
 import type { GateResult, HeldBackComponent, InstructionRowInput, ParityFinding, ParityReport } from './lib/updater-parity';
 import type { PbiCacheFact } from './lib/updater-pbi';
 import type { Component, DeprecatedFile, ReportSink, RunSummary, UpdaterConfig } from './lib/updater-types';
+import type { PreflightCheck, PreflightResult } from './preflight.ts';
 import { execSync, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
+
 import * as os from 'node:os';
 import * as path from 'node:path';
-
 import pc from 'picocolors';
 import { checkAgentCompatibility, repairAgentSurfaces, SHADOWING_COMMANDS_BACKUP_DIR, SKILLS_ALIAS_DEFERRED_MARKER } from './lib/agent-compatibility.ts';
 import { applyInsertions, planInsertions, projectDelta, SCHEMA_FILE, SCHEMA_SOURCE } from './lib/agents-schema.ts';
 import { declaredHarnesses, isUnderAny, unusedHarnessPaths } from './lib/harness-selection.ts';
 import * as tui from './lib/tui';
+import { startUpdaterUi } from './lib/ui/updater-run.ts';
 import {
+  buildPairedDiff,
   cleanupTempDir,
   createBackupDir,
-  detectGitVersion,
-  gitVersionMeetsMin,
   isLocalTemplateSource,
   LAST_APPLY_FILE,
   readSyncState,
@@ -65,6 +67,8 @@ import {
   collectParityFindings,
   PARITY_PROMPT_PATH,
   persistArchivedSkillMarkers,
+  prerequisiteArbiterPasses,
+  prerequisiteFor,
   renderParityReport,
   RESOLVED_BY_APPLY_MARK,
   resolvedByApply,
@@ -74,6 +78,7 @@ import { makePbiCacheMigrationHook } from './lib/updater-pbi';
 import { CLAUDE_SETTINGS_FILE, formatHookCommand, mergeHookGroups, mergePermissionLists, readDeclinedDenies, readDeclinedHooks } from './lib/updater-settings';
 import { parseDotEnvExampleKeys, requiredNow, VAR_MANIFEST } from './lib/variables-manifest.ts';
 import { checkoutRoots } from './lib/worktree.ts';
+import { plainMsg, runUpPreflight } from './preflight.ts';
 
 // --- CONFIGURATION ---
 // Not tied to the lock schema (`schemaVersion: 7` stays): it stamps the lock's
@@ -83,7 +88,50 @@ const CLI_VERSION = '8.5';
 // clone (absolute path / file:// URL, cloned with plain git, no gh session) to
 // exercise an unpublished boilerplate branch against a consumer repo.
 const TEMPLATE_REPO = process.env.UPEX_TEMPLATE_REPO || 'upex-galaxy/agentic-qa-boilerplate';
-const TEMP_DIR = path.join(os.tmpdir(), 'kata-boilerplate-update');
+// One clone directory per process. A fixed name was shared by every `bun sync`
+// on the machine, and each clone wipes its destination first, so two concurrent
+// runs (two worktrees, two test processes) deleted each other's clone and one
+// died with CLONE_FAILED. The pid is unique among live processes. The
+// self-update children never rely on sharing it: the --dry-run preview gets the
+// parent's clone through UPDATER_UPSTREAM_DIR_ENV, the real re-exec clones its
+// own. A pid is practically never reused, so a run that ends without cleaning
+// would leave its clone forever: the entry point removes TEMP_DIR on every
+// process exit, and sweeps the dirs of dead runs at start (SIGKILL included).
+export const TEMP_DIR = path.join(os.tmpdir(), `kata-boilerplate-update-${process.pid}`);
+
+/** True while the process exists (EPERM: it exists and belongs to someone else). */
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  }
+  catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/**
+ * Remove the clone dirs (`kata-boilerplate-update-<pid>`) whose run is gone:
+ * what a killed or crashed `bun sync` leaves, since no exit handler survives a
+ * SIGKILL. A live run's dir, this run's own and any other name are kept.
+ * Never throws; returns the names removed.
+ */
+export function sweepStaleCloneDirs(tmp: string = os.tmpdir()): string[] {
+  let names: string[];
+  try { names = fs.readdirSync(tmp); }
+  catch { return []; }
+  const removed: string[] = [];
+  for (const name of names) {
+    const pid = Number(/^kata-boilerplate-update-(\d+)$/.exec(name)?.[1]);
+    if (!pid || pid === process.pid || pidAlive(pid)) { continue; }
+    try {
+      fs.rmSync(path.join(tmp, name), { recursive: true, force: true });
+      removed.push(name);
+    }
+    catch { /* another sweep got there first, or no permission: leave it */ }
+  }
+  return removed;
+}
 // Where the upstream clone sits while the afterApply hooks read it: our own
 // temp dir, or the clone a parent process handed down for the --dry-run
 // preview of a pending self-update (see UPDATER_UPSTREAM_DIR_ENV).
@@ -139,6 +187,13 @@ const ENV_SCHEMA_FILES = ['.env.schema', '.env.core.schema'];
 // The hook adapter carries no project state and keeps flowing.
 const CODEX_FRAMEWORK_FILES = ['hooks.json'];
 const CLAUDE_ROOT_CONFIG_FILES = ['settings.json'];
+// The framework helpers under `tests/utils/`: pure logic every project runs as
+// is (outcome classes, the known-defect marker, the Xray JSON body) plus their
+// tests. A file-list, not the directory: `decorators.ts` and `jiraSync.ts` sit
+// beside them on PROTECTED_WATCHLIST, and every other helper there is the
+// project's own. Without this component a synced skill cites files that never
+// arrive, and `skills:check` refuses the sync's own commit.
+const TESTS_UTILS_FILES = ['testOutcomes.ts', 'testOutcomes.test.ts', 'knownDefect.ts', 'xrayResults.ts', 'xrayResults.test.ts'];
 
 // `docs/` is the human documentation site. The boilerplate owns ONLY its
 // shipped half: `docs/core/**` (the pages), `docs/assets/**` (shared css/js and
@@ -234,7 +289,7 @@ export const DEPRECATED_FILES: DeprecatedFile[] = [...RETIRED_COMMAND_WRAPPERS, 
 
 export const COMPONENTS: Component[] = [
   // `skills` stays its own component (not folded into `agent-compatibility` as
-  // upstream dev does): `bun run up skills --skill a,b` narrows it by subdirectory.
+  // upstream dev does): `bun sync skills --skill a,b` narrows it by subdirectory.
   { name: 'skills', type: 'directory', paths: [SKILLS_CANONICAL_DIR] },
   // The progressive-disclosure sections behind the AGENTS.md ROUTER. Synced
   // like a skill (overwrite, `.backups/` copy, an "overwritten edit" row,
@@ -268,6 +323,7 @@ export const COMPONENTS: Component[] = [
   { name: 'agents-docs', type: 'file-list', paths: ['.agents'], files: AGENTS_DOCS_FILES },
   { name: 'tooling', type: 'file-list', paths: ['.'], files: TOOLING_FILES },
   { name: 'config-core', type: 'file-list', paths: ['config'], files: CONFIG_CORE_FILES },
+  { name: 'tests-utils', type: 'file-list', paths: ['tests/utils'], files: TESTS_UTILS_FILES },
   // `.env.example` carries NO secrets (placeholder values only) and fast-forwards
   // safely. Shipping it is the prerequisite for env-var drift detection — the
   // afterApply hook can only diff against an `.env.example` we have shipped.
@@ -345,7 +401,11 @@ export function parseArgs(args: string[]): ParsedArgs {
     }
     else if (aliases[a]) { out.commands.push(aliases[a]); }
     else if (valid.has(a)) { out.commands.push(a); }
+    // The page flags are read by cli/lib/ui/env-detect.ts.
+    else if (a === '--headless' || a === '--ui') { /* known */ }
     else if (!a.startsWith('-')) { tui.log.error(`Comando/componente desconocido: ${a}. Usa --help para ver los validos.`); process.exit(1); }
+    // An unknown flag used to be ignored, so `--dryrun` ran a REAL sync (analysis §8 #28).
+    else { tui.log.error(`Opción desconocida: ${a}. Usa --help para ver las válidas.`); process.exit(1); }
   }
   return out;
 }
@@ -355,7 +415,7 @@ const HELP_TEXT = `
 UPEX QA Boilerplate Updater v${CLI_VERSION} — Ayuda
 
 USO:
-  bun up [comando] [flags]
+  bun sync [comando] [flags]
 
 COMPONENTES: ${COMPONENTS.map(c => c.name).join(', ')}
 ATAJOS:      all, rollback, help
@@ -444,6 +504,17 @@ SIN TTY:
   asume --auto y lo avisa en una linea, en vez de quedarse esperando en el
   multi-select de la Fase 3.
 
+PAGINA LOCAL (en una terminal con pantalla):
+  La corrida se ve en una pagina local (127.0.0.1, con token) que abre sola:
+  chequeo previo, fases, cada pregunta como tarjeta con sus diffs, y el
+  reporte final. La terminal sigue mostrando el log; si ninguna pagina se
+  conecta en 10 s, las preguntas siguen en la terminal. Con --auto la pagina
+  es de solo lectura. Nunca se abre en CI, sin TTY, desde un agente ni por SSH
+  sin pantalla. Al terminar guarda una copia en .session/runs/up-*.html.
+  --headless             Sin pagina: el flujo de terminal de siempre
+  --ui                   Abre la pagina aunque las reglas digan que no (SSH con
+                         tunel, una terminal manejada por un agente)
+
 FLAGS:
   --auto                 Modo no-interactivo: sincroniza TODO el boilerplate
                          (copia archivos nuevos + sobreescribe divergencias con
@@ -478,36 +549,35 @@ ENV:
                          un consumidor.
 
 EJEMPLOS:
-  bun up                                 # Flujo interactivo (5 fases)
-  bun up skills                          # Solo agent skills
-  bun up skills --skill a,b,c            # Skills especificos
-  bun up --list                          # Listar skills disponibles
-  bun up scripts docs                    # Multiples componentes
-  bun up codex-config                    # Solo el adaptador de Codex
-  bun up --auto                          # CI mode (seguro, preserva lo tuyo)
-  bun up --force                         # Forzar todo del upstream (sin preguntar)
-  bun up --dry-run                       # Preview (con el updater nuevo si hay self-update)
-  bun up --auto --strict                 # CI: falla si queda un contrato roto
-  bun up --auto --no-gates               # Sin gates al final
-  bun up --rollback                      # Restaurar backup
+  bun sync                               # Flujo interactivo (5 fases)
+  bun sync skills                        # Solo agent skills
+  bun sync skills --skill a,b,c          # Skills especificos
+  bun sync --list                        # Listar skills disponibles
+  bun sync scripts docs                  # Multiples componentes
+  bun sync codex-config                  # Solo el adaptador de Codex
+  bun sync --auto                        # CI mode (seguro, preserva lo tuyo)
+  bun sync --force                       # Forzar todo del upstream (sin preguntar)
+  bun sync --dry-run                     # Preview (con el updater nuevo si hay self-update)
+  bun sync --auto --strict               # CI: falla si queda un contrato roto
+  bun sync --auto --no-gates             # Sin gates al final
+  bun sync --rollback                    # Restaurar backup
 `;
 
-// --- PREREQ ---
-function ensureGitVersion(): void {
-  try {
-    const v = detectGitVersion();
-    if (!gitVersionMeetsMin(v)) {
-      tui.log.error(`git ${v.raw} detectado. Se requiere git >= 2.25.0.`);
-      process.exit(2);
-    }
-  }
-  catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    tui.log.error(msg === 'GIT_NOT_FOUND' ? 'git no encontrado. Se requiere git >= 2.25.' : `git: ${msg}`);
-    process.exit(2);
-  }
+// --- RENAMED COMMAND ---
+// The updater was `bun up` until 2026-10 and is `bun sync` now. `up` stays a
+// hidden alias: a project whose package.json only has `up` runs it once, and
+// the `scripts` key sync adds `sync`. The env flag keeps the self-update
+// re-exec child, which inherits npm_lifecycle_event, from repeating the line.
+const RENAMED_NOTICE_ENV = 'UPEX_SYNC_RENAME_NOTICED';
+function noticeRenamedCommand(): void {
+  if (process.env.npm_lifecycle_event !== 'up' || process.env[RENAMED_NOTICE_ENV] === '1') { return; }
+  process.env[RENAMED_NOTICE_ENV] = '1';
+  tui.log.info('Este comando ahora se llama `bun sync`; `bun up` sigue funcionando como alias.');
 }
 
+// --- PREREQ ---
+// The git version, gh session and network checks of a run live in the preflight
+// (`cli/preflight.ts`); `--list` still needs the gh check on its own.
 async function validatePrerequisites(): Promise<void> {
   if (isLocalTemplateSource(TEMPLATE_REPO)) { return; } // plain `git clone`, no gh session involved
   try { execSync('gh --version', { stdio: 'ignore' }); }
@@ -602,7 +672,7 @@ const runFacts: RunFacts = { compat: null, envNewKeys: [], migration: null, migr
 // `.env.example` declares against what the target already has locally (`.env` +
 // local `.env.example`) and surface any upstream-added keys the target is missing.
 //
-// D3: this only PRINTS and OFFERS to run `bun run setup --variables` — it NEVER
+// D3: this only PRINTS and OFFERS to run `bun setup --variables` — it NEVER
 // auto-runs the remote push, and in non-interactive / CI mode it just prints
 // the warning (no prompt, no action).
 
@@ -662,23 +732,23 @@ async function detectEnvVarDrift(
 
   // CI / non-interactive: print only — never prompt, never touch remote (D3).
   if (nonInteractive) {
-    sink.step('Modo --auto: ejecuta `bun run setup --variables` manualmente para poblarlas.');
+    sink.step('Modo --auto: ejecuta `bun setup --variables` manualmente para poblarlas.');
     return;
   }
 
   const proceed = await sink.confirm(
-    'Ejecutar `bun run setup --variables` ahora para poblar las variables faltantes?',
+    'Ejecutar `bun setup --variables` ahora para poblar las variables faltantes?',
     false,
   );
   if (!proceed) {
-    sink.step('Omitido. Puedes ejecutar `bun run setup --variables` cuando quieras.');
+    sink.step('Omitido. Puedes ejecutar `bun setup --variables` cuando quieras.');
     return;
   }
 
-  sink.step('Lanzando `bun run setup --variables`…');
+  sink.step('Lanzando `bun setup --variables`…');
   const res = spawnSync('bun', ['run', 'setup', '--variables'], { stdio: 'inherit' });
   if (res.status !== 0) {
-    sink.warn('`bun run setup --variables` terminó con error o fue cancelado.');
+    sink.warn('`bun setup --variables` terminó con error o fue cancelado.');
   }
 }
 
@@ -881,7 +951,7 @@ export function makeAgentCompatibilityHook(
 // (`scripts/kata-manifest.ts`) and the test tree it scans (`tests/`) do travel
 // through the sync. When either changed this run, regenerate the manifest in
 // the consumer repo so the `kata:manifest:check` gate (and the pre-commit
-// staleness check) does not flag it after a routine `bun run up`. Best-effort:
+// staleness check) does not flag it after a routine `bun sync`. Best-effort:
 // a failure warns (e.g. bun missing from PATH), never aborts.
 function makeKataManifestHook(sink: ReportSink): (summary: RunSummary) => Promise<void> {
   return async (summary: RunSummary): Promise<void> => {
@@ -912,7 +982,9 @@ function makeKataManifestHook(sink: ReportSink): (summary: RunSummary) => Promis
 // Everything the old hooks promised is kept verbatim, because those promises
 // are what make writing to a project's identity file acceptable at all:
 // INSERT-ONLY, never an edit to an existing line, idempotent, interactive
-// confirm, and `--auto` warns without mutating. One prompt per BLOCK: per-key
+// confirm. `--auto` inserts only a WHOLE missing block (nothing of the
+// project's can live in a block it lacks) and warns about the leaves missing
+// from a block the project has. One prompt per BLOCK: per-key
 // prompting on a project 46 paths behind is abusive, and a single
 // all-or-nothing prompt hides what is being accepted.
 //
@@ -930,12 +1002,13 @@ function upstreamRelease(templateDir: string): string | null {
   catch { return null; }
 }
 
-async function backfillProjectYamlFromSchema(
+export async function backfillProjectYamlFromSchema(
   templateDir: string,
   sink: ReportSink,
   nonInteractive: boolean,
+  cwd: string = process.cwd(),
 ): Promise<void> {
-  const consumerPath = path.join(process.cwd(), SCHEMA_SOURCE);
+  const consumerPath = path.join(cwd, SCHEMA_SOURCE);
   const schemaPath = path.join(templateDir, SCHEMA_FILE);
   if (!fs.existsSync(consumerPath) || !fs.existsSync(schemaPath)) { return; }
 
@@ -957,28 +1030,36 @@ async function backfillProjectYamlFromSchema(
   if (delta.gaps.length === 0) { return; }
 
   const release = upstreamRelease(templateDir);
-  const total = delta.gaps.reduce((n, g) => n + g.paths.length, 0);
 
+  // Non-interactive (`--auto`, headless, an agent run): a WHOLE missing block is
+  // inserted, copied from the schema with its blank values, because nothing of
+  // the project's can be in a block it does not have, and a shipped skill that
+  // reads the block (`CONFIG_BLOCK_READERS`) would otherwise fail at runtime.
+  // A block the project HAS stays untouched: its missing leaves are only listed.
   if (nonInteractive) {
-    sink.warn(`Tu \`${SCHEMA_SOURCE}\` no tiene ${total} clave(s) que el schema de upstream declara.`);
-    for (const gap of delta.gaps) {
-      sink.step(`  ${gap.block}${gap.wholeBlock ? ' (bloque completo)' : ''}: ${gap.paths.join(', ')}`);
+    const partial = delta.gaps.filter(g => !g.wholeBlock);
+    if (partial.length > 0) {
+      const missing = partial.reduce((n, g) => n + g.paths.length, 0);
+      sink.warn(`Tu \`${SCHEMA_SOURCE}\` no tiene ${missing} clave(s) que el schema de upstream declara dentro de bloques que ya tienes.`);
+      for (const gap of partial) { sink.step(`  ${gap.block}: ${gap.paths.join(', ')}`); }
+      sink.step('Modo --auto: un bloque existente no se modifica. Ejecuta el updater interactivo, o `bun run agents:schema --project`.');
     }
-    sink.step('Modo --auto: no se modifica nada. Ejecuta el updater interactivo, o `bun run agents:schema --project`.');
-    return;
+    if (partial.length === delta.gaps.length) { return; }
   }
 
   let current = consumer;
   const applied: string[] = [];
   for (const gap of delta.gaps) {
+    if (nonInteractive && !gap.wholeBlock) { continue; }
     const what = gap.wholeBlock
       ? `el bloque \`${gap.block}\` completo (${gap.paths.length} clave(s))`
       : `${gap.paths.length} clave(s) nueva(s) en \`${gap.block}\`: ${gap.paths.join(', ')}`;
-    const proceed = await sink.confirm(
-      `Tu \`${SCHEMA_SOURCE}\` no tiene ${what}. ¿Insertarlas ahora? (insert-only — ningún valor tuyo se modifica)`,
+    const proceed = nonInteractive || await sink.confirm(
+      `Tu \`${SCHEMA_SOURCE}\` no tiene ${what}. Insertarlas ahora? (insert-only — ningún valor tuyo se modifica)`,
       false,
     );
     if (!proceed) { continue; }
+    if (nonInteractive) { sink.step(`Modo --auto: insertando ${what} (valores en blanco, insert-only).`); }
 
     // A whole missing block is inserted as ONE unit, not leaf by leaf: its
     // children come with it, and asking for each would be the per-key
@@ -1137,7 +1218,7 @@ function makeYamlBackfillHook(
     }
 
     const proceed = await sink.confirm(
-      `Tu \`${spec.consumerRel}\` no tiene el bloque \`${spec.label}\` (estándar de defect-management). ¿Agregarlo ahora? (insert-only — tus valores existentes nunca se modifican)`,
+      `Tu \`${spec.consumerRel}\` no tiene el bloque \`${spec.label}\` (estándar de defect-management). Agregarlo ahora? (insert-only — tus valores existentes nunca se modifican)`,
       false,
     );
     if (!proceed) {
@@ -1206,7 +1287,7 @@ async function listAvailableSkills(): Promise<void> {
   process.stdout.write(`\n${pc.bold('Skills disponibles:')}\n`);
   for (const skill of skills) { process.stdout.write(`  ${pc.cyan(skill)}\n`); }
   process.stdout.write(`\n${pc.dim(`Total: ${skills.length} skill${skills.length === 1 ? '' : 's'}`)}\n`);
-  tui.log.info('Uso: bun run up skills --skill <nombre[,nombre,...]>');
+  tui.log.info('Uso: bun sync skills --skill <nombre[,nombre,...]>');
   cleanupTempDir(TEMP_DIR);
 }
 
@@ -1239,7 +1320,9 @@ async function resolveSkillFilter(skills: string[]): Promise<Component[]> {
 // "they differ" alone would fire every run. An entry fires ONLY when the
 // UPSTREAM content changed since the last advice, tracked per entry by a
 // content hash under `.template/upstream-sha/`. One nudge per upstream change,
-// never on dry-run (markers are not persisted there).
+// never on dry-run (markers are not persisted there). The one exception is a
+// BLOCKING entry (`PATH_PREREQUISITES`): it fires every run while its arbiter
+// gate fails, because its marker says "seen", never "resolved".
 //
 // `AGENTS.md` (formerly `CLAUDE.md`, promoted by the cross-harness migration)
 // keeps the legacy `claude-md.upstream.sha` marker path so repos that already
@@ -1262,6 +1345,11 @@ const PROTECTED_WATCHLIST: ProtectedWatchEntry[] = [
   { path: 'tests/components/UiFixture.ts', reason: 'UI fixture wiring adapted per project' },
   { path: 'tests/components/api/ApiBase.ts', reason: 'KATA L2 HTTP base adapted to the target API' },
   { path: 'tests/components/ui/UiBase.ts', reason: 'KATA L2 UI base adapted to the target app' },
+  // The reporter and the two helpers that carry project wiring. Their pure
+  // neighbours sync through `tests-utils`; these get a drift row with the hunks.
+  { path: 'tests/KataReporter.ts', reason: 'the project\'s reporter: merge upstream\'s outcome records (reports/test-outcomes.json, the run id shared with atc_results.json), without which the board never shows an automated result' },
+  { path: 'tests/utils/decorators.ts', reason: 'the @atc decorator adapted per project: merge upstream\'s AtcResult.playwrightTestId and the runtime test.skip() as SKIP' },
+  { path: 'tests/utils/jiraSync.ts', reason: 'the project\'s TMS write-back: merge upstream\'s Xray body built through the synced tests/utils/xrayResults.ts and its key check before authenticating' },
   // Since the api-login split the generic CLI lives in `scripts/lib/api-login-core.ts`
   // (plainly synced) and the project's auth flow in `scripts/api-login.project.ts`
   // (bootstrapOnlyPaths below). The entry itself stays watched: a repo scaffolded
@@ -1540,8 +1628,15 @@ function makeParityHook(sink: ReportSink, priorLockSha: string, dryRun: boolean,
     // ANY first-advice entry whose upstream copy hasn't moved since the
     // project's own lock cursor, first-run noise on a migrated repo, not a
     // new upstream change to review.
+    // A BLOCKING entry (a release prerequisite) is re-judged by its arbiter
+    // gate on every run: while the gate fails, the row stays, whatever the
+    // marker says, and it is never seeded silently.
+    const arbiterFails = (entry: ProtectedWatchEntry): boolean => {
+      const prerequisite = prerequisiteFor(entry.path);
+      return prerequisite !== null && !prerequisiteArbiterPasses(prerequisite, cwd);
+    };
     const { advised: drifted, seeded, seededNoUpstreamChange } = splitFirstProjectAdvice(
-      detectProtectedDrift(watchlist, UPSTREAM_DIR, cwd),
+      detectProtectedDrift(watchlist, UPSTREAM_DIR, cwd, arbiterFails),
       { tempDir: UPSTREAM_DIR, lockCursor: priorLockSha || null },
     );
     // Markers FIRST: one nudge per upstream change even if the user ignores
@@ -1592,6 +1687,7 @@ function makeParityHook(sink: ReportSink, priorLockSha: string, dryRun: boolean,
     const findings = collectParityFindings({
       root: cwd,
       upstreamDir: UPSTREAM_DIR,
+      dryRun,
       drift: drifted.map(d => ({ path: d.path, reason: d.reason, structural: d.structural === true, source: d.source })),
       compatErrors,
       compatWarnings,
@@ -1614,6 +1710,8 @@ function makeParityHook(sink: ReportSink, priorLockSha: string, dryRun: boolean,
         backupPath: summary.backupDir ? path.join(summary.backupDir, edit.path) : null,
       })),
       packageJsonKept: summary.packageJsonKept ?? [],
+      packageJsonAppended: summary.packageJsonAppended ?? [],
+      testSiblingsHeldBack: summary.testSiblingsHeldBack ?? [],
       gates: runFacts.gates,
       pbiCache: runFacts.pbiCache,
       shadowingCommandsMoved: runFacts.shadowingCommandsMoved,
@@ -1716,6 +1814,7 @@ function runHarnessMigration(sink: ReportSink, dryRun: boolean): HarnessMigratio
 
   tui.log.info('Migración cross-harness (Claude → Claude + OpenCode + Codex):');
   for (const line of describeHarnessMigration(plan)) { tui.log.message(`  · ${line}`); }
+  pageNote('info', ['Migración cross-harness (Claude → Claude + OpenCode + Codex):', ...describeHarnessMigration(plan).map(l => `· ${l}`)].join('\n'));
 
   // --dry-run must still SHOW this. Without it the preview would suggest the
   // project's memory is untouched while a real run promotes it to AGENTS.md
@@ -1723,6 +1822,7 @@ function runHarnessMigration(sink: ReportSink, dryRun: boolean): HarnessMigratio
   if (dryRun) {
     if (plan.blockers.length > 0) {
       tui.log.warn(`Bloqueantes que detendrían la migración:\n  - ${plan.blockers.join('\n  - ')}`);
+      pageNote('warn', `Bloqueantes que detendrían la migración: ${plan.blockers.join('; ')}`);
     }
     tui.log.message('  (--dry-run: nada de lo anterior se aplicó. La corrida real lo hace ANTES de sincronizar.)');
     runFacts.migrationPlanned = plan.needed;
@@ -1759,13 +1859,35 @@ function runHarnessMigration(sink: ReportSink, dryRun: boolean): HarnessMigratio
       sink.step(`.gitignore: añadido ${result.ignoredEntriesAdded.join(', ')}.`);
     }
     tui.log.message(`  Copia de seguridad: ${MIGRATION_BACKUP_DIR}/ (gitignored). Revísala antes de borrarla.`);
+    pageNote('info', `Copia de seguridad: ${MIGRATION_BACKUP_DIR}/ (gitignored). Revísala antes de borrarla.`);
     return result;
   }
   catch (error) {
     tui.log.error(error instanceof Error ? error.message : String(error));
-    tui.log.warn('El update se detuvo ANTES de tocar nada. Resuelve lo anterior y vuelve a correr `bun run up`.');
-    process.exit(1);
+    tui.log.warn('El update se detuvo ANTES de tocar nada. Resuelve lo anterior y vuelve a correr `bun sync`.');
+    pageNote('error', error instanceof Error ? error.message : String(error));
+    throw Object.assign(new Error('El update se detuvo ANTES de tocar nada.'), { name: 'UpdaterAbort', exitCode: 1 });
   }
+}
+
+// --- PAGE (installer-ui delivery 2) ---
+/** The page of this run, when it opened; the error handler closes it too. */
+let activeUi: UpdaterUi | null = null;
+/** A line of output that bypasses the sink (migration block), mirrored into the page. */
+function pageNote(level: 'info' | 'warn' | 'error', text: string): void {
+  activeUi?.notice(level, text);
+}
+
+/** Closes the page (summary saved, server stopped) once; safe to call with no page. */
+async function closeUi(status: 'done' | 'done-with-pending' | 'failed' | 'aborted', exit: number): Promise<void> {
+  const ui = activeUi;
+  activeUi = null;
+  if (!ui) { return; }
+  try {
+    const saved = await ui.finish(status, exit);
+    if (saved) { tui.log.info(`Resumen guardado en ${pc.cyan(saved)}`); }
+  }
+  catch { /* closing the page never changes the run's exit */ }
 }
 
 // --- SINK ---
@@ -1776,7 +1898,12 @@ function abortOnCancel<T>(v: T | symbol): T {
   return v;
 }
 
-function buildSink(): ReportSink {
+/**
+ * Today's terminal sink. With the page open it keeps printing every log line
+ * and asks a question only when no page has been connected for 10 s; `signal`
+ * then cancels the prompt the moment the page answers first (owner answer Q6).
+ */
+function buildSink(signal: () => AbortSignal | undefined = () => undefined): ReportSink {
   return {
     phase: (n, label) => tui.phaseHeader(n, label),
     subphase: (label) => {
@@ -1789,7 +1916,7 @@ function buildSink(): ReportSink {
     spinner: () => tui.spinner(),
 
     confirm: async (message, defaultValue = false) => {
-      const r = await tui.confirm({ message, initialValue: defaultValue });
+      const r = await tui.confirm({ message, initialValue: defaultValue, signal: signal() });
       return abortOnCancel<boolean>(r);
     },
 
@@ -1799,7 +1926,7 @@ function buildSink(): ReportSink {
         value: s.name,
         label: `${s.name} (${s.changedCount} cambiados${s.divergedCount > 0 ? `, ${s.divergedCount} divergente${s.divergedCount > 1 ? 's' : ''}` : ''})`,
       }));
-      const r = await tui.multiselect({ message: 'Selecciona componentes a revisar:', options, required: false });
+      const r = await tui.multiselect({ message: 'Selecciona componentes a revisar:', options, required: false, signal: signal() });
       return abortOnCancel<string[]>(r);
     },
 
@@ -1811,13 +1938,14 @@ function buildSink(): ReportSink {
         ? `, +${stats.addedTotal}/-${stats.removedTotal} líneas`
         : '';
       const r = await tui.select({
-        message: `${scope} (${stats.changedCount} archivo(s)${divergedSuffix}${locSuffix}) — ¿como proceder?`,
+        message: `${scope} (${stats.changedCount} archivo(s)${divergedSuffix}${locSuffix}) — cómo proceder?`,
         options: [
           { value: 'all', label: `aceptar todos (${stats.changedCount})` },
           { value: 'pick', label: 'elegir individualmente' },
           { value: 'skip', label: 'saltar scope completo' },
         ],
         initialValue: 'all',
+        signal: signal(),
       });
       return abortOnCancel<string>(r) as 'all' | 'pick' | 'skip';
     },
@@ -1825,7 +1953,7 @@ function buildSink(): ReportSink {
     pickFiles: async (scope, files) => {
       if (files.length === 0) { return []; }
       const options = files.map(f => ({ value: f.entry.path, label: f.label, hint: f.entry.classification }));
-      const r = await tui.multiselect({ message: `Selecciona archivos en ${scope}:`, options, required: false });
+      const r = await tui.multiselect({ message: `Selecciona archivos en ${scope}:`, options, required: false, signal: signal() });
       const selected = new Set(abortOnCancel<string[]>(r));
       return files.filter(f => selected.has(f.entry.path)).map(f => f.entry);
     },
@@ -1855,22 +1983,36 @@ function buildSink(): ReportSink {
         options: opts,
         initialValues,
         required: false,
+        signal: signal(),
       });
       // Expand atomic groups back into their individual lines for the core.
       return abortOnCancel<string[]>(r).flatMap(v => v.split('\n'));
+    },
+
+    pickPackageJsonKeys: async (file, section, keys) => {
+      if (keys.length === 0) { return []; }
+      const r = await tui.multiselect({
+        message: `${file} → ${section}: claves nuevas en upstream (se agregan sin tocar las tuyas):`,
+        options: keys.map(k => ({ value: k.value, label: k.label })),
+        initialValues: keys.filter(k => k.checked).map(k => k.value),
+        required: false,
+        signal: signal(),
+      });
+      return abortOnCancel<string[]>(r);
     },
 
     resolvePackageJsonKey: async (file, section, key, drift) => {
       const body = `=== Tu versión (local) ===\n${drift.localValue}\n\n=== Versión del boilerplate (upstream) ===\n${drift.upstreamValue}`;
       tui.note(body, `${file} → ${section}.${key}`);
       const r = await tui.select({
-        message: `${section}.${key} difiere — ¿qué hacemos?`,
+        message: `${section}.${key} difiere — qué hacemos?`,
         options: [
           { value: 'mine', label: 'Mantener la mía (predeterminado)' },
           { value: 'theirs', label: 'Actualizar a la del boilerplate' },
           { value: 'skip', label: 'Decidir después (preguntar de nuevo)' },
         ],
         initialValue: 'mine',
+        signal: signal(),
       });
       return abortOnCancel<string>(r) as 'theirs' | 'mine' | 'skip';
     },
@@ -1879,19 +2021,20 @@ function buildSink(): ReportSink {
       const body = `=== Cambios upstream ===\n${diff.templateDiff.trim() || '(sin diff)'}\n\n=== Tus cambios locales ===\n${diff.localDiff.trim() || '(sin diff)'}`;
       tui.note(body, `Divergencia en ${entry.path}`);
       const r = await tui.select({
-        message: '¿Como resolver?',
+        message: 'Cómo resolver?',
         options: [
           { value: 'skip', label: 'skip (predeterminado — preservar tu version)' },
           { value: 'theirs', label: 'theirs (descartar locales, usar upstream)' },
           { value: 'mine', label: 'mine (conservar tu version explicitamente)' },
         ],
         initialValue: 'skip',
+        signal: signal(),
       });
       return abortOnCancel<string>(r) as 'skip' | 'theirs' | 'mine';
     },
 
     confirmDelete: async (entry) => {
-      const r = await tui.confirm({ message: `¿Eliminar ${entry.path} localmente? (upstream lo borro)`, initialValue: false });
+      const r = await tui.confirm({ message: `Eliminar ${entry.path} localmente? (upstream lo borro)`, initialValue: false, signal: signal() });
       return abortOnCancel<boolean>(r);
     },
 
@@ -1971,13 +2114,14 @@ function buildSink(): ReportSink {
 export function worktreeRefusal(cwd = process.cwd()): string | null {
   const roots = checkoutRoots(cwd);
   if (roots === null || !roots.linked) { return null; }
-  return 'Este checkout es un worktree. `bun run up` guarda backups (para --rollback), marcadores y prompts '
-    + 'dentro del checkout, y en un worktree se pierden al borrarlo. Ejecuta `bun run up` en el checkout '
+  return 'Este checkout es un worktree. `bun sync` guarda backups (para --rollback), marcadores y prompts '
+    + 'dentro del checkout, y en un worktree se pierden al borrarlo. Ejecuta `bun sync` en el checkout '
     + `principal: ${roots.primaryRoot}`;
 }
 
 async function main(): Promise<void> {
   const parsed = parseArgs(process.argv.slice(2));
+  noticeRenamedCommand();
 
   if (parsed.help) { process.stdout.write(HELP_TEXT); process.exit(0); }
   const refusal = worktreeRefusal();
@@ -1989,18 +2133,64 @@ async function main(): Promise<void> {
   if (parsed.rollback) { rollbackFromBackup(); process.exit(0); }
   if (parsed.listSkills) { await listAvailableSkills(); process.exit(0); }
 
-  ensureGitVersion();
-  await validatePrerequisites();
+  // The page opens on a real terminal with a screen; CI, a pipe, an agent or
+  // SSH keep today's terminal flow, and so does `--headless`. A self-update
+  // re-exec child picks up the page its parent opened (installer-ui plan §5-§6).
+  let terminalSignal: AbortSignal | undefined;
+  const terminalSink = buildSink(() => terminalSignal);
+  try {
+    activeUi = await startUpdaterUi({
+      argv: process.argv.slice(2),
+      repoRoot: process.cwd(),
+      repoName: path.basename(process.cwd()),
+      version: CLI_VERSION,
+      terminal: terminalSink,
+      setTerminalSignal: (sig) => { terminalSignal = sig; },
+      onTerminalCancel: () => {
+        tui.cancel('Aborted by user.');
+        void closeUi('aborted', 130).then(() => process.exit(130));
+      },
+      diffFor: entry => buildPairedDiff(entry, UPSTREAM_DIR, process.cwd()),
+      groupIgnoreLines: lines => groupIgnoreLines(lines),
+      print: line => tui.log.info(line),
+    });
+  }
+  catch (err) {
+    tui.log.warn(`No se pudo abrir la página (${err instanceof Error ? err.message : String(err)}); la corrida sigue en la terminal.`);
+  }
+  const ui = activeUi;
+
+  // PREFLIGHT (installer-ui preflight.md §3): what would fail halfway, in seconds.
+  const migrationRows = (): PreflightCheck[] => {
+    const plan = planHarnessMigration();
+    if (!plan.needed && plan.blockers.length === 0) { return []; }
+    return [{ id: 'harness-migration', group: ui?.lang === 'en' ? 'This machine' : 'Esta máquina', label: ui?.lang === 'en' ? 'Cross-harness migration' : 'Migración cross-harness', value: ui?.lang === 'en' ? 'pending' : 'pendiente', state: 'info', msg: describeHarnessMigration(plan).join(' · '), neededBy: 'fetch' }];
+  };
+  const preflightOpts = { cwd: process.cwd(), templateRepo: TEMPLATE_REPO, lockFile: VERSION_FILE, lang: ui?.lang ?? 'es' as const, extra: migrationRows() };
+  const pre = await runUpPreflight(preflightOpts);
+  printPreflight(pre);
+  if (ui) {
+    if (await ui.preflight(pre, async () => runUpPreflight(preflightOpts)) === 'abort') {
+      tui.outro(ABORTED_OUTRO);
+      await closeUi('aborted', 1);
+      process.exit(1);
+    }
+  }
+  else if (pre.verdict === 'block') {
+    tui.outro(ABORTED_OUTRO);
+    process.exit(pre.checks.some(c => c.id === 'git-version' && c.state === 'block') ? 2 : 1);
+  }
 
   // No terminal on stdin (CI, a pipe, an agent's shell) and no explicit mode:
   // the Phase 3 multi-select would hang forever. Default to --auto and say so.
-  if (!parsed.auto && !parsed.force && !parsed.interactive && !process.stdin.isTTY) {
+  // A page opened with `--ui` answers the questions itself, so it keeps them.
+  if (!ui && !parsed.auto && !parsed.force && !parsed.interactive && !process.stdin.isTTY) {
     parsed.auto = true;
     tui.log.info('stdin no es una terminal: se asume --auto (pasa --interactive para conservar los prompts).');
   }
   const nonInteractive = parsed.auto || parsed.force;
 
-  // Filter components if sub-commands passed (e.g. `bun run up scripts`).
+  // Filter components if sub-commands passed (e.g. `bun sync scripts`).
   let components = COMPONENTS;
   if (parsed.commands.length > 0 && !parsed.commands.includes('all')) {
     const requested = new Set(parsed.commands);
@@ -2016,7 +2206,7 @@ async function main(): Promise<void> {
     components = await resolveSkillFilter(parsed.skills);
   }
 
-  const sink = buildSink();
+  const sink = ui?.sink ?? terminalSink;
 
   // Cross-harness migration: runs BEFORE any component is synced, on purpose.
   // A repo scaffolded when instructions lived in CLAUDE.md and skills in
@@ -2030,7 +2220,7 @@ async function main(): Promise<void> {
   if (migration?.applied && runFacts.migration === null) { runFacts.migration = migration; }
   // What the preflight just wrote is the updater's own dirt: the dirty-tree
   // guard in runUpdate (and in the self-update re-exec child) must not refuse
-  // a tree that was clean before `bun run up` started.
+  // a tree that was clean before `bun sync` started.
   const updaterOwnedPaths = migration ? harnessMigrationTouchedPaths(migration) : [];
   // Lock cursor BEFORE this run advances it: the parity prompt names both shas.
   const priorLockSha = readLock(process.cwd()).templateCommit;
@@ -2053,7 +2243,7 @@ async function main(): Promise<void> {
     // component is synced wholesale and imports picocolors / yaml / boxen /
     // cli-table3 / figures / @clack/prompts / @inquirer/prompts at RUNTIME,
     // all declared only there — syncing the code without the package leaves
-    // `bun run up` crashing on import. `lint-staged` is here because
+    // `bun sync` crashing on import. `lint-staged` is here because
     // `.husky/pre-commit` shells out to `bunx lint-staged`, which reads its
     // config from this file.
     packageJsonSpecs: [
@@ -2085,6 +2275,9 @@ async function main(): Promise<void> {
       '.agents/skills/iql-context/references/project-overrides.md',
       ...watchlist.map(e => e.path),
     ],
+    // A kept protected file keeps its own test: upstream's `.test.*` sibling
+    // asserts upstream's copy (testSiblingsToHoldBack in ./lib/updater-drift.ts).
+    holdTestSiblingsOf: watchlist.map(e => e.path),
     // Files inside a synced component that must NEVER be delivered or
     // overwritten by the sync: the generated surfaces (see GENERATED_PATHS).
     // CLAUDE.md is the shim the migration / scaffold writes, REGISTRY.md is
@@ -2111,10 +2304,14 @@ async function main(): Promise<void> {
     // without this every consumer project inherits our proposals and backlogs as
     // if they were framework documentation. Mirrored in TEMPLATE_EXCLUDES
     // (packages/create-agentic-qa/src/prepare.ts) — the scaffold prunes them on
-    // first install and this keeps `bun run up` from putting them back.
+    // first install and this keeps `bun sync` from putting them back.
     //
     // `.context/ADR/` needs no entry here: `.context` is not a synced component,
-    // so ADRs only ever travel through the scaffold tarball, which prunes them.
+    // so ADRs only ever travel through the scaffold tarball, which prunes the
+    // recorded ones (`ADR-<digits>-*`) and keeps the template and the README. A
+    // prefix entry would drop those two as well, and this list has no pattern
+    // form; the component-registry test holds the invariant instead. The synced
+    // linters skip a cite of a pruned ADR outside the boilerplate.
     repoOnlyPaths: [
       'docs/reports',
       // The files of a harness this project does not use (ADR-0012): it
@@ -2128,6 +2325,8 @@ async function main(): Promise<void> {
     promptFile: PARITY_PROMPT_PATH,
     hooks: {
       skillsResolver: resolveTemplateSkills,
+      // The page survives the re-exec: the child binds the same port and token.
+      ...(ui ? { beforeReexec: ui.beforeReexec } : {}),
       // afterApply runs while the upstream clone still sits in UPSTREAM_DIR
       // (cleanup happens after). On dry-run only the read-only pieces run (env
       // keys, the parity table), nothing is regenerated or saved. Each hook is
@@ -2198,7 +2397,8 @@ async function main(): Promise<void> {
     },
   };
 
-  tui.intro(tui.headline(`UPEX QA Boilerplate Updater v${CLI_VERSION}`));
+  // A re-exec child continues the parent's run: its intro is already on screen.
+  if (process.env.UPEX_UPDATER_REEXEC !== '1') { tui.intro(tui.headline(`UPEX QA Boilerplate Updater v${CLI_VERSION}`)); }
 
   const summary = await runUpdate(cfg, sink, {
     auto: parsed.auto,
@@ -2215,18 +2415,67 @@ async function main(): Promise<void> {
   const verdict = runVerdict({ aborted, dryRun: parsed.dryRun, strict: parsed.strict }, runFacts.parity?.findings ?? []);
   if (verdict.reason) { tui.log.error(verdict.reason); }
   tui.outro(verdict.outro);
+  if (ui) {
+    const findings = runFacts.parity?.findings ?? [];
+    if (!aborted) {
+      ui.report({
+        dryRun: parsed.dryRun,
+        auto: nonInteractive,
+        aborted,
+        applied: summary.applied.length,
+        skipped: summary.skipped.length,
+        failed: summary.failed.map(f => ({ path: f.entry.path, reason: f.reason })),
+        upstreamSha: summary.newHeadSha,
+        surfaces: runFacts.parity?.report.surfaces ?? [],
+        findings,
+        prompt: runFacts.parity?.report.prompt,
+        promptPath: !parsed.dryRun && (summary.promptSaved || runFacts.promptKept) ? PARITY_PROMPT_PATH : null,
+        commit: !parsed.dryRun && summary.newHeadSha && (summary.applied.length > 0 || (summary.lastApplyPaths ?? 0) > 0) ? suggestCommitMessage(summary) : null,
+        extraNext: runFacts.aliasDeferred ? [{ title: 'Alias de skills pendiente', text: ALIAS_DEFERRED_NEXT_STEP }] : [],
+      });
+    }
+    const pending = (nonInteractive && summary.skipped.length > 0) || findings.length > 0;
+    await closeUi(aborted ? 'aborted' : verdict.exitCode !== 0 ? 'failed' : pending ? 'done-with-pending' : 'done', verdict.exitCode);
+  }
   if (verdict.exitCode !== 0) { process.exit(verdict.exitCode); }
+}
+
+/** Terminal rows of the preflight: nothing when all is clear (today's output), every warn and block otherwise. */
+function printPreflight(pre: PreflightResult): void {
+  for (const c of pre.checks) {
+    if (c.state !== 'warn' && c.state !== 'block') { continue; }
+    const text = `${c.label}${c.value && c.value !== '-' ? ` (${c.value})` : ''}: ${plainMsg(c.msg ?? '')}`;
+    if (c.state === 'block') { tui.log.error(text); }
+    else { tui.log.warn(text); }
+  }
 }
 
 // Guarded so tests can import COMPONENTS and the pure helpers above
 // (extractIndentedYamlBlock, insertBlockAtEndOfSection) without kicking off a sync.
 if (import.meta.main) {
-  main().catch((err: unknown) => {
+  sweepStaleCloneDirs();
+  // Every process.exit passes here (Ctrl-C at a prompt, UpdaterAbort, a throw,
+  // a terminal cancel, an empty selection), so none of them leaves the clone.
+  // rmSync is synchronous, which an exit listener requires. SIGINT / SIGTERM
+  // would kill the process without an exit event: turn them into one, with the
+  // shell's exit codes. A SIGKILL is the startup sweep's job.
+  process.on('exit', () => cleanupTempDir(TEMP_DIR));
+  for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]] as const) {
+    process.once(signal, () => process.exit(code));
+  }
+  main().catch(async (err: unknown) => {
     if (err instanceof Error && err.name === 'ExitPromptError') {
       tui.cancel('Aborted by user.');
+      await closeUi('aborted', 130);
       process.exit(130);
     }
+    if (err instanceof Error && err.name === 'UpdaterAbort') {
+      await closeUi('aborted', 1);
+      process.exit(1);
+    }
     tui.log.error(err instanceof Error ? err.message : String(err));
+    activeUi?.notice('error', err instanceof Error ? err.message : String(err));
+    await closeUi('failed', 1);
     process.exit(1);
   });
 }

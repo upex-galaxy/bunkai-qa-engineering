@@ -24,6 +24,8 @@ A workflow skill (`metadata.kind: workflow`) with no dispatch of its own: it is 
 - DO: state the final PNG's repo-relative path in chat the moment it lands, unprompted, and repeat it leading the "Bug annotations" group in the session-close screenshot list.
 - WHEN embedding the annotated PNG into the bug issue: offer it and let the human confirm first; once published it leads the bug's Evidence section, ahead of the raw capture.
 
+- DIRECTION: the evidence page (the `evidence-artifact` skill) keeps marks as data on one page per ticket and per bug; when a ticket has one, link it and keep this PNG only where a tracker needs an inline image.
+
 **Read full SKILL.md when**: building the annotation HTML, choosing shape types, or handling a case the local render cannot cover (e.g. a photo of physical signage that would need anonymization).
 
 ---
@@ -84,7 +86,7 @@ So: **QA evidence containing real product or customer data never routes through 
      --caption "Annotated evidence — <one-line defect summary>" --publish
    ```
 
-   The annotated image is the "money shot": it leads the bug's Evidence section and ranks first (ahead of the raw capture) in the Stage 3 Evidence Handoff (`../sprint-testing/references/reporting-templates.md` §3.5).
+   The annotated image is the "money shot": it leads the bug's Evidence section, ahead of the raw capture. When the bug has an evidence page (the `evidence-artifact` skill), the image goes into the bug's pack as the reproduction's first defect image, so it leads the page and becomes the bug's one tracker thumbnail; the Stage 3 Evidence Handoff (`../sprint-testing/references/reporting-templates.md` §3.5) links that page, not image files.
 
 ## Known gotchas
 

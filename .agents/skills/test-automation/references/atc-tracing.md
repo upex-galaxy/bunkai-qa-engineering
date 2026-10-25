@@ -89,6 +89,8 @@ reports/atc_results.json
 
 Written by `KataReporter.onEnd()` in the coordinator process. Persists after the run — downstream tooling (teardown, TMS sync, dashboards) reads from here.
 
+Beside it, `KataReporter.onEnd()` writes `reports/test-outcomes.json`: one record per Playwright test with its outcome class (`passed`, `failed`, `known-defect`, `unexpected-pass`, `skipped`) and the ATC ids it ran, which `@atc` pushes as an `atc` annotation (ADR-0020). The run headline comes from that file. The TMS write-back keeps reading `atc_results.json`.
+
 ### 3.2 Schema
 
 ```json
@@ -237,8 +239,17 @@ bun run test:sync             # reads it and writes the results back
 
 The suite workflows under `.github/workflows/` run the second line as a
 `Sync Results to TMS` step gated on `AUTO_SYNC == 'true'`, right after the test
-step. `syncResults()` itself still honours the `AUTO_SYNC` gate, and in CI it
+step. On an Xray project, `regression.yml` skips that step and its `XrayImport`
+job imports the same file instead, through the same payload builder
+(`tests/utils/xrayResults.ts`). `syncResults()` itself still honours the `AUTO_SYNC` gate, and in CI it
 exits non-zero when the report file is missing rather than returning silently.
+
+**When you may run `bun run test:sync`.** Only after a run against the environment the TC's
+precondition names (the Test Execution's Test Environment). The write-back records `PASSED` / `FAILED`,
+and a case is `PASSED` or `FAILED` only when observed in that environment
+(`../../agentic-qa-core/references/discovery-driven-doctrine.md` §5.2). A Code-phase run, the local
+gate, a local stack or any environment other than the Execution's is evidence about the code,
+never a TMS result: leave `AUTO_SYNC` off for it. This is a usage rule; the sync code does not check the environment.
 
 ### 8.2 Provider routing
 
@@ -246,7 +257,9 @@ exits non-zero when the report file is missing rather than returning silently.
 syncResults()
 ├── provider = 'xray'  → syncToXray()
 │   ├── POST /authenticate  (bearer token)
-│   └── POST /import/execution (batch, all ATCs in one payload)
+│   └── POST /import/execution (batch, all ATCs in one payload:
+│        one entry per ATC, testKey = the @atc id, never testInfo,
+│        so the import cannot create a Test)
 │
 ├── provider = 'jira'  → syncToJiraDirect()
 │   ├── For each testId:
@@ -413,7 +426,7 @@ The manifest is a static registry — it says what **exists in code**. `atc_resu
 | Sensitive value visible in step title | Key not in `SENSITIVE_KEYS` | Add the key to `SENSITIVE_KEYS` in `tests/utils/decorators.ts` |
 | Sync reports "No ATC results to sync" | `atc_results.json` empty | Run tests first; check KataReporter ran `generateAtcReport()`; confirm reporter config |
 | Sync fails with 401 | Bad TMS credentials | Verify `XRAY_CLIENT_*` or `ATLASSIAN_API_TOKEN`; check expiry and permissions |
-| Sync fails with "Test key not found" | TMS issue missing or mistyped | Create the issue in the TMS first; check case-sensitive exact match |
+| Sync fails with "Test key not found" | TMS issue missing or mistyped | Check case-sensitive exact match; a missing Test goes to `/test-documentation` (signed ROI first, `../SKILL.md` §"TC source gate"), never created here |
 | Custom-field error (Jira Direct) | Wrong `JIRA_TEST_STATUS_FIELD` ID | `[ISSUE_TRACKER_TOOL] list_fields()` (load `/acli`) and grep for the field; or re-run `bun run jira:sync-fields --force` |
 | Sync is slow | Jira Direct = one request per ATC | Batch via Xray if budget allows; move sync off the local loop — run only in CI on `main` |
 

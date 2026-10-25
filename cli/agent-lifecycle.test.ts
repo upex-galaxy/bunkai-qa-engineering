@@ -17,16 +17,19 @@ import {
   migrateAgentIds,
   offerEngramClaudePlugin,
   parseAgentsEnv,
+  partitionDeclinedSkills,
   PROJECT_LEVEL_SKILLS,
   PROJECT_SKILL_DESTINATION,
   remoteHeadRef,
   repairRepositoryCompatibility,
+  USER_LEVEL_SKILLS,
 } from './install.ts';
 import { declaredMcpIds } from './lib/agent-compatibility-contracts.ts';
 import {
   claudeSkillsAliasPlan,
   repairClaudeSkillsAlias,
 } from './lib/agent-compatibility.ts';
+import { isMaintainerCopy, isSchemaOwner } from './lib/agents-schema.ts';
 import { COMPONENTS, makeAgentCompatibilityHook } from './update-boilerplate.ts';
 
 const REPO_ROOT = resolve(import.meta.dir, '..');
@@ -78,6 +81,14 @@ function copyPath(root: string, relativePath: string): void {
 const HAS_CODEX = existsSync(join(REPO_ROOT, '.codex/hooks.json')) && existsSync(join(REPO_ROOT, '.codex/config.toml'));
 const HAS_CLAUDE = existsSync(join(REPO_ROOT, 'CLAUDE.md'));
 const HAS_ALL_HARNESSES = HAS_CODEX && existsSync(join(REPO_ROOT, 'opencode.jsonc')) && existsSync(join(REPO_ROOT, '.mcp.json'));
+/**
+ * The boilerplate's own checkout: the package name AND the maintainer sentinel
+ * (the same test `contractsEnforced` makes). A downstream project declares its
+ * own MCP servers, so an assertion on the boilerplate's exact set skips there.
+ */
+const yamlPath = join(REPO_ROOT, '.agents/project.yaml');
+const MAINTAINER_CHECKOUT = isSchemaOwner(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'))
+  && existsSync(yamlPath) && isMaintainerCopy(readFileSync(yamlPath, 'utf8'));
 
 function compatibilityFixture(): string {
   const root = temporaryRoot();
@@ -203,7 +214,7 @@ describe('installer Codex lifecycle', () => {
     });
   });
 
-  test.skipIf(!HAS_ALL_HARNESSES)('discovers the MCP environment contracts from the loader filter on every host, and exposes launch guidance', async () => {
+  test.skipIf(!HAS_ALL_HARNESSES || !MAINTAINER_CHECKOUT)('discovers the MCP environment contracts from the loader filter on every host, and exposes launch guidance', async () => {
     // Each server names what it reads in its `.env` loader's `--filter`, the
     // same list on all three hosts: the six DBHUB_* dbhub.toml interpolates,
     // the two SLACK_MCP_*, the OpenAPI pair. None is core scope (project or
@@ -259,7 +270,7 @@ describe('compatibility repair lifecycle', () => {
 
   test.skipIf(!HAS_CLAUDE)('reclaims the skills CLI per-skill symlink shim without losing a skill body', () => {
     // `bunx skills add` (project level) writes the body to .agents/skills/<slug>/ and then
-    // creates .claude/skills/ as a REAL directory of per-skill symlinks. `bun run setup`
+    // creates .claude/skills/ as a REAL directory of per-skill symlinks. `bun setup`
     // installs community skills BEFORE repairing compatibility, so this is what a clean
     // clone actually looks like at repair time. Refusing here aborted the install.
     const root = compatibilityFixture();
@@ -379,6 +390,35 @@ describe('doctor and updater parity', () => {
 // scaffold-day copy forever with no signal. Reporting only: no reinstall path,
 // because an overwrite of a gitignored skill has no backup to restore from.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// T4 user-level skills: a per-skill multiselect. An unchecked skill is stored as
+// declined and stays out of every later offer, a forced re-run included.
+// ---------------------------------------------------------------------------
+
+describe('user-level skill selection', () => {
+  test('a declined skill is held back; the rest are offered in list order', () => {
+    const [first, second, ...rest] = USER_LEVEL_SKILLS;
+    const { offered, declined } = partitionDeclinedSkills(USER_LEVEL_SKILLS, {
+      [`community:global:${first.skill}`]: 'declined',
+      [`community:global:${second.skill}`]: 'installed',
+    });
+    expect(declined).toEqual([first]);
+    expect(offered).toEqual([second, ...rest]);
+  });
+
+  test('a project-level decline does not hide the user-level skill of the same slug', () => {
+    const [first] = USER_LEVEL_SKILLS;
+    const { declined } = partitionDeclinedSkills(USER_LEVEL_SKILLS, { [`community:project:${first.skill}`]: 'declined' });
+    expect(declined).toEqual([]);
+  });
+
+  test('retired skills stay out of the user-level list', () => {
+    const slugs = USER_LEVEL_SKILLS.map(item => item.skill);
+    expect(slugs).not.toContain('bun');
+    expect(slugs).not.toContain('brainstorming');
+  });
+});
 
 describe('community skill version reporting', () => {
   const SHA = 'a'.repeat(40);

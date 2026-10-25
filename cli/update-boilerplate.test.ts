@@ -1,13 +1,28 @@
+import type { ReportSink } from './lib/updater-types.ts';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+
 import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, test } from 'bun:test';
 
+import { parse as parseYaml } from 'yaml';
+import { isMaintainerCopy, isSchemaOwner } from './lib/agents-schema.ts';
 import { unusedHarnessPaths } from './lib/harness-selection.ts';
+import { loadBoardConfig } from './lib/sprint-source/index.ts';
 import { cleanupDeprecated, componentOwnedPaths, isRepoOnlyPath, validateComponentRegistry } from './lib/updater-core.ts';
 import { RETIRED_SECTION_FILES } from './lib/updater-instructions.ts';
-import { COMPONENTS, DEPRECATED_FILES, GATE_SCRIPTS, gatesSummaryLine, parseArgs, resolveProtectedWatchlist, RETIRED_COMMAND_WRAPPERS, RETIRED_SKILL_FILES, runGate, summarizeGates, worktreeRefusal } from './update-boilerplate.ts';
+import { backfillProjectYamlFromSchema, COMPONENTS, DEPRECATED_FILES, extractIndentedYamlBlock, GATE_SCRIPTS, gatesSummaryLine, parseArgs, resolveProtectedWatchlist, RETIRED_COMMAND_WRAPPERS, RETIRED_SKILL_FILES, runGate, summarizeGates, sweepStaleCloneDirs, TEMP_DIR, worktreeRefusal } from './update-boilerplate.ts';
+
+/**
+ * The boilerplate's own checkout: the package name AND the maintainer sentinel
+ * (the same test `contractsEnforced` makes). Cases that read a bootstrap-only
+ * file as upstream's copy skip downstream, where that file is the project's.
+ */
+const yamlPath = join(import.meta.dir, '..', '.agents', 'project.yaml');
+const MAINTAINER_CHECKOUT = isSchemaOwner(readFileSync(join(import.meta.dir, '..', 'package.json'), 'utf8'))
+  && existsSync(yamlPath) && isMaintainerCopy(readFileSync(yamlPath, 'utf8'));
 
 const temporaryRoots: string[] = [];
 
@@ -58,7 +73,10 @@ describe('component registry', () => {
 
   test('.playwright/cli.config.json ships once (bootstrap-only): a project keeps its tuning, the legacy profile is a parity row', () => {
     expect(COMPONENTS.find(c => c.name === 'playwright-cli-config')).toMatchObject({ type: 'file-list', paths: ['.playwright'], files: ['cli.config.json'], bootstrapOnly: true });
-    // Upstream's own copy is the shape the parity row asks for.
+  });
+
+  // Downstream, the file on disk is the project's own tuning, not upstream's copy.
+  test.skipIf(!MAINTAINER_CHECKOUT)('upstream\'s own .playwright/cli.config.json is the shape the parity row asks for', () => {
     const shipped = JSON.parse(readFileSync(join(import.meta.dir, '..', '.playwright', 'cli.config.json'), 'utf8')) as { browser: Record<string, unknown> };
     expect(shipped.browser.isolated).not.toBe(false);
     expect(shipped.browser).not.toHaveProperty('userDataDir');
@@ -133,6 +151,28 @@ describe('component registry', () => {
     expect(existsSync(join(kept, '.agents/skills/adapt-framework/SKILL.md'))).toBe(false);
   });
 
+  test('the framework helpers under tests/utils sync as a file-list; the project\'s own helpers and the watched ones are never walked', () => {
+    const testsUtils = COMPONENTS.find(c => c.name === 'tests-utils');
+    expect(testsUtils).toMatchObject({ type: 'file-list', paths: ['tests/utils'] });
+    expect(testsUtils?.bootstrapOnly).toBeUndefined();
+    const owned = COMPONENTS.flatMap(c => componentOwnedPaths(c));
+    for (const helper of ['testOutcomes.ts', 'knownDefect.ts', 'xrayResults.ts', 'testOutcomes.test.ts', 'xrayResults.test.ts']) {
+      expect(testsUtils?.files).toContain(helper);
+      // Every listed file exists upstream: a stale name would deliver nothing, silently.
+      expect(existsSync(join(import.meta.dir, '..', 'tests/utils', helper))).toBe(true);
+    }
+    for (const kept of ['tests/utils/decorators.ts', 'tests/utils/jiraSync.ts', 'tests/utils/allure.ts', 'tests/KataReporter.ts', 'tests/e2e/login.test.ts']) {
+      expect(isRepoOnlyPath(kept, owned)).toBe(false);
+    }
+  });
+
+  test('no component delivers the boilerplate\'s own ADRs: the scaffold prunes them and no sync brings them back', () => {
+    const owned = COMPONENTS.flatMap(c => componentOwnedPaths(c));
+    for (const adr of ['.context/ADR/ADR-0001-example.md', '.context/ADR/README.md', '.context/ADR/ADR-NNNN-template.md']) {
+      expect(isRepoOnlyPath(adr, owned)).toBe(false);
+    }
+  });
+
   test('docs syncs only its shipped half; every other path under docs/ is project-owned', () => {
     const docs = COMPONENTS.find(c => c.name === 'docs');
     expect(docs?.paths).not.toContain('docs');
@@ -157,7 +197,7 @@ describe('protected watchlist', () => {
     expect(warnings).toEqual([]);
     const byPath = Object.fromEntries(watchlist.map(e => [e.path, e]));
     expect(byPath['AGENTS.md']).toMatchObject({ markerPath: '.template/claude-md.upstream.sha', source: 'upstream' });
-    for (const p of ['allurerc.mjs', 'playwright.config.ts', 'config/variables.ts', 'tests/components/TestContext.ts', 'tests/components/api/ApiBase.ts', 'scripts/api-login.ts', '.github/workflows/regression.yml', 'tsconfig.json', 'eslint.config.js']) {
+    for (const p of ['allurerc.mjs', 'playwright.config.ts', 'config/variables.ts', 'tests/components/TestContext.ts', 'tests/components/api/ApiBase.ts', 'scripts/api-login.ts', '.github/workflows/regression.yml', 'tsconfig.json', 'eslint.config.js', 'tests/KataReporter.ts', 'tests/utils/decorators.ts', 'tests/utils/jiraSync.ts']) {
       expect(byPath[p]).toBeDefined();
     }
     for (const p of ['.mcp.json', 'opencode.jsonc', '.codex/config.toml', '.claude/settings.json']) {
@@ -234,10 +274,44 @@ describe('worktree refusal', () => {
 
     expect(worktreeRefusal(primary)).toBeNull();
     const refusal = worktreeRefusal(wt);
-    expect(refusal).toContain('bun run up');
+    expect(refusal).toContain('bun sync');
     expect(refusal).toContain('primary');
     // Not a git checkout at all: not this guard's business.
     expect(worktreeRefusal(temporaryRoot())).toBeNull();
+  });
+});
+
+describe('upstream clone directory', () => {
+  // Two `bun sync` runs on one machine (two worktrees, two test processes) used
+  // to share one fixed directory, and each clone wiped the other's: CLONE_FAILED.
+  test('two concurrent processes clone into two different directories under the temp dir', async () => {
+    const code = `import { TEMP_DIR } from ${JSON.stringify(join(import.meta.dir, 'update-boilerplate.ts'))}; console.log(TEMP_DIR);`;
+    const probe = async (): Promise<string> => (await new Response(Bun.spawn([process.execPath, '-e', code], { stdout: 'pipe', stderr: 'ignore' }).stdout).text()).trim();
+    const [first, second] = await Promise.all([probe(), probe()]);
+    expect(first).not.toBe('');
+    expect(first).not.toBe(second);
+    for (const dir of [first, second]) { expect(dirname(dir)).toBe(tmpdir()); }
+  });
+
+  test('this process owns a directory named after its pid', () => {
+    expect(TEMP_DIR).toBe(join(tmpdir(), `kata-boilerplate-update-${process.pid}`));
+  });
+
+  test('the startup sweep removes the clone dir of a dead run and keeps the live ones', () => {
+    const tmp = temporaryRoot();
+    // A pid that existed and is gone: a run killed with SIGKILL leaves exactly this.
+    const dead = spawnSync('true').pid;
+    const names = [`kata-boilerplate-update-${dead}`, `kata-boilerplate-update-${process.ppid}`, `kata-boilerplate-update-${process.pid}`, 'kata-boilerplate-update', 'kata-boilerplate-update-x1'];
+    for (const name of names) { mkdirSync(join(tmp, name, '.git'), { recursive: true }); }
+
+    expect(sweepStaleCloneDirs(tmp)).toEqual([`kata-boilerplate-update-${dead}`]);
+    expect(existsSync(join(tmp, `kata-boilerplate-update-${dead}`))).toBe(false);
+    // A live run (the parent here), this run, and anything not shaped `<prefix><digits>` stay.
+    for (const name of names.slice(1)) { expect(existsSync(join(tmp, name))).toBe(true); }
+  });
+
+  test('the sweep never throws on a temp dir it cannot read', () => {
+    expect(sweepStaleCloneDirs(join(temporaryRoot(), 'missing'))).toEqual([]);
   });
 });
 
@@ -307,5 +381,69 @@ describe('post-apply gates', () => {
     expect(gatesSummaryLine([
       { script: 'types:check', status: 'pass', exitCode: 0, seconds: 3, errorCount: 0, firstErrors: [], failingApplied: [], output: '' },
     ], 'no-changes')).toBe('types:check OK');
+  });
+});
+
+describe('project.yaml back-fill under --auto', () => {
+  const SCHEMA = readFileSync(join(import.meta.dir, '..', '.agents', 'project.schema.yaml'), 'utf8');
+
+  function autoSink(lines: string[]): ReportSink {
+    return {
+      step: (m: string) => lines.push(m),
+      warn: (m: string) => lines.push(m),
+      error: (m: string) => lines.push(m),
+      confirm: async () => { throw new Error('--auto never prompts'); },
+    } as unknown as ReportSink;
+  }
+
+  function fixture(projectYaml: string): { root: string, upstream: string } {
+    const root = temporaryRoot();
+    const upstream = temporaryRoot();
+    mkdirSync(join(root, '.agents'), { recursive: true });
+    mkdirSync(join(upstream, '.agents'), { recursive: true });
+    writeFileSync(join(root, '.agents/project.yaml'), projectYaml);
+    writeFileSync(join(upstream, '.agents/project.schema.yaml'), SCHEMA);
+    writeFileSync(join(upstream, 'package.json'), JSON.stringify({ version: '9.9.9' }));
+    return { root, upstream };
+  }
+
+  test('a whole missing block is inserted from the schema with blank values; a block the project has is never edited', async () => {
+    const boardBlock = extractIndentedYamlBlock(SCHEMA, 'board', '');
+    expect(boardBlock).not.toBeNull();
+    // The project lacks the whole `board:` block AND one leaf of `testing:`.
+    const projectYaml = SCHEMA.replace(`${boardBlock}\n`, '').replace(/^ {2}default_env:.*\n/m, '');
+    expect(projectYaml).not.toContain('\nboard:');
+    const { root, upstream } = fixture(projectYaml);
+    const lines: string[] = [];
+    await backfillProjectYamlFromSchema(upstream, autoSink(lines), true, root);
+
+    const after = readFileSync(join(root, '.agents/project.yaml'), 'utf8');
+    const parsed = parseYaml(after) as { board?: { source?: string }, testing?: Record<string, unknown> };
+    expect(parsed.board?.source).toBe('auto');
+    expect(after).toContain('# NEW in 9.9.9');
+    // The existing block keeps its shape: the missing leaf is only reported.
+    expect(parsed.testing).not.toHaveProperty('default_env');
+    expect(lines.join('\n')).toContain('testing.default_env');
+    // Insert-only: every line the project had is still there, in order, and the
+    // only new lines are the block and its markers.
+    const nonBlank = (text: string): string[] => text.split('\n').filter(l => l.trim() !== '');
+    const kept = nonBlank(after).filter(l => !l.includes('NEW in 9.9.9'));
+    const blockLines = new Set(nonBlank(boardBlock!));
+    expect(kept.filter(l => !blockLines.has(l))).toEqual(nonBlank(projectYaml).filter(l => !blockLines.has(l)));
+    expect(kept.length).toBe(nonBlank(projectYaml).length + nonBlank(boardBlock!).length);
+    // The inserted template block is how the board ships unconfigured: one INFO line, exit 0.
+    expect(loadBoardConfig(root).state).toBe('unconfigured');
+  });
+
+  test('a block silenced through updater.schema_exempt is not inserted, and nothing missing means nothing written', async () => {
+    const boardBlock = extractIndentedYamlBlock(SCHEMA, 'board', '')!;
+    const silenced = fixture(SCHEMA.replace(`${boardBlock}\n`, '').replace(/^updater:\n/m, 'updater:\n  schema_exempt: [board]\n'));
+    const before = readFileSync(join(silenced.root, '.agents/project.yaml'), 'utf8');
+    await backfillProjectYamlFromSchema(silenced.upstream, autoSink([]), true, silenced.root);
+    expect(readFileSync(join(silenced.root, '.agents/project.yaml'), 'utf8')).toBe(before);
+
+    const complete = fixture(SCHEMA);
+    await backfillProjectYamlFromSchema(complete.upstream, autoSink([]), true, complete.root);
+    expect(readFileSync(join(complete.root, '.agents/project.yaml'), 'utf8')).toBe(SCHEMA);
   });
 });

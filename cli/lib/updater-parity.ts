@@ -1,5 +1,5 @@
 /**
- * @fileoverview Parity report after `bun run up`: ONE table of what still
+ * @fileoverview Parity report after `bun sync`: ONE table of what still
  * differs from upstream per surface, with concrete evidence, and ONE prompt the
  * user hands to their AI so every row gets a decision (keep project | take
  * upstream | merge) BEFORE anything is edited.
@@ -45,7 +45,7 @@ import { parse as parseYaml } from 'yaml';
 
 import { stripJsonComments } from './agent-compatibility-contracts.ts';
 import { compatibilityErrorGroup, HARNESS_COMMAND_DIRS, RETIRED_COMMAND_ALIAS_OVERLAY, SHADOWING_COMMANDS_BACKUP_DIR } from './agent-compatibility.ts';
-import { hasDeepWalk, walkGovernedFile } from './agents-schema.ts';
+import { hasDeepWalk, SCHEMA_SOURCE, schemaExemptions, walkGovernedFile } from './agents-schema.ts';
 import { contextMapAdvice, contextMapStatuses, mapRelPath } from './context-maps.ts';
 import { HARNESS_LEVEL_MCPS } from './harness-level-mcps.ts';
 import { declaredHarnesses } from './harness-selection.ts';
@@ -194,6 +194,12 @@ export interface ParityInput {
   localEdits?: LocalEditInput[]
   /** `package.json` keys kept at the project's value while upstream differs. */
   packageJsonKept?: PackageJsonKeptInput[]
+  /** `package.json` keys appended this run (planned, on a dry-run): a script whose target file is absent becomes a row. */
+  packageJsonAppended?: { file: string, section: string, key: string, value: string }[]
+  /** Test siblings of kept protected files the run held back (`testSiblingsToHoldBack`). */
+  testSiblingsHeldBack?: { path: string, protectedPath: string }[]
+  /** The run applied nothing: a target the upstream clone holds is one the real run delivers. */
+  dryRun?: boolean
   /** Quality gates run after the apply; only failed / timed-out ones become rows. */
   gates?: GateResult[]
   /** Project commands the compat hook moved to `SHADOWING_COMMANDS_BACKUP_DIR` this run. */
@@ -204,6 +210,8 @@ export interface ParityInput {
   contextMaps?: MapStatus[]
   /** Shared-profile keys in the project's playwright-cli config; defaults to reading `root` (`legacyPlaywrightProfileKeys`). */
   playwrightProfileKeys?: string[]
+  /** Disk-profile lines in the project's skills and instructions; defaults to scanning `root` (`browserProfileDrift`). */
+  browserProfileSites?: BrowserProfileSite[]
   /** Prerequisite declarations, keyed by repo-relative path. Defaults to `PATH_PREREQUISITES`. */
   prerequisites?: Record<string, PathPrerequisite>
   /** Which shipped skill reads which top-level config block. Defaults to `CONFIG_BLOCK_READERS`. */
@@ -349,6 +357,10 @@ export const PATH_PREREQUISITES: Record<string, PathPrerequisite> = {
     requiredBy: 'the generator and the rule table behind `.agents/project.schema.yaml`, which ships in the same release; a kept older copy compares a project against a template whose key set and safety reversals it does not implement, and reports a clean bill of health while doing it',
     gate: 'bun test cli/lib/agents-schema.test.ts',
   },
+  '.github/workflows/regression.yml': {
+    requiredBy: 'the CI write-back to Xray: the synced `bun xray import` guard refuses every JUnit testcase without a `test_key`, so a kept workflow that still runs `bun xray import junit` stops writing results on every run with the write-back on, while CI stays green (the step is `continue-on-error`). Port upstream\'s XrayImport job: upload each test job\'s `reports/atc_results.json` and `reports/test-outcomes.json` as `*-atc-results` artifacts, build the body with `bun run xray:payload`, import it as Xray JSON, and make sure every `@atc` id is an existing Test key before the first run',
+    gate: 'grep -q \'xray:payload\' .github/workflows/regression.yml',
+  },
   'scripts/api-login.ts': {
     requiredBy: 'the 10-line entry that wires `scripts/lib/api-login-core.ts` (synced generic CLI) to `scripts/api-login.project.ts` (the project auth adapter); a kept pre-split copy never imports either, so agentic CLI improvements land inert until the project ports its own auth flow into the adapter and takes upstream\'s entry',
     gate: 'bun test scripts/api-login.test.ts',
@@ -396,6 +408,10 @@ export const CONFIG_BLOCK_READERS: Record<string, Record<string, ConfigBlockRead
       skill: '/orca-orchestration',
       requiredBy: 'the fleet defaults (worktree provisioning, run mailbox, claims) the skill reads before launching a single worker',
     },
+    board: {
+      skill: '/sprint-conductor',
+      requiredBy: 'the sprint source, its ticket query and the status buckets every Sprint Board snapshot, the Merge Line and the evidence links are built from; without the block the board has no sprint to show and `bun run board:check` has nothing to validate',
+    },
   },
 };
 
@@ -410,16 +426,20 @@ export function missingConfigBlocks(
   upstream: string,
   readers: Record<string, Record<string, ConfigBlockReader>> = CONFIG_BLOCK_READERS,
 ): { block: string, reader: ConfigBlockReader }[] {
-  const declared = readers[filePath.replace(/\\/g, '/')];
+  const normalized = filePath.replace(/\\/g, '/');
+  const declared = readers[normalized];
   if (declared === undefined) { return []; }
   const mine = configEntries(project, filePath);
   const theirs = configEntries(upstream, filePath);
   if (!mine || !theirs) { return []; }
+  // A block the project removed on purpose (`updater.schema_exempt`) is its
+  // decision, not a half-delivered release: the back-fill skips it, so must this.
+  const exempt = new Set(normalized === SCHEMA_SOURCE ? schemaExemptions(project) : []);
   return Object.entries(declared)
     // Top-level only: `configEntries` also carries `top.child` rows, and a
     // missing CHILD of a block the project has is a value-shaped difference,
     // not the absent-block failure this escalates.
-    .filter(([block]) => theirs.has(block) && !mine.has(block))
+    .filter(([block]) => theirs.has(block) && !mine.has(block) && !exempt.has(block))
     .map(([block, reader]) => ({ block, reader }));
 }
 
@@ -449,6 +469,53 @@ export function prerequisiteFor(
  */
 export function prerequisiteClause(prerequisite: PathPrerequisite): string {
   return `PREREQUISITE for this release: ${prerequisite.requiredBy}; keeping the project copy as-is fails \`${prerequisite.gate}\` (run it: it is the arbiter, and it passes if your copy already carries the hunk)`;
+}
+
+/** Ceiling for one arbiter run; a gate that hangs counts as failing, so the row stays. */
+const ARBITER_TIMEOUT_MS = 120_000;
+
+/**
+ * Run a prerequisite's gate in `cwd` and report whether it passes (exit 0).
+ * The gates are the fixed commands of `PATH_PREREQUISITES`, never user input.
+ * Fail-closed: a gate that cannot start, times out or exits non-zero is a
+ * failing arbiter, so the BLOCKING row is kept rather than dropped.
+ *
+ * Why it runs every sync: the upstream-sha marker records "upstream seen", not
+ * "project resolved". Live finding: run 1 printed the BLOCKING row for a kept
+ * `.github/workflows/regression.yml` and stamped its marker; run 2, with the
+ * same failing `grep -q 'xray:payload'`, printed no row at all, and the only
+ * pointer to a release prerequisite was gone (see `detectProtectedDrift`).
+ */
+export function prerequisiteArbiterPasses(prerequisite: PathPrerequisite, cwd: string): boolean {
+  const res = spawnSync(prerequisite.gate, { cwd, shell: true, stdio: 'ignore', timeout: ARBITER_TIMEOUT_MS });
+  return res.error === undefined && res.status === 0;
+}
+
+/** Runners whose next non-flag argument is a file they execute. */
+const SCRIPT_RUNNERS = new Set(['bun', 'node', 'tsx']);
+
+/**
+ * The repo-relative source files a `package.json` script executes: the first
+ * non-flag argument of each `bun` / `node` / `tsx` in the command (after an
+ * optional `run`), when it names a `.ts` / `.js` / `.mjs` / `.cjs` file. A
+ * script name (`bun run lint`), a built-in (`bun test`) and a package binary
+ * (`bunx tsc`) are not files. `scripts/launch.ts --warn bun tests/x.ts` names
+ * both files.
+ */
+export function scriptFileTargets(command: string): string[] {
+  const words = command.split(/\s+|&&|\|\||;/).filter(w => w !== '');
+  const targets: string[] = [];
+  for (let i = 0; i < words.length; i += 1) {
+    if (!SCRIPT_RUNNERS.has(words[i])) { continue; }
+    let j = i + 1;
+    while (j < words.length && words[j].startsWith('-')) { j += 1; }
+    if (words[j] === 'run') { j += 1; }
+    const candidate = words[j];
+    if (candidate !== undefined && /^[\w./@-]+\.(?:ts|js|mjs|cjs)$/.test(candidate) && !candidate.startsWith('-')) {
+      targets.push(candidate.replace(/^\.\//, ''));
+    }
+  }
+  return [...new Set(targets)];
 }
 
 /** Marker for a dry-run row the apply step is expected to resolve by itself. */
@@ -1200,6 +1267,112 @@ export function legacyPlaywrightProfileKeys(root: string): string[] {
   return keys;
 }
 
+/** One line of a project skill, command or instruction that opens a browser on a disk profile. */
+export interface BrowserProfileSite {
+  /** Repo-relative path, `/` separators. */
+  file: string
+  /** 1-indexed. */
+  line: number
+  /** What the line does: `--persistent`, or the `--profile=<value>` it passes. */
+  flag: string
+  reason: 'persistent' | 'relative profile' | 'profile inside the repo'
+}
+
+/** Where a project keeps the text its agents follow. `.claude/skills` is usually the alias of `.agents/skills` (deduplicated by real path). */
+export const BROWSER_PROFILE_SCAN_ROOTS: readonly string[] = ['.agents/skills', '.claude/skills', '.claude/commands', '.agents/instructions'];
+export const BROWSER_PROFILE_SCAN_FILES: readonly string[] = ['AGENTS.md', 'CLAUDE.md'];
+
+/**
+ * The vendor `playwright-cli` skill documents its own `--persistent` flag; that
+ * is the vendor describing the tool, not the project instructing an agent.
+ * A relative `--profile` in it is still reported (the vendor's examples are absolute).
+ */
+const VENDOR_FLAG_DOCS = /^\.(?:agents|claude)\/skills\/playwright-cli\//;
+const SCANNED_EXTENSIONS = /\.(?:md|mdx|txt|sh|ts|js|mjs|cjs|json|ya?ml)$/i;
+const MAX_SCANNED_BYTES = 1_000_000;
+
+/** `--profile=<v>` / `--profile <v>`: a quoted value (spaces allowed) or a bare one. */
+const PROFILE_FLAG = /--profile(?:=|[ \t]+)(?:"([^"]+)"|'([^']+)'|([^\s"'`)]+))/g;
+/** A negation just before `--persistent` ("never `--persistent`", "nunca --persistent"). */
+const NEGATED = /\b(?:never|nunca|not|no|don't|do not|avoid|evita|without|sin)\b[^.;|]{0,24}$/i;
+
+/** Classify one `--profile` value, or null when it is fine (outside the repo, or a placeholder). */
+function profileValueProblem(value: string, line: string, root: string): BrowserProfileSite['reason'] | null {
+  // Values that name the repo itself, written as a variable or a placeholder.
+  if (/^(?:<repo(?:-root)?>|\$\{?(?:PWD|CLAUDE_PROJECT_DIR)\}?|\$\(pwd\))(?:[/\\]|$)/i.test(value)) { return 'profile inside the repo'; }
+  // Other placeholders and variables (`<abs root>/<service>`, `$HOME/...`, `%USERPROFILE%\...`): outside by intent.
+  if (/^[<{$%~]/.test(value)) { return null; }
+  if (/^(?:[a-z]:)?[/\\]/i.test(value)) {
+    const abs = path.resolve(value);
+    const rootAbs = path.resolve(root);
+    return abs === rootAbs || abs.startsWith(rootAbs + path.sep) ? 'profile inside the repo' : null;
+  }
+  // Relative. `--profile <name>` belongs to other CLIs too (`api:login`, resend,
+  // docker compose): a bare name only counts on a browser line, a path anywhere.
+  const pathLike = /[/\\]/.test(value) || value.startsWith('.');
+  if (/api[:-]login/.test(line)) { return null; }
+  if (pathLike || /playwright-cli|\bopen\b/.test(line)) { return 'relative profile'; }
+  return null;
+}
+
+/** The disk-profile sites in one file's text. Exported for tests. */
+export function browserProfileSitesIn(file: string, text: string, root: string): BrowserProfileSite[] {
+  const sites: BrowserProfileSite[] = [];
+  const vendor = VENDOR_FLAG_DOCS.test(file);
+  text.split(/\r?\n/).forEach((line, i) => {
+    // `open --help` output quoted in a doc lists the flag; it does not use it.
+    const persistent = !vendor && [...line.matchAll(/--persistent\b/g)].some((m) => {
+      const before = line.slice(0, m.index);
+      return /playwright-cli|\bopen\b/.test(before) && !/--help\b/.test(before) && !NEGATED.test(before);
+    });
+    if (persistent) { sites.push({ file, line: i + 1, flag: '--persistent', reason: 'persistent' }); }
+    for (const m of line.matchAll(PROFILE_FLAG)) {
+      const value = m[1] ?? m[2] ?? m[3];
+      const reason = profileValueProblem(value, line, root);
+      if (reason) { sites.push({ file, line: i + 1, flag: `--profile=${value}`, reason }); }
+    }
+  });
+  return sites;
+}
+
+/**
+ * Lines of the project's own skills, commands and instructions that open a
+ * browser on a disk profile the doctrine retired: `--persistent`, or a
+ * `--profile` that is relative or inside the repo (browser-sessions.md §2).
+ * Read-only; unreadable or oversized files are skipped.
+ */
+export function browserProfileDrift(root: string): BrowserProfileSite[] {
+  const seen = new Set<string>();
+  const sites: BrowserProfileSite[] = [];
+  const visit = (abs: string): void => {
+    let real: string;
+    try { real = fs.realpathSync(abs); }
+    catch { return; }
+    if (seen.has(real)) { return; }
+    seen.add(real);
+    let stat: fs.Stats;
+    try { stat = fs.statSync(real); }
+    catch { return; }
+    if (stat.isDirectory()) {
+      const name = path.basename(abs);
+      if (name === 'node_modules' || name === '.git' || name.endsWith('-workspace')) { return; }
+      let entries: string[];
+      try { entries = fs.readdirSync(abs).sort(); }
+      catch { return; }
+      for (const entry of entries) { visit(path.join(abs, entry)); }
+      return;
+    }
+    if (!stat.isFile() || stat.size > MAX_SCANNED_BYTES || !SCANNED_EXTENSIONS.test(abs)) { return; }
+    let text: string;
+    try { text = fs.readFileSync(real, 'utf8'); }
+    catch { return; }
+    if (!text.includes('--p')) { return; }
+    sites.push(...browserProfileSitesIn(path.relative(root, abs).split(path.sep).join('/'), text, root));
+  };
+  for (const rel of [...BROWSER_PROFILE_SCAN_FILES, ...BROWSER_PROFILE_SCAN_ROOTS]) { visit(path.join(root, rel)); }
+  return sites;
+}
+
 // ============================================================================
 // COLLECTOR
 // ============================================================================
@@ -1592,6 +1765,23 @@ export function collectParityFindings(input: ParityInput): ParityFinding[] {
     });
   }
 
+  // Same family, in the project's own words: a skill, command or instruction
+  // that still opens a browser on a disk profile (`--persistent`, a relative or
+  // in-repo `--profile`) leaves a full Chrome profile behind per ticket. One
+  // row per file, every line named; the file is never rewritten.
+  const profileSites = input.browserProfileSites ?? browserProfileDrift(input.root);
+  const sitesByFile = new Map<string, BrowserProfileSite[]>();
+  for (const site of profileSites) { sitesByFile.set(site.file, [...(sitesByFile.get(site.file) ?? []), site]); }
+  for (const [file, sites] of sitesByFile) {
+    findings.push({
+      surface: /^\.(?:agents|claude)\/(?:skills|commands)\//.test(file) ? 'skills' : 'instructions',
+      path: file,
+      evidence: `informational: ${sites.map(s => `line ${s.line} ${s.flag} (${s.reason})`).join('; ')}: each such open leaves a full Chrome profile on disk that nothing removes. Tickets and workers run in memory (\`-s=<KEY> open\`, then \`state-load\` of the role's state file); only an owner account keeps a profile, at an absolute path under ~/.agentic-qa/playwright-profiles/<service>. Left untouched: edit the lines when convenient. Doctrine: .agents/skills/agentic-qa-core/references/browser-sessions.md §2, §8`,
+      suggested: 'keep project',
+      blocking: false,
+    });
+  }
+
   if (input.pbiCache && input.pbiCache.tracked > 0) {
     const testSpecs = input.pbiCache.testSpecs ?? 0;
     const specsClause = testSpecs > 0
@@ -1719,6 +1909,42 @@ export function collectParityFindings(input: ParityInput): ParityFinding[] {
     });
   }
 
+  // 8b. A script appended this run whose target file is not in the project: it
+  //     fails with "Module not found" the first time anyone runs it. Checked
+  //     here, after every component and hook has written its files, because a
+  //     target can arrive through a component synced after package.json.
+  for (const appended of input.packageJsonAppended ?? []) {
+    if (appended.section !== 'scripts') { continue; }
+    const missing = scriptFileTargets(appended.value).filter((target) => {
+      if (fs.existsSync(path.join(input.root, target))) { return false; }
+      // A dry-run applied nothing: a target upstream ships is one the real run delivers.
+      return !(input.dryRun === true && fs.existsSync(path.join(input.upstreamDir, target)));
+    });
+    if (missing.length === 0) { continue; }
+    findings.push({
+      surface: 'package',
+      path: appended.file,
+      evidence: `${appended.section}.${appended.key}: appended this run, but its target ${missing.map(t => `\`${t}\``).join(', ')} is not in this project, so \`bun run ${appended.key}\` fails with "Module not found". The file belongs to a path this sync did not deliver (a protected path, a harness left out, or a narrowed \`bun sync <component>\`): deliver it, or remove the script`,
+      suggested: 'decide',
+      blocking: true,
+      side: 'kept',
+      detail: `${appended.section}.${appended.key}:\n  ${appended.value}`,
+    });
+  }
+
+  // 8c. A protected file's test held back with it: delivering upstream's test
+  //     next to a kept copy that differs fails `bun test` on code nobody changed.
+  for (const held of input.testSiblingsHeldBack ?? []) {
+    findings.push({
+      surface: 'components',
+      path: held.path,
+      evidence: `informational: held back with its protected file \`${held.protectedPath}\`: your copy differs from upstream's, and upstream's test asserts upstream's copy. Take both together when you merge \`${held.protectedPath}\` (\`bun test ${held.path}\` is the check)`,
+      suggested: 'keep project',
+      blocking: false,
+      side: 'kept',
+    });
+  }
+
   // 9. Quality gates that failed after the apply. Informational (never
   //    blocking): a type or lint break the diff-based rows cannot see.
   for (const gate of input.gates ?? []) {
@@ -1805,7 +2031,7 @@ export function buildParityPrompt(findings: ParityFinding[], meta: ParityMeta): 
   const isGitHubHandle = /^[\w.-]+\/[\w.-]+$/.test(meta.templateRepo);
   const copies = isGitHubHandle ? `; upstream copies: https://raw.githubusercontent.com/${meta.templateRepo}/main/<path>` : '';
   return [
-    `Parity review after \`bun run up${dryRun ? ' --dry-run' : ''}\` (upstream ${meta.templateRepo}@${upstream}, project lock ${lock}).`,
+    `Parity review after \`bun sync${dryRun ? ' --dry-run' : ''}\` (upstream ${meta.templateRepo}@${upstream}, project lock ${lock}).`,
     'Present the table below to the user, one row per finding, and WAIT for a decision per row',
     '(keep project | take upstream | merge) BEFORE editing anything. Then apply only the chosen rows,',
     'run tests -> types -> lint, and report.',
@@ -1839,7 +2065,7 @@ export function buildParityFileBody(findings: ParityFinding[], meta: ParityMeta)
   return [
     '# Parity plan — AI review prompt',
     '',
-    `> **AUTO-GENERATED, SINGLE-USE.** Written by \`bun run up\` on ${today}.`,
+    `> **AUTO-GENERATED, SINGLE-USE.** Written by \`bun sync\` on ${today}.`,
     '> Paste the prompt below into your AI session, then delete this file.',
     '> It is regenerated (overwritten) on every run that ends with findings.',
     '',

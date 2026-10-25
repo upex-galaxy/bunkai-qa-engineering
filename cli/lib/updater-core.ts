@@ -56,6 +56,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { CONTEXT_MAP_SKILLS } from './context-maps';
+import { testSiblingsToHoldBack } from './updater-drift';
 import { applyIgnoreAppend, computeBlobSha, detectIgnoreDelta } from './updater-ignore';
 import { applyPackageJsonAppend, applyPackageJsonOverride, detectPackageJsonDelta } from './updater-package';
 import { ComponentOverlapError, CorruptStateError } from './updater-types';
@@ -1065,6 +1066,26 @@ export const UPDATER_OWNED_PATHS_ENV = 'UPEX_UPDATER_OWNED_PATHS';
 export const UPDATER_SELF_UPDATED_ENV = 'UPEX_UPDATER_SELF_UPDATED';
 
 /**
+ * Env var through which the parent tells its self-update re-exec child which
+ * confirmations the person already gave (comma-separated keys), so the child
+ * does not ask them again: it re-runs `runUpdate` from the top.
+ */
+export const UPDATER_CONFIRMED_ENV = 'UPEX_UPDATER_CONFIRMED';
+
+/** True when the parent process of a re-exec already got a yes for `key`. */
+export function confirmedByParent(key: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.UPEX_UPDATER_REEXEC !== '1') { return false; }
+  return (env[UPDATER_CONFIRMED_ENV] ?? '').split(',').includes(key);
+}
+
+/** Records a yes in this process's env, which a re-exec child inherits. */
+function rememberConfirmed(key: string): void {
+  const keys = new Set((process.env[UPDATER_CONFIRMED_ENV] ?? '').split(',').filter(Boolean));
+  keys.add(key);
+  process.env[UPDATER_CONFIRMED_ENV] = [...keys].join(',');
+}
+
+/**
  * The self-update component when the parent process refreshed it to exactly
  * `newHeadSha` before re-exec'ing us: it has no delta entry left to advance
  * its cursor through, yet it IS at upstream HEAD, so the lock must say so.
@@ -1267,8 +1288,9 @@ export function dirtyTreeExemptions(
  *
  * The dirty-tree guard blocks ONLY on user work inside this surface: those
  * files would be overwritten and their pre-write backup lives in `.backups/`
- * (gitignored). Uncommitted work anywhere else (`tests/`, project code, a
- * protected file) is listed and never blocks: the sync does not write there.
+ * (gitignored). Uncommitted work anywhere else (`tests/` outside the
+ * `tests-utils` helpers, project code, a protected file) is listed and never
+ * blocks: the sync does not write there.
  */
 export function isWithinWriteSurface(
   cfg: Pick<UpdaterConfig, 'components' | 'ignoreFiles' | 'packageJsonSpecs' | 'deprecatedFiles' | 'excludePaths' | 'repoOnlyPaths' | 'bootstrapOnlyPaths'>,
@@ -1867,6 +1889,34 @@ export function computeComponentAdvancement(
   };
 }
 
+/**
+ * Components whose lock cursor is behind `newHeadSha` but that have nothing to
+ * deliver at it: no entry of theirs in `visible` (the run's user-facing delta,
+ * `unchanged` / `binary-skip` already filtered out). The content reconcile walks
+ * the full upstream tree, so "no visible entry" means the project already holds
+ * this head's copy; the cursor moves without an entry, like a settled bootstrap.
+ *
+ * Live finding: a sync that advanced 13 components left the other 9 (no delta)
+ * at the old cursor, so the top-level `templateCommit`, which advances only when
+ * EVERY component sits at the new head, stayed releases behind forever. A
+ * component with a visible entry is never listed here, whatever happens to it
+ * (a deselected scope, a skipped file): its delta is still pending.
+ */
+export function componentsWithoutDelta(
+  components: readonly Component[],
+  visible: readonly DeltaEntry[],
+  perComponentCommit: Readonly<Record<string, string>>,
+  newHeadSha: string,
+): string[] {
+  const withDelta = new Set(visible.map(e => e.component));
+  return components
+    .filter((c) => {
+      const cursor = perComponentCommit[c.name];
+      return cursor !== undefined && cursor !== newHeadSha && !withDelta.has(c.name);
+    })
+    .map(c => c.name);
+}
+
 // ============================================================================
 // SYNC-STATE WRITEBACK (pure)
 // ============================================================================
@@ -1888,6 +1938,10 @@ export function suggestCommitMessage(summary: RunSummary): string {
  *     - Else → advance to newHeadSha
  *   - Components untouched this run → prior value preserved
  *   - Top-level templateCommit advances to newHeadSha ONLY if ALL components advanced
+ *
+ * A component with no delta at the new head is not "untouched": the caller
+ * lists it in `componentsAdvanced` (`componentsWithoutDelta`, passed as a
+ * settled component), or `templateCommit` could never reach the head.
  */
 export function advanceSyncState(
   prior: SyncStateV6,
@@ -2035,7 +2089,8 @@ export function syncStateWriteNeeded(existing: string | null, next: SyncStateV7)
 
 /**
  * Advance perComponentCommit SHAs for a v7 state — mirror of `advanceSyncState`
- * but preserves the v7-only `ignoreFileSync` block.
+ * (same rules, including the no-delta components the caller settles) but
+ * preserves the v7-only `ignoreFileSync` block.
  */
 export function advanceSyncStateV7(
   prior: SyncStateV7,
@@ -2141,7 +2196,7 @@ export async function shallowCloneTemplate(templateRepo: string, dest: string): 
  * path, or a `file://` URL) instead of a GitHub `OWNER/REPO` handle. Local
  * sources are cloned with plain `git clone` and need no `gh` session: this is
  * how the updater is exercised against an unpublished branch of the
- * boilerplate (`UPEX_TEMPLATE_REPO=/path/to/clone bun run up`).
+ * boilerplate (`UPEX_TEMPLATE_REPO=/path/to/clone bun sync`).
  */
 export function isLocalTemplateSource(templateRepo: string): boolean {
   return templateRepo.startsWith('file://')
@@ -2448,7 +2503,7 @@ export async function runUpdate(
   //
   // Dirtiness the updater produced itself (cross-harness migration output, the
   // CLI files a parent process refreshed before re-exec'ing us) is exempt: see
-  // `dirtyTreeExemptions`. A clean tree before `bun run up --auto` must never
+  // `dirtyTreeExemptions`. A clean tree before `bun sync --auto` must never
   // abort because of the updater's own writes.
   //
   // The previous run's own output is exempt too, even uncommitted: a sync
@@ -2498,13 +2553,17 @@ export async function runUpdate(
           sink.warn(`El sync anterior sigue sin commitear. Commit sugerido: ${lastApply.suggestedCommit}${lastApply.promptFile ? `; prompt de paridad: ${lastApply.promptFile}` : ''}.`);
         }
         if (opts.auto) {
-          sink.error('Abortado: árbol sucio en modo --auto. Re-ejecuta con --force para forzar.');
+          // Name the files and the reversible fix, never `--force` (analysis §8 #20):
+          // that flag also deletes files and takes upstream's package.json values.
+          const paths = blocking.slice(0, 5).map(p => JSON.stringify(p)).join(' ');
+          sink.error(`Abortado: ${blocking.length} ruta(s) que este updater sincroniza tienen cambios sin commitear (${shown}). Commitéalas, o guárdalas con \`git stash push -- ${paths}\`, y vuelve a correr.`);
           return abortedSummary;
         }
-        const proceed = await sink.confirm('¿Continuar de todas formas pese a los cambios sin commitear?', false);
+        const proceed = confirmedByParent('dirty-tree') || await sink.confirm('Continuar de todas formas pese a los cambios sin commitear?', false);
         if (!proceed) {
           return abortedSummary;
         }
+        rememberConfirmed('dirty-tree');
       }
     }
   }
@@ -2547,13 +2606,14 @@ export async function runUpdate(
   if (fromV5 || fromV6) {
     const sourceLabel = fromV5 ? 'v5 (legacy)' : 'v6';
     sink.warn(`Detectado esquema ${sourceLabel} en .template/boilerplate.lock.json.`);
-    const ok = opts.auto
+    const ok = opts.auto || opts.force || confirmedByParent('lock-migration')
       ? true
       : await sink.confirm(`Migrar esquema ${sourceLabel} → v7 (rastreo per-component SHA + ignore-files + flags ampliados)?`, true);
     if (!ok) {
       sink.warn('Migración cancelada. Ejecuta de nuevo cuando quieras migrar.');
       return abortedSummary;
     }
+    rememberConfirmed('lock-migration');
     const v6 = fromV5 ? migrateSyncState(rawState as SyncStateV5, cfg.cliVersion) : (rawState as SyncStateV6);
     v7State = migrateV6ToV7(v6, cfg.templateRepo, cfg.cliVersion);
   }
@@ -2694,10 +2754,11 @@ export async function runUpdate(
             try { fs.symlinkSync(localModules, cloneModules, process.platform === 'win32' ? 'junction' : 'dir'); }
             catch (err) { sink.warn(`No se pudo enlazar node_modules en el clon upstream: ${errorMessage(err)}`); }
           }
+          const handoff = await cfg.hooks?.beforeReexec?.({ kind: 'preview', from: cfg.cliVersion, to: newHeadSha.slice(0, 7) }) ?? {};
           const child = spawnSync(process.execPath, [upstreamEntry, ...process.argv.slice(2)], {
             stdio: 'inherit',
             cwd: repoRoot,
-            env: { ...process.env, UPEX_UPDATER_REEXEC: '1', [UPDATER_UPSTREAM_DIR_ENV]: templateDir },
+            env: { ...process.env, ...handoff, UPEX_UPDATER_REEXEC: '1', [UPDATER_UPSTREAM_DIR_ENV]: templateDir },
           });
           cleanupTempDir(cfg.tempDir);
           if (child.error) {
@@ -2712,8 +2773,9 @@ export async function runUpdate(
         // A2: confirm before clobbering cli/. A user who customized the updater
         // gets a chance to bail; files are backed up + restorable via --rollback,
         // but .backups/ is gitignored, so the explicit OK matters. Auto skips.
-        if (!opts.auto) {
-          const okSelf = await sink.confirm(`Se reemplazarán ${stale.length} archivo(s) de cli/ (backup en .backups/, restaurable con --rollback). ¿Continuar?`, true);
+        // `--force` never asks either (analysis §8 #21: the help says so).
+        if (!opts.auto && !opts.force) {
+          const okSelf = await sink.confirm(`Se reemplazarán ${stale.length} archivo(s) de cli/ (backup en .backups/, restaurable con --rollback). Continuar?`, true);
           if (!okSelf) {
             sink.warn('Self-update cancelado. Re-ejecuta cuando quieras actualizar el CLI.');
             cleanupTempDir(cfg.tempDir);
@@ -2722,7 +2784,7 @@ export async function runUpdate(
         }
         // Pre-write backup contract: mirror each existing local file into a
         // fresh `.backups/update-<ts>/` before overwriting. Symmetric with
-        // applyResolution's backup behavior. `bun run up --rollback` can then
+        // applyResolution's backup behavior. `bun sync --rollback` can then
         // restore the prior CLI if a self-update breaks it.
         const selfBackupDir = createBackupDir(repoRoot);
         for (const relPath of stale) {
@@ -2743,11 +2805,12 @@ export async function runUpdate(
         // just written) so its own dirty-tree guard can tell it apart from
         // uncommitted user work; see `dirtyTreeExemptions`.
         const ownedPaths = dirtyTreeExemptions(cfg, opts).concat(stale);
+        const handoff = await cfg.hooks?.beforeReexec?.({ kind: 'self-update', from: cfg.cliVersion, to: newHeadSha.slice(0, 7) }) ?? {};
         const child = spawnSync(process.execPath, [process.argv[1], ...process.argv.slice(2)], {
           stdio: 'inherit',
           // The sha we just put `cli/` at: the child advances that cursor even
           // though it finds nothing left to sync there (`selfUpdatedComponents`).
-          env: { ...process.env, UPEX_UPDATER_REEXEC: '1', [UPDATER_OWNED_PATHS_ENV]: ownedPaths.join('\n'), [UPDATER_SELF_UPDATED_ENV]: newHeadSha },
+          env: { ...process.env, ...handoff, UPEX_UPDATER_REEXEC: '1', [UPDATER_OWNED_PATHS_ENV]: ownedPaths.join('\n'), [UPDATER_SELF_UPDATED_ENV]: newHeadSha },
         });
         cleanupTempDir(cfg.tempDir);
         if (child.error) {
@@ -2888,6 +2951,23 @@ export async function runUpdate(
   // A deprecated file leaves through cleanupDeprecated (Phase 5), not the delete prompt.
   entries = dropDeprecatedDeletes(entries, cfg.deprecatedFiles);
 
+  // The test of a protected file the project kept travels with that file: held
+  // back (not delivered, not overwritten) while the two copies differ.
+  const heldSiblings = testSiblingsToHoldBack(cfg.holdTestSiblingsOf ?? [], repoRoot, templateDir);
+  const testSiblingsHeldBack: { path: string, protectedPath: string }[] = [];
+  if (heldSiblings.length > 0) {
+    const byPath = new Map(heldSiblings.map(h => [h.path, h]));
+    entries = entries.filter((e) => {
+      const held = byPath.get(e.path.replace(/\\/g, '/'));
+      if (held === undefined) { return true; }
+      if (e.classification !== 'unchanged' && e.classification !== 'binary-skip') { testSiblingsHeldBack.push(held); }
+      return false;
+    });
+    for (const held of testSiblingsHeldBack) {
+      sink.warn(`${held.path}: retenido junto a su archivo protegido ${held.protectedPath} (tu copia difiere de upstream).`);
+    }
+  }
+
   // Business context skills: the whole folder once, when the project has none.
   entries.push(...collectContextMapBootstrap(cfg.components, templateDir, repoRoot, entries));
 
@@ -2901,7 +2981,8 @@ export async function runUpdate(
   for (const e of visible) {
     const slot = perComp.get(e.component) ?? { changed: 0, diverged: 0 };
     slot.changed++;
-    if (e.classification === 'locally-diverged') { slot.diverged++; }
+    // Diverged = the PROJECT edited it (3-way, `detectLocalEdits`), not merely "bytes differ".
+    if (e.classification === 'locally-diverged' && localEdits.has(e.path)) { slot.diverged++; }
     perComp.set(e.component, slot);
   }
 
@@ -2948,9 +3029,15 @@ export async function runUpdate(
       ? settledSelfUpdateSignal
       : selfUpdateComponentByContent(cfg, templateDir, repoRoot, newHeadSha, priorSelfUpdateCursor)
   ).filter(name => !entries.some(e => e.component === name));
+  // A component already synced before, behind this head, with no delta at it:
+  // its cursor moves too, so `templateCommit` can reach the head (see
+  // componentsWithoutDelta). Listed before the no-op exit below, so a re-run
+  // at the same head also heals a lock a partial-delta sync left behind.
+  const settledNoDelta = componentsWithoutDelta(cfg.components, visible, v7State?.perComponentCommit ?? {}, newHeadSha);
   const settledBootstrap = [...new Set([
     ...bootstrapComponents.filter(c => !entries.some(e => e.component === c.name)).map(c => c.name),
     ...settledSelfUpdate,
+    ...settledNoDelta,
   ])];
   // The afterApply hooks still run on a no-op: they are idempotent (alias,
   // registry) and they own the parity report, which is the run's
@@ -2973,7 +3060,7 @@ export async function runUpdate(
   };
   if (visible.length === 0 && ignoreDeltasPre.length === 0 && pkgJsonDeltasPre.length === 0 && settledBootstrap.length === 0) {
     sink.step('Sin cambios detectados respecto al upstream. Nada que sincronizar.');
-    return finish({ ...emptySummary, newHeadSha });
+    return finish({ ...emptySummary, newHeadSha, testSiblingsHeldBack });
   }
   if (visible.length > 0) {
     let suffix = '';
@@ -3049,6 +3136,14 @@ export async function runUpdate(
     }
   };
 
+  // Collect first, then write (installer-ui plan §4): every decision of Phase 3
+  // to 4.5b is taken before ANY file is written, and the writes happen once, at
+  // the start of Phase 5. A run cancelled mid-way through the questions leaves
+  // the tree untouched instead of half-applied.
+  interface QueuedWrite { item: AppliedFile, tracksEdits: boolean }
+  const queued: QueuedWrite[] = [];
+  const queue = (item: AppliedFile, tracksEdits: boolean): void => { queued.push({ item, tracksEdits }); };
+
   for (const scope of chosenScopes) {
     const scopeFiles = visible.filter(e => e.component === scope);
     if (scopeFiles.length === 0) { continue; }
@@ -3062,34 +3157,12 @@ export async function runUpdate(
       // Deferred (deleted-upstream) is held back; mark as skipped
       for (const d of deferred) { skipped.push(d); }
       // Plan items that resolve to 'skip' are skipped; others apply
-      selected = [];
       for (const item of plan) {
         if (item.resolution === 'skip') {
           skipped.push(item.entry);
           continue;
         }
-        // Apply directly
-        if (opts.dryRun) {
-          sink.step(`[dry-run] aplicaría: ${item.entry.path}`);
-          applied.push(item);
-          continue;
-        }
-        try {
-          await applyResolution(
-            item.entry,
-            item.resolution,
-            templateDir,
-            repoRoot,
-            ensureBackup(),
-            false,
-            makeCoreLoggerFromSink(sink),
-          );
-          noteOverwrite(item);
-        }
-        catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          failed.push({ entry: item.entry, reason: msg });
-        }
+        queue(item, true);
       }
       continue;
     }
@@ -3100,7 +3173,7 @@ export async function runUpdate(
       (acc, e) => {
         acc.addedTotal += e.added;
         acc.removedTotal += e.removed;
-        if (e.classification === 'locally-diverged') { acc.divergedCount++; }
+        if (e.classification === 'locally-diverged' && localEdits.has(e.path)) { acc.divergedCount++; }
         return acc;
       },
       { changedCount: scopeFiles.length, divergedCount: 0, addedTotal: 0, removedTotal: 0 },
@@ -3135,31 +3208,22 @@ export async function runUpdate(
 
     // Per-file handling
     for (const entry of selected) {
-      if (entry.classification === 'locally-diverged') {
-        // Upstream is canonical for framework files — no skip/mine prompt.
-        // The user already controls inclusion via scope/file selection above;
-        // a SELECTED diverged file is overwritten wholesale ('theirs'). Backup
-        // is taken inside applyResolution, so --rollback restores it.
+      if (entry.classification === 'locally-diverged' && localEdits.has(entry.path)) {
+        // The project edited this file AND upstream changed it: taking either
+        // side alone loses the other change, so the person decides (the
+        // backup of 'theirs' is taken at write time, --rollback restores it).
+        // A dry-run asks nothing and previews the overwrite, as before.
         if (opts.dryRun) {
-          sink.step(`[dry-run] sobreescribiría con upstream: ${entry.path}`);
+          sink.step(`[dry-run] cambió en los dos lados, la corrida real pregunta: ${entry.path}`);
           applied.push({ entry, resolution: 'theirs' });
           continue;
         }
-        try {
-          await applyResolution(
-            entry,
-            'theirs',
-            templateDir,
-            repoRoot,
-            ensureBackup(),
-            false,
-            makeCoreLoggerFromSink(sink),
-          );
-          noteOverwrite({ entry, resolution: 'theirs' });
+        const resolution = await sink.resolveDiverged(entry, buildPairedDiff(entry, templateDir, repoRoot));
+        if (resolution === 'theirs') {
+          queue({ entry, resolution: 'theirs' }, true);
         }
-        catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          failed.push({ entry, reason: msg });
+        else {
+          skipped.push(entry);
         }
         continue;
       }
@@ -3170,27 +3234,7 @@ export async function runUpdate(
           skipped.push(entry);
           continue;
         }
-        if (opts.dryRun) {
-          sink.step(`[dry-run] eliminaría: ${entry.path}`);
-          applied.push({ entry, resolution: 'delete' });
-          continue;
-        }
-        try {
-          await applyResolution(
-            entry,
-            'delete',
-            templateDir,
-            repoRoot,
-            ensureBackup(),
-            false,
-            makeCoreLoggerFromSink(sink),
-          );
-          applied.push({ entry, resolution: 'delete' });
-        }
-        catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          failed.push({ entry, reason: msg });
-        }
+        queue({ entry, resolution: 'delete' }, false);
         continue;
       }
 
@@ -3201,27 +3245,7 @@ export async function runUpdate(
         const paired = buildPairedDiff(entry, templateDir, repoRoot);
         await sink.showDiff(entry, paired);
       }
-      if (opts.dryRun) {
-        sink.step(`[dry-run] aplicaría: ${entry.path}`);
-        applied.push({ entry, resolution: 'theirs' });
-        continue;
-      }
-      try {
-        await applyResolution(
-          entry,
-          'theirs',
-          templateDir,
-          repoRoot,
-          ensureBackup(),
-          false,
-          makeCoreLoggerFromSink(sink),
-        );
-        applied.push({ entry, resolution: 'theirs' });
-      }
-      catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        failed.push({ entry, reason: msg });
-      }
+      queue({ entry, resolution: 'theirs' }, false);
     }
   }
 
@@ -3273,6 +3297,10 @@ export async function runUpdate(
   // report gets one row per key, so a non-interactive run does not lose the
   // FYI in the terminal scrollback.
   const packageJsonKept: PackageJsonKeptKey[] = [];
+  // Every key appended this run (planned, on a dry-run), with its value: the
+  // parity stage checks an appended script's target file once every component
+  // has written its files.
+  const packageJsonAppended: { file: string, section: string, key: string, value: string }[] = [];
   if (pkgJsonDeltasPre.length > 0) {
     sink.subphase('PACKAGE.JSON KEYS');
     for (const delta of pkgJsonDeltasPre) {
@@ -3358,6 +3386,23 @@ export async function runUpdate(
   // --- PHASE 5 — APPLY (state write + deprecated cleanup) ---
   sink.phase(5, 'APPLY');
 
+  // The file writes decided in Phase 4, in decision order.
+  for (const { item, tracksEdits } of queued) {
+    if (opts.dryRun) {
+      sink.step(item.resolution === 'delete' ? `[dry-run] eliminaría: ${item.entry.path}` : `[dry-run] aplicaría: ${item.entry.path}`);
+      applied.push(item);
+      continue;
+    }
+    try {
+      await applyResolution(item.entry, item.resolution, templateDir, repoRoot, ensureBackup(), false, makeCoreLoggerFromSink(sink));
+      if (tracksEdits) { noteOverwrite(item); }
+      else { applied.push(item); }
+    }
+    catch (err) {
+      failed.push({ entry: item.entry, reason: errorMessage(err) });
+    }
+  }
+
   // Apply ignore-line appends BEFORE state write (so the new appendedLines
   // make it into the persisted v7 state). In bootstrap mode v7State is null;
   // materialize it lazily so the appendedLines can still be tracked.
@@ -3440,6 +3485,13 @@ export async function runUpdate(
       }
     }
 
+    for (const [section, keys] of Object.entries(writtenBySection)) {
+      for (const key of keys) {
+        const value = selection.values[section]?.[key];
+        if (typeof value === 'string') { packageJsonAppended.push({ file: spec.path, section, key, value }); }
+      }
+    }
+
     // Materialise v7State lazily (bootstrap mode) so the state update sticks.
     if (v7State === null) {
       v7State = {
@@ -3509,9 +3561,10 @@ export async function runUpdate(
     // Deferred-deletes are already represented in `skipped`, so no separate
     // deferred list is passed (the old `bootstrapMode ? [] : []` was a no-op).
     [],
-    // Settled without an entry: bootstrapped with nothing to deliver, or
-    // refreshed by the parent's self-update (see `settledBootstrap`).
-    [...new Set([...bootstrapComponents.map(c => c.name), ...settledSelfUpdate])],
+    // Settled without an entry: bootstrapped with nothing to deliver,
+    // refreshed by the parent's self-update, or already at this head's
+    // content with a cursor behind it (see `settledBootstrap`).
+    [...new Set([...bootstrapComponents.map(c => c.name), ...settledSelfUpdate, ...settledNoDelta])],
   );
 
   const summary: RunSummary = {
@@ -3524,6 +3577,8 @@ export async function runUpdate(
     backupDir,
     localEditsOverwritten,
     packageJsonKept,
+    packageJsonAppended,
+    testSiblingsHeldBack,
   };
 
   // State write

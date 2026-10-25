@@ -37,12 +37,12 @@ Layer 2 — Base Components
         |
         v
 Layer 1 — TestContext
-    Config, logger, faker, environment accessors
+    Playwright drivers (page, request), config, environment, DataFactory
 ```
 
 | Layer | Responsibility | Typical files |
 |-------|---------------|---------------|
-| 1 — TestContext | Global utilities (config, logger, faker, env) | `TestContext.ts` |
+| 1 — TestContext | Playwright drivers, config, env, DataFactory (faker-backed data) | `TestContext.ts` |
 | 2 — Base | HTTP and Playwright helpers | `ApiBase.ts`, `UiBase.ts` |
 | 3 — Domain | Business logic, ATCs | `UsersApi.ts`, `LoginPage.ts` |
 | 3.5 — Steps | Reusable ATC chains for preconditions | `AuthSteps.ts`, `CheckoutSteps.ts` |
@@ -126,7 +126,7 @@ interface TestContextOptions {
 }
 ```
 
-Responsibilities: select URLs/credentials from `config` based on `TEST_ENV`; expose `faker`; expose environment label; provide shared logger/attachment helpers.
+Responsibilities: hold the Playwright drivers (`page`, `request`); select URLs/credentials from `config` based on `TEST_ENV`; expose the environment label (`env`); expose `DataFactory` (the faker-backed test data, through `data`). It has no logger and no `faker` field of its own: faker lives inside `tests/data/DataFactory.ts`.
 
 Do not put Playwright-specific logic here (belongs in UiBase). Do not put HTTP-specific logic here (belongs in ApiBase).
 
@@ -629,7 +629,7 @@ Never apply decorators to Layer 2 base methods or private helpers. Detailed trac
 
 For a project that already has Playwright tests and adopts this boilerplate. One area at a time; the old tests keep running until their replacement is proven.
 
-1. **Find ATC candidates.** Read the current tests for blocks that repeat, map each to a Jira/Xray test case, and start with the most reused. Check `kata-manifest.json` first (Critical Rule #12): the boilerplate may already ship the component.
+1. **Find ATC candidates.** Read the current tests for blocks that repeat, map each to a Jira/Xray test case, and start with the most reused. A block with no test case behind it goes to `/test-documentation` first (signed ROI, `../SKILL.md` §"TC source gate"); never create the test case from here. Check `kata-manifest.json` first (Critical Rule #12): the boilerplate may already ship the component.
 2. **Adapt Layers 1-2, do not rewrite them.** `TestContext`, `ApiBase` and `UiBase` ship in `tests/components/`; wire your URLs and credentials through `config/variables.ts` and `.env` (`/test-framework-adaptation` does this).
 3. **Extract the first component.** Pick one functional area, create `{Resource}Api` or `{Page}Page`, move its methods in as ATCs with `@atc('{TICKET-ID}')`, helpers with `@step`.
 4. **Register it in the fixture.** Add it to `ApiFixture` / `UiFixture` (`tests/components/`), then rewrite ONE test to use `{ api }` / `{ ui }` / `{ test }` per the fixture selection table (§7).

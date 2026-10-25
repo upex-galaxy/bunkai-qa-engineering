@@ -29,6 +29,8 @@ export interface AtcResult {
   executedAt: string
   duration: number
   softFail: boolean
+  /** Playwright's id of the test that ran this ATC, when one was running. */
+  playwrightTestId?: string
 }
 
 export interface AtcOptions {
@@ -55,13 +57,15 @@ export interface AtcOptions {
  * @param options.severity - Allure severity level: 'blocker' | 'critical' | 'normal' | 'minor' | 'trivial'
  * @param options.description - Description for Allure report
  * @examples - Usage
- * Basic Usage - UI Component
+ * Basic Usage - UI Component (a complete mini-flow named {verb}{Resource}{Scenario},
+ * never a single interaction such as `fillEmailSuccessfully`)
  * ```typescript
  * @atc('UPEX-101')
- * async fillEmailSuccessfully(email: string) {
- *   const input = this.page.locator('[data-testid="email"]');
- *   await input.fill(email);
- *   await expect(input).toHaveValue(email);
+ * async loginSuccessfully(credentials: LoginCredentials) {
+ *   await this.page.locator('[data-testid="login-email-input"]').fill(credentials.email);
+ *   await this.page.locator('[data-testid="login-password-input"]').fill(credentials.password);
+ *   await this.page.locator('[data-testid="login-submit-button"]').click();
+ *   await expect(this.page).not.toHaveURL(/\/login/);
  * }
  * ```
  *
@@ -91,8 +95,8 @@ export interface AtcOptions {
  *
  * Console Output
  * ```typescript
- * ✅ [UPEX-101] fillEmailSuccessfully - PASS (234ms)
- * ❌ [UPEX-102] submitFormSuccessfully - FAIL: Element not found
+ * ✅ [UPEX-101] loginSuccessfully - PASS (234ms)
+ * ❌ [UPEX-102] completeCheckoutSuccessfully - FAIL: Element not found
  * ⚠️ [UPEX-103] Soft fail enabled - continuing execution
  * ```
  */
@@ -141,6 +145,20 @@ export function atc(testId: string, options: AtcOptions = {}) {
         // Allure might not be available in all contexts
       }
 
+      // Tag the running test with this ATC id. KataReporter reads the `atc`
+      // annotations into the outcome records (reports/test-outcomes.json),
+      // which is how a test outcome maps to its TC ids (ADR-0020).
+      try {
+        result.playwrightTestId = test.info().testId;
+        const annotations = test.info().annotations;
+        if (!annotations.some(a => a.type === 'atc' && a.description === testId)) {
+          annotations.push({ type: 'atc', description: testId });
+        }
+      }
+      catch {
+        // Called outside a running test: there is nothing to tag
+      }
+
       try {
         // Execute within test.step (visible in KataReporter + auto-captured by allure-playwright)
         const stepTitle = `ATC [${testId}]: ${methodName}${formatArgs(args)}`;
@@ -157,9 +175,19 @@ export function atc(testId: string, options: AtcOptions = {}) {
         return returnValue;
       }
       catch (error: unknown) {
-        result.status = 'FAIL';
         result.error = error instanceof Error ? error.message : String(error);
         result.duration = Date.now() - startTime;
+
+        // A runtime `test.skip()` inside the ATC throws to stop the test: that is
+        // NOT RUN (ADR-0020), never a failure, and it must still propagate.
+        if (isSkipping()) {
+          result.status = 'SKIP';
+          storeResult(testId, result);
+          console.log(`⏭️ [${testId}] ${methodName} - SKIP: ${result.error}`);
+          throw error;
+        }
+
+        result.status = 'FAIL';
         storeResult(testId, result);
 
         console.log(`❌ [${testId}] ${methodName} - FAIL: ${result.error}`);
@@ -284,6 +312,16 @@ function formatValue(value: unknown, key?: string): string {
   }
 
   return String(value);
+}
+
+/** True when the running test was just skipped at runtime (`test.skip()` / `test.fixme()`). */
+function isSkipping(): boolean {
+  try {
+    return test.info().expectedStatus === 'skipped';
+  }
+  catch {
+    return false;
+  }
 }
 
 function formatArgs(args: unknown[]): string {

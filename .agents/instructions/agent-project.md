@@ -121,6 +121,15 @@ Jira moved `upexgalaxy71` → `upexgalaxy72`, a second restore with the same sha
 - **The other two scripts' flags differ**: `jira:sync-fields` REQUIRES `--force`, and `jira:sync-link-types` has no `--force` flag at all (it is silently swallowed). Never use `--upex` for a real migration — it downloads the boilerplate authors' own workspace catalog.
 - **Gotcha — the process environment outlives the files.** A session opened through the retired `.env`-exporting launcher snapshotted `.env` into `process.env` while `.env` still held an older `ATLASSIAN_URL` and `XRAY_CLIENT_*`, so those values shadowed `.env` for the whole session. Nothing is wrong in `~/.zshrc` (`env -i zsh -l` prints nothing) — the only fix is restarting the agent session. `bun run vars:env:check` reports it; prefix one-off commands with `env -u ATLASSIAN_URL` to work around it mid-session.
 
+### Jira instance 74 (migrated by `/jira-administration` mode `instance-migration`)
+
+Jira moved `upexgalaxy72` → `upexgalaxy74`, a third restore with the same shape: same project `BK`, same issue keys, reassigned custom-field and status ids. The vanity `jira.upexgalaxy.com` redirects to the new site.
+
+- **It started half-migrated**: the machine-global `acli` session had already been re-logged to the new site while `issue_tracker.atlassian_url` still named the old one, so `acli` and the REST scripts read different instances with no error. Phase 0 of the migration is the only place that shows it: compare the yaml, `bun run --silent jira:url` and `acli jira auth status` before assuming which side is "before".
+- **`test_status` moved again**, with new option ids, and the old id resolves to an unrelated field on the new site. The `.env` `JIRA_TEST_STATUS_FIELD` pin was re-set with `bun run env:set` to the `test_status` id in `.agents/jira-fields.json`; the known gap in `syncToJiraDirect()` still makes that pin load-bearing.
+- **`jira:sync-workflows --force` was needed again** (dry run first, stdin closed): every work type's status ids moved, transition ids moved none. The synced `instance-migration.md` still says the opposite; this overlay is the measured rule for this repo.
+- **`.agents/jira-required.yaml` was adopted from upstream verbatim** before the regeneration (it gained the `test_plan` and `test_execution` required statuses); it is `bootstrapOnly`, so re-check it at the next migration too.
+
 ---
 
 ## 14. GIT STRATEGY (DOCS EXCEPTION)

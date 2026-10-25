@@ -1,13 +1,18 @@
+import type { ProtectedWatchEntry } from './updater-drift.ts';
 import type { ParityFinding, ParityInput, ParityMeta } from './updater-parity.ts';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, test } from 'bun:test';
+import { detectProtectedDrift, persistMarkers, resolveMarkerPath, splitFirstProjectAdvice } from './updater-drift.ts';
 import {
   ABORTED_OUTRO,
   archivedSkillsToReport,
+  browserProfileDrift,
+  browserProfileSitesIn,
   buildParityFileBody,
   buildParityPrompt,
   collectParityFindings,
@@ -29,6 +34,7 @@ import {
   PATH_PREREQUISITES,
   persistArchivedSkillMarkers,
   PLAYWRIGHT_CLI_CONFIG,
+  prerequisiteArbiterPasses,
   prerequisiteFor,
   protectNote,
   readGitStrategyStamp,
@@ -39,6 +45,7 @@ import {
   retiredHarnessScripts,
   retiredMcpNote,
   runVerdict,
+  scriptFileTargets,
   strictVerdict,
   structuralEvidence,
   SURFACE_ORDER,
@@ -520,6 +527,88 @@ describe('collectParityFindings', () => {
     expect(findings()).toEqual([]);
   });
 
+  test('a project skill that opens a browser on a disk profile gets one informational row per file, every line named, the file untouched', () => {
+    const root = temporaryRoot();
+    const upstream = temporaryRoot();
+    write(root, '.agents/project.yaml', 'git_strategy:\n  strategy: solo-main\n  meta:\n    strategy_source: chosen\n');
+    const skill = [
+      '# Sprint testing',
+      'playwright-cli -s=KEY-{n} open --profile=.playwright/profiles/KEY-{n}',
+      'Add `--persistent` only if you need it: `playwright-cli -s=KEY-1 open https://app --persistent`',
+      '',
+    ].join('\n');
+    write(root, '.agents/skills/sprint-testing/SKILL.md', skill);
+    write(root, 'AGENTS.md', `Open \`playwright-cli -s=W1 open --profile="${join(root, '.playwright/profiles/W1')}"\`.\n`);
+    const findings = (): ReturnType<typeof collectParityFindings> => collectParityFindings({
+      root,
+      upstreamDir: upstream,
+      drift: [],
+      compatErrors: [],
+      archivedSkills: [],
+      archivedSkillsDir: join(root, '.template/pre-agents-migration/skills'),
+      heldBack: [],
+      envNewKeys: [],
+    });
+
+    expect(browserProfileDrift(root)).toEqual([
+      { file: 'AGENTS.md', line: 1, flag: `--profile=${join(root, '.playwright/profiles/W1')}`, reason: 'profile inside the repo' },
+      { file: '.agents/skills/sprint-testing/SKILL.md', line: 2, flag: '--profile=.playwright/profiles/KEY-{n}', reason: 'relative profile' },
+      { file: '.agents/skills/sprint-testing/SKILL.md', line: 3, flag: '--persistent', reason: 'persistent' },
+    ]);
+    const rows = findings();
+    expect(rows).toHaveLength(2);
+    expect(rows.find(r => r.path === '.agents/skills/sprint-testing/SKILL.md')).toMatchObject({ surface: 'skills', blocking: false, suggested: 'keep project' });
+    expect(rows.find(r => r.path === 'AGENTS.md')).toMatchObject({ surface: 'instructions', blocking: false });
+    const evidence = rows.find(r => r.path === '.agents/skills/sprint-testing/SKILL.md')!.evidence;
+    expect(evidence).toStartWith('informational: line 2 --profile=.playwright/profiles/KEY-{n} (relative profile); line 3 --persistent (persistent)');
+    expect(evidence).toContain('browser-sessions.md');
+    expect(readFileSync(join(root, '.agents/skills/sprint-testing/SKILL.md'), 'utf8')).toBe(skill);
+  });
+
+  test('the disk-profile detector ignores the doctrine, placeholders, other CLIs and the vendor flag docs', () => {
+    const root = '/work/repo';
+    const quiet = [
+      '2. **Never `--persistent`.** Persistence is `--profile=<absolute dir>` or nothing.',
+      'a named session per worker (`-s=<label>`); never `--persistent`',
+      'nunca --persistent: `playwright-cli list` vacío',
+      'only `--browser --config --headed --persistent --profile` (confirmed via `playwright-cli open --help`)',
+      'playwright-cli -s=loom open <url> --profile=<abs root>/loom --browser=chrome',
+      'playwright-cli -s=loom open <url> --profile=~/.agentic-qa/playwright-profiles/loom',
+      'playwright-cli -s=loom open <url> --profile="$HOME/.agentic-qa/playwright-profiles/loom"',
+      'playwright-cli -s=loom open <url> --profile=/Users/me/.agentic-qa/playwright-profiles/loom',
+      String.raw`playwright-cli -s=loom open <url> --profile=%USERPROFILE%\.agentic-qa\playwright-profiles\loom`,
+      'bun run api:login staging --profile W1',
+      'resend emails list --profile staging',
+      'docker compose --profile test up --abort-on-container-exit',
+      '`--profile <name>`: writes tokens under `.auth/profiles/<name>/`',
+    ].join('\n');
+    expect(browserProfileSitesIn('.agents/skills/x/SKILL.md', quiet, root)).toEqual([]);
+
+    // The vendor playwright-cli skill documents its own flag; a relative profile in it is still a project edit.
+    const vendor = 'playwright-cli open --persistent\nplaywright-cli open --profile=/path/to/profile\nplaywright-cli -s=KEY-1 open --profile=.playwright/profiles/KEY-1\n';
+    expect(browserProfileSitesIn('.claude/skills/playwright-cli/SKILL.md', vendor, root)).toEqual([
+      { file: '.claude/skills/playwright-cli/SKILL.md', line: 3, flag: '--profile=.playwright/profiles/KEY-1', reason: 'relative profile' },
+    ]);
+
+    // Repo-root spellings and a bare relative name on a browser line.
+    const loud = [
+      'playwright-cli -s=K open --profile=<repo>/.playwright/profiles/K',
+      'playwright-cli -s=K open --profile="$PWD/profiles/K"',
+      'playwright-cli -s=K open --profile=KEY-1',
+      'pw open --persistent >/dev/null 2>&1',
+    ].join('\n');
+    expect(browserProfileSitesIn('scripts.sh', loud, root).map(s => s.reason)).toEqual([
+      'profile inside the repo',
+      'profile inside the repo',
+      'relative profile',
+      'persistent',
+    ]);
+  });
+
+  test('the shipped skills and instructions carry no disk-profile line', () => {
+    expect(browserProfileDrift(join(import.meta.dir, '..', '..'))).toEqual([]);
+  });
+
   test('archived skills nudge once: this run, plus unreported archive entries, until their marker exists', () => {
     const root = temporaryRoot();
     const archive = join(root, '.template/pre-agents-migration/skills');
@@ -730,6 +819,12 @@ describe('a missing config block a shipped skill reads blocks the run', () => {
     expect(row!.evidence).not.toContain('BLOCKING');
   });
 
+  test('a block the project exempted through updater.schema_exempt never escalates', () => {
+    const upstream = 'project:\n  name: upstream\nboard:\n  source: auto\n';
+    expect(missingConfigBlocks('.agents/project.yaml', 'project:\n  name: consumer\n', upstream)).toEqual([{ block: 'board', reader: CONFIG_BLOCK_READERS['.agents/project.yaml'].board }]);
+    expect(missingConfigBlocks('.agents/project.yaml', 'project:\n  name: consumer\nupdater:\n  schema_exempt: [board]\n', upstream)).toEqual([]);
+  });
+
   test('missingConfigBlocks is top-level only and declaration-driven', () => {
     const project = 'git_strategy:\n  strategy: solo-main\n';
     const upstream = 'git_strategy:\n  strategy: solo-main\n  policy:\n    direct_push_to_protected: allowed\n';
@@ -748,8 +843,10 @@ describe('a missing config block a shipped skill reads blocks the run', () => {
     const declared = CONFIG_BLOCK_READERS['.agents/project.yaml'];
     expect(Object.keys(declared)).toContain('git_strategy');
     expect(Object.keys(declared)).toContain('orchestration');
+    expect(declared.board?.skill).toBe('/sprint-conductor');
     for (const reader of Object.values(declared)) {
       expect(reader.skill.startsWith('/')).toBe(true);
+      expect(existsSync(join(import.meta.dir, '..', '..', '.agents/skills', reader.skill.slice(1), 'SKILL.md'))).toBe(true);
       expect(reader.requiredBy.length).toBeGreaterThan(20);
     }
   });
@@ -1001,7 +1098,7 @@ describe('renderParityReport', () => {
     expect(report.surfaces.find(r => r.surface === 'mcp')?.cell).toBe('1 hallazgo: .codex/config.toml');
 
     const prompt = report.prompt;
-    expect(prompt.startsWith('Parity review after `bun run up` (upstream upex-galaxy/agentic-qa-boilerplate@abcdef1, project lock 1234567).')).toBe(true);
+    expect(prompt.startsWith('Parity review after `bun sync` (upstream upex-galaxy/agentic-qa-boilerplate@abcdef1, project lock 1234567).')).toBe(true);
     expect(prompt).toContain('WAIT for a decision per row');
     expect(prompt).toContain('(keep project | take upstream | merge) BEFORE editing anything');
     expect(prompt).toContain('| # | Surface | File | Now | What differs (evidence) | Suggested |');
@@ -1397,11 +1494,124 @@ describe('a kept file whose hunk gates another file of the same release', () => 
     expect(declared[0].evidence).toContain('`bun run report:check`');
   });
 
+  test('a kept regression workflow that still imports JUnit is a blocking row with the port and a real arbiter', () => {
+    // Live finding: the synced import guard refuses every keyless JUnit testcase,
+    // and the kept workflow's write-back fails silently behind continue-on-error.
+    const root = temporaryRoot();
+    const upstream = temporaryRoot();
+    write(root, '.github/workflows/regression.yml', 'jobs:\n  XrayImport:\n    steps:\n      - run: bun xray import junit test-results/junit.xml\n');
+    write(upstream, '.github/workflows/regression.yml', 'jobs:\n  XrayImport:\n    steps:\n      - run: bun run xray:payload\n');
+    const findings = collectParityFindings({
+      ...base(root, upstream),
+      drift: [{ path: '.github/workflows/regression.yml', reason: 'CI suite adapted (secrets, envs, jobs)' }],
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0].blocking).toBe(true);
+    expect(findings[0].evidence).toContain('XrayImport');
+    expect(findings[0].evidence).toContain('`bun run xray:payload`');
+    const gate = prerequisiteFor('.github/workflows/regression.yml')!.gate;
+    // The arbiter is a command, and it fails on the kept copy and passes on upstream's.
+    expect(spawnSync('sh', ['-c', gate], { cwd: root }).status).not.toBe(0);
+    expect(spawnSync('sh', ['-c', gate], { cwd: upstream }).status).toBe(0);
+  });
+
   test('the shipped manifest declares the category vocabulary at least', () => {
     expect(prerequisiteFor('scripts/lint-skills.ts')).not.toBeNull();
     expect(prerequisiteFor('scripts/lint-skills.ts')?.gate).toBe('bun run skills:check');
     expect(prerequisiteFor('scripts\\lint-skills.ts')).toBe(PATH_PREREQUISITES['scripts/lint-skills.ts']);
     expect(prerequisiteFor('README.md')).toBeNull();
+  });
+});
+
+describe('a BLOCKING row stays while its arbiter fails, whatever its marker says', () => {
+  // Live finding: run 1 printed the kept `.github/workflows/regression.yml` as
+  // BLOCKING and stamped its upstream-sha marker; run 2, with nothing changed
+  // and `grep -q 'xray:payload'` still failing, printed no row for it at all.
+  // The marker records "upstream seen", never "project resolved".
+  const FILE = '.github/workflows/regression.yml';
+  const KEPT = 'jobs:\n  Project:\n    steps:\n      - run: bun xray import junit test-results/junit.xml\n';
+  const UPSTREAM = 'jobs:\n  XrayImport:\n    steps:\n      - run: bun run xray:payload\n';
+  const watch: ProtectedWatchEntry[] = [{ path: FILE, reason: 'CI suite adapted (secrets, envs, jobs)' }];
+  const arbiterFails = (root: string) => (entry: ProtectedWatchEntry): boolean => {
+    const prerequisite = prerequisiteFor(entry.path);
+    return prerequisite !== null && !prerequisiteArbiterPasses(prerequisite, root);
+  };
+
+  /** One sync's parity pass, as the wrapper's hook runs it: detect, split, persist, collect. */
+  function syncRun(root: string, upstream: string, withArbiter = true): ParityFinding[] {
+    const { advised, seeded, seededNoUpstreamChange } = splitFirstProjectAdvice(
+      detectProtectedDrift(watch, upstream, root, withArbiter ? arbiterFails(root) : undefined),
+    );
+    persistMarkers([...advised, ...seeded, ...seededNoUpstreamChange], root);
+    return collectParityFindings({
+      root,
+      upstreamDir: upstream,
+      drift: advised.map(d => ({ path: d.path, reason: d.reason, structural: false, source: d.source })),
+      compatErrors: [],
+      archivedSkills: [],
+      archivedSkillsDir: join(root, 'x'),
+      heldBack: [],
+      envNewKeys: [],
+    }).filter(f => f.path === FILE);
+  }
+
+  test('run 1 emits it, run 2 with the same failing arbiter still emits it, a passing arbiter removes it', () => {
+    const root = temporaryRoot();
+    const upstream = temporaryRoot();
+    write(root, FILE, KEPT);
+    write(upstream, FILE, UPSTREAM);
+
+    const first = syncRun(root, upstream);
+    expect(first).toHaveLength(1);
+    expect(first[0].blocking).toBe(true);
+    expect(existsSync(resolveMarkerPath(watch[0], root))).toBe(true);
+
+    const second = syncRun(root, upstream);
+    expect(second).toHaveLength(1);
+    expect(second[0].blocking).toBe(true);
+
+    // The project ports the hunk and keeps its own job: it still differs from
+    // upstream, but the arbiter passes, so the row is gone.
+    write(root, FILE, `${KEPT}  XrayImport:\n    steps:\n      - run: bun run xray:payload\n`);
+    expect(syncRun(root, upstream)).toEqual([]);
+  });
+
+  test('the repro without the arbiter: the stamped marker silences the row on run 2', () => {
+    const root = temporaryRoot();
+    const upstream = temporaryRoot();
+    write(root, FILE, KEPT);
+    write(upstream, FILE, UPSTREAM);
+    expect(syncRun(root, upstream, false)).toHaveLength(1);
+    expect(syncRun(root, upstream, false)).toEqual([]);
+  });
+
+  test('a failing arbiter is never seeded: not as a project-declared path, not as unchanged since the cursor', () => {
+    const upstream = temporaryRoot();
+    write(upstream, FILE, UPSTREAM);
+    const g = (args: string[]): string => spawnSync('git', ['-C', upstream, ...args], { encoding: 'utf8' }).stdout;
+    g(['init', '--quiet', '--initial-branch=main']);
+    g(['-c', 'user.email=t@example.com', '-c', 'user.name=t', 'commit', '--quiet', '--allow-empty', '-m', 'base']);
+    g(['add', '-A']);
+    g(['-c', 'user.email=t@example.com', '-c', 'user.name=t', 'commit', '--quiet', '-m', 'upstream']);
+    const cursor = g(['rev-parse', 'HEAD']).trim();
+    const failing = { path: FILE, reason: 'r', upstreamSha: 'x', firstAdvice: true, arbiterFailing: true };
+
+    const declared = splitFirstProjectAdvice([{ ...failing, source: 'project' as const }]);
+    expect(declared.advised.map(e => e.path)).toEqual([FILE]);
+    expect(declared.seeded).toEqual([]);
+
+    const sinceCursor = splitFirstProjectAdvice([failing], { tempDir: upstream, lockCursor: cursor });
+    expect(sinceCursor.advised.map(e => e.path)).toEqual([FILE]);
+    expect(sinceCursor.seededNoUpstreamChange).toEqual([]);
+    // The same entry with a passing arbiter is seeded, exactly as before.
+    const { arbiterFailing: _passing, ...passing } = failing;
+    expect(splitFirstProjectAdvice([passing], { tempDir: upstream, lockCursor: cursor }).seededNoUpstreamChange.map(e => e.path)).toEqual([FILE]);
+  });
+
+  test('an arbiter that cannot run counts as failing (fail-closed)', () => {
+    expect(prerequisiteArbiterPasses({ requiredBy: 'x', gate: 'exit 3' }, temporaryRoot())).toBe(false);
+    expect(prerequisiteArbiterPasses({ requiredBy: 'x', gate: 'definitely-not-a-command-xyz' }, temporaryRoot())).toBe(false);
+    expect(prerequisiteArbiterPasses({ requiredBy: 'x', gate: 'true' }, temporaryRoot())).toBe(true);
   });
 });
 
@@ -1485,14 +1695,14 @@ describe('the dry-run table marks what the apply step resolves by itself', () =>
 
   test('the mark and its legend appear on a dry-run only', () => {
     const dry = buildParityPrompt([compat, drift], { ...META, dryRun: true });
-    expect(dry).toContain('Parity review after `bun run up --dry-run`');
+    expect(dry).toContain('Parity review after `bun sync --dry-run`');
     expect(dry).toContain(`skills alias missing ${RESOLVED_BY_APPLY_MARK}`);
     expect(dry).toContain('this table lists MORE work than the run that applies');
     expect(dry).not.toContain(`"1. RULES" ${RESOLVED_BY_APPLY_MARK}`);
 
     const real = buildParityPrompt([compat, drift], META);
     expect(real).not.toContain(RESOLVED_BY_APPLY_MARK);
-    expect(real).toContain('Parity review after `bun run up` (upstream');
+    expect(real).toContain('Parity review after `bun sync` (upstream');
   });
 });
 
@@ -1590,5 +1800,60 @@ describe('context map rows (informational)', () => {
     const rows = collectParityFindings(base(root)).filter(f => f.path.includes('business-e2e-map'));
     expect(rows).toHaveLength(1);
     expect(rows[0].evidence).toContain('has no map');
+  });
+});
+
+describe('an appended script whose target file is absent', () => {
+  function base(root: string, upstream: string): ParityInput {
+    return { root, upstreamDir: upstream, drift: [], compatErrors: [], archivedSkills: [], archivedSkillsDir: join(root, 'x'), heldBack: [], envNewKeys: [] };
+  }
+
+  test('the targets of a script are the files bun, node or tsx execute, never a script name, a built-in or a binary', () => {
+    expect(scriptFileTargets('bun tests/utils/xrayResults.ts')).toEqual(['tests/utils/xrayResults.ts']);
+    expect(scriptFileTargets('bun --no-env-file scripts/launch.ts --warn bun tests/utils/jiraSync.ts')).toEqual(['scripts/launch.ts', 'tests/utils/jiraSync.ts']);
+    expect(scriptFileTargets('bun run cli/sprint-board/index.ts serve --open')).toEqual(['cli/sprint-board/index.ts']);
+    expect(scriptFileTargets('bun cli/preflight.ts --for setup --gate && bun cli/install.ts')).toEqual(['cli/preflight.ts', 'cli/install.ts']);
+    expect(scriptFileTargets('node ./scripts/x.mjs')).toEqual(['scripts/x.mjs']);
+    for (const none of ['bun run lint:check && bun run types:check', 'bun test', 'bunx playwright test', 'bun xray import', 'tsc --noEmit', 'eslint .']) {
+      expect(scriptFileTargets(none)).toEqual([]);
+    }
+  });
+
+  test('a missing target is a blocking package row naming the script and the file; a present one is no row', () => {
+    const root = temporaryRoot();
+    const upstream = temporaryRoot();
+    write(root, 'cli/sprint-board/index.ts', 'board\n');
+    const appended = [
+      { file: 'package.json', section: 'scripts', key: 'xray:payload', value: 'bun tests/utils/xrayResults.ts' },
+      { file: 'package.json', section: 'scripts', key: 'board', value: 'bun run cli/sprint-board/index.ts' },
+      { file: 'package.json', section: 'devDependencies', key: 'x.ts', value: 'bun missing.ts' },
+    ];
+    const findings = collectParityFindings({ ...base(root, upstream), packageJsonAppended: appended });
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ surface: 'package', path: 'package.json', blocking: true });
+    expect(findings[0].evidence).toContain('scripts.xray:payload');
+    expect(findings[0].evidence).toContain('`tests/utils/xrayResults.ts`');
+    expect(findings[0].evidence).toContain('Module not found');
+    expect(strictVerdict(true, findings).exitCode).toBe(1);
+  });
+
+  test('on a dry-run, a target upstream ships is one the real run delivers: no row', () => {
+    const root = temporaryRoot();
+    const upstream = temporaryRoot();
+    write(upstream, 'tests/utils/xrayResults.ts', 'payload\n');
+    const appended = [{ file: 'package.json', section: 'scripts', key: 'xray:payload', value: 'bun tests/utils/xrayResults.ts' }];
+    expect(collectParityFindings({ ...base(root, upstream), packageJsonAppended: appended, dryRun: true })).toEqual([]);
+    expect(collectParityFindings({ ...base(root, upstream), packageJsonAppended: appended })).toHaveLength(1);
+  });
+
+  test('a held-back test sibling is one informational row naming both files', () => {
+    const root = temporaryRoot();
+    const findings = collectParityFindings({
+      ...base(root, temporaryRoot()),
+      testSiblingsHeldBack: [{ path: 'scripts/lint-skills.test.ts', protectedPath: 'scripts/lint-skills.ts' }],
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ path: 'scripts/lint-skills.test.ts', blocking: false, suggested: 'keep project', side: 'kept' });
+    expect(findings[0].evidence).toContain('`scripts/lint-skills.ts`');
   });
 });

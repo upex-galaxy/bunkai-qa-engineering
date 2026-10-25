@@ -10,15 +10,11 @@
  * Usage:
  *   bun run setup:doctor              # human-readable summary
  *   bun run setup:doctor --json       # machine-readable JSON
- *   bun run setup:doctor --preflight  # blocker-only gate for `bun run setup`
+ *   bun run setup:doctor --preflight  # alias of `bun cli/preflight.ts --for setup --gate`
  *
- * --preflight mode: minimal pre-install gate. Checks only the things that
- * would crash `cli/install.ts` at module-load time (Bun runtime present and
- * recent enough, `node_modules/@inquirer/prompts` resolvable) plus Node >= 18
- * on PATH, which the prompt hooks need on every harness. Skips env
- * vars, MCPs, external CLIs — those are install.ts's job. Uses only
- * node built-ins so it runs safely before `bun install`. Wired into the
- * `setup` npm script as `bun cli/doctor.ts --preflight && bun cli/install.ts`.
+ * --preflight mode: an alias of the setup gate in `cli/preflight.ts` (Bun
+ * recent enough, dependencies installed, `bun install` run when they are
+ * missing). The full pre-run checklist runs inside `bun setup` itself.
  *
  * Exit code:
  *   0 if status === "ok"     (full mode) or preflight passes
@@ -57,6 +53,7 @@ import { CORE_SCHEMA_FILE, neutralizeRetiredKeys, PROJECT_SCHEMA_FILE, removeRet
 // Canonical variable manifest (source of truth — D1). Imports only `node:fs`,
 // so it is safe to load statically here without breaking the dependency-free
 // `--preflight` contract (no third-party deps pulled in).
+import { PILLOW_INSTALL, pythonPreflight } from './lib/evidence-page/python.ts';
 import {
   check as checkHarnessEnv,
   CLAUDE_LOCAL_SETTINGS,
@@ -82,16 +79,6 @@ const ENV_PATH = join(REPO_ROOT, '.env');
 const MCP_PATH = join(REPO_ROOT, '.mcp.json');
 const OPENCODE_PATH = join(REPO_ROOT, 'opencode.jsonc');
 const NODE_MODULES_VARLOCK = join(REPO_ROOT, 'node_modules', 'varlock');
-// --preflight mode resolves install.ts's only third-party import.
-const INQUIRER_MARKER = join(REPO_ROOT, 'node_modules', '@inquirer', 'prompts', 'package.json');
-
-// Minimum Bun version that install.ts is known to work with.
-const MIN_BUN: readonly [number, number, number] = [1, 0, 0];
-// Minimum Node major: the prompt hook on every harness runs
-// `node .agents/hooks/personality-reinject.mjs`, and Bun does not stand in for
-// it there. Same floor the scaffolder's doctor enforces.
-const MIN_NODE_MAJOR = 18;
-
 // Env vars surfaced by doctor.
 //
 // Source of truth = `VAR_MANIFEST` (D1) via `varsFor('local')` — resolved at the
@@ -355,7 +342,7 @@ interface DoctorReport {
    *
    * NEVER a failure. Being behind upstream is not a broken repo, and the moment
    * an upstream key addition turns a project's own checks red, the project
-   * learns to skip them. `bun run up` is where it becomes actionable; here it
+   * learns to skip them. `bun sync` is where it becomes actionable; here it
    * is the answer to "why is my project behaving oddly".
    */
   project_schema: ProjectSchemaDiagnostic
@@ -373,6 +360,17 @@ interface DoctorReport {
    * writes no file), never a failure. Reporting only.
    */
   harness_level_mcps: { verdicts: HarnessLevelVerdict[], sources: string[] }
+  /**
+   * Python 3.9+ with Pillow, which only the evidence pages (`/evidence-artifact`)
+   * need. Reporting only: a missing one is an Optional warning, never `status`.
+   */
+  evidence_builder: { ready: boolean, detail: string | null }
+  /**
+   * The orchestrator `/sprint-conductor` requires (every other skill treats it as
+   * optional): the CLI named in `orchestration.orchestrator_cli`, and whether its
+   * runtime answers. Information only, never a warning and never `status`.
+   */
+  orchestrator: { cli: string | null, state: OrchestratorState }
   pending_actions: PendingAction[]
   /**
    * OPTIONAL items, reported and never blocking: they do not turn `status` to
@@ -445,19 +443,6 @@ function parseEnvFile(content: string): Record<string, string> {
     out[key] = value;
   }
   return out;
-}
-
-function parseBunVersion(v: string): [number, number, number] | null {
-  const m = v.match(/^(\d+)\.(\d+)\.(\d+)/);
-  if (!m) { return null; }
-  return [Number(m[1]), Number(m[2]), Number(m[3])];
-}
-
-function compareVersion(a: readonly number[], b: readonly number[]): number {
-  for (let i = 0; i < 3; i++) {
-    if (a[i] !== b[i]) { return a[i] - b[i]; }
-  }
-  return 0;
 }
 
 // LINT.IfChange(openapi-spec-source)
@@ -575,7 +560,7 @@ export function diagnoseAgentCompatibility(
 }
 
 // ----------------------------------------------------------------------------
-// Preflight (blocker-only gate for `bun run setup`)
+// Preflight (blocker-only gate for `bun setup`)
 // ----------------------------------------------------------------------------
 
 /**
@@ -618,7 +603,7 @@ function projectSchemaDiagnostic(): ProjectSchemaDiagnostic {
   if (!existsSync(sourcePath)) { return { gaps: [], exempt: [], note: `${SCHEMA_SOURCE} not found`, copied_template: false }; }
   const sourceText = readFileSync(sourcePath, 'utf8');
   const copied_template = classifyProjectYaml(sourceText, gitOrigin()) === 'copied-template';
-  if (!existsSync(schemaPath)) { return { gaps: [], exempt: [], note: `${SCHEMA_FILE} not found — run \`bun run up\` to receive it`, copied_template }; }
+  if (!existsSync(schemaPath)) { return { gaps: [], exempt: [], note: `${SCHEMA_FILE} not found — run \`bun sync\` to receive it`, copied_template }; }
   try {
     const delta = projectDelta(sourceText, readFileSync(schemaPath, 'utf8'));
     return { gaps: delta.gaps, exempt: delta.exempt, note: delta.error, copied_template };
@@ -738,57 +723,18 @@ function envSchemaDiagnostic(): EnvSchemaDiagnostic {
   return { ...base, validation: 'ok', items };
 }
 
-function preflightFail(msg: string, fix: string): never {
-  // Dependency-free output — preflight may run before `bun install`, so no TUI.
-  process.stderr.write(`Preflight failed: ${msg}\n`);
-  process.stderr.write(`  Fix: ${fix}\n`);
-  process.exit(1);
-}
-
-function runPreflight(): never {
-  // Dependency-free header — preflight loads no TUI (third-party) modules.
-  process.stdout.write('\nPreflight check\n');
-
-  const bunVersion = process.versions.bun;
-  if (!bunVersion) {
-    preflightFail(
-      'Bun runtime not detected (process.versions.bun is undefined).',
-      'Install Bun from https://bun.sh, then re-run `bun run setup`.',
-    );
-  }
-  const parsed = parseBunVersion(bunVersion);
-  if (!parsed || compareVersion(parsed, MIN_BUN) < 0) {
-    preflightFail(
-      `Bun ${bunVersion} is older than required ${MIN_BUN.join('.')}.`,
-      'Upgrade Bun: `bun upgrade` (or reinstall from https://bun.sh).',
-    );
-  }
-  // Probe the real `node` binary, never `process.versions.node`: under Bun that
-  // field is synthesized whether or not Node is installed (the scaffolder's
-  // doctor learned this the hard way). `shell: true` on Windows is the
-  // documented way to resolve a `.cmd` shim; documented, not measured here.
-  const nodeFix = `Install Node >= ${MIN_NODE_MAJOR} (https://nodejs.org): the agent hooks run \`node .agents/hooks/personality-reinject.mjs\` on every prompt.`;
-  const node = spawnSync('node', ['--version'], {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'ignore'],
-    shell: process.platform === 'win32',
-  });
-  if (node.error || node.status !== 0) {
-    preflightFail('Node.js not found on PATH.', nodeFix);
-  }
-  const nodeVersion = (node.stdout ?? '').trim().replace(/^v/, '');
-  const nodeMajor = Number.parseInt(nodeVersion.split('.')[0] ?? '0', 10);
-  if (!nodeMajor || nodeMajor < MIN_NODE_MAJOR) {
-    preflightFail(`Node ${nodeVersion || 'unknown'} is older than required ${MIN_NODE_MAJOR}.`, nodeFix);
-  }
-  if (!existsSync(INQUIRER_MARKER)) {
-    preflightFail(
-      'Project dependencies not installed (node_modules/@inquirer/prompts missing).',
-      'Run `bun install` first, then re-run `bun run setup`.',
-    );
-  }
-  process.stdout.write(`Preflight OK (Bun ${bunVersion}, Node ${nodeVersion}, deps installed)\n`);
-  process.exit(0);
+/**
+ * `--preflight`: an alias of the setup gate (`cli/preflight.ts --for setup
+ * --gate`, node:* only), kept for the scripts and docs that still call it.
+ * `bun setup` calls the gate directly: this file statically imports modules
+ * that need `node_modules`, so on a fresh clone it cannot load before
+ * `bun install` (analysis §8 #3).
+ */
+async function runPreflight(): Promise<never> {
+  const { runSetupGate } = await import('./preflight.ts');
+  const env = process.env;
+  const lang = (env.LC_ALL || env.LC_MESSAGES || env.LANG || '').toLowerCase().startsWith('en') ? 'en' : 'es';
+  process.exit(await runSetupGate({ cwd: REPO_ROOT, lang }));
 }
 
 // ----------------------------------------------------------------------------
@@ -800,6 +746,34 @@ function runPreflight(): never {
  * network inside a command people run to diagnose a broken setup. Cap it, and
  * treat every failure as `unknown`.
  */
+export type OrchestratorState = 'not-configured' | 'not-installed' | 'unreachable' | 'ready';
+
+/**
+ * The orchestrator CLI the project names (`orchestration.orchestrator_cli`), or
+ * null when it names none. On Linux outside an Orca terminal a bare `orca` is the
+ * GNOME screen reader, so the Orca CLI is probed as `orca-ide` there (the same
+ * rule as the orca-orchestration gate).
+ */
+export function orchestratorCli(yamlText: string, platform: string, env: Record<string, string | undefined>): string | null {
+  const m = yamlText.match(/^[ \t]+orchestrator_cli:[ \t]*['"]?([^\s'"#]*)/m);
+  const cli = m?.[1] ?? '';
+  if (cli === '') { return null; }
+  if (cli === 'orca' && platform === 'linux' && !env.ORCA_TERMINAL_HANDLE && !env.ORCA_APP_VERSION) { return 'orca-ide'; }
+  return cli;
+}
+
+/** The orca-orchestration gate: the binary, then `status --json` with the NESTED `result.runtime.reachable`. */
+export function orchestratorState(cli: string | null, spawn: typeof spawnSync = spawnSync): OrchestratorState {
+  if (cli === null) { return 'not-configured'; }
+  const r = spawn(cli, ['status', '--json'], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'] });
+  if ((r.error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') { return 'not-installed'; }
+  try {
+    const parsed = JSON.parse(String(r.stdout ?? '')) as { result?: { runtime?: { reachable?: unknown } } };
+    return parsed.result?.runtime?.reachable === true ? 'ready' : 'unreachable';
+  }
+  catch { return 'unreachable'; }
+}
+
 function tryRunWithTimeout(binary: string, args: string[], timeoutMs: number): { ok: boolean, stdout: string } {
   try {
     const stdout = execFileSync(binary, args, {
@@ -891,6 +865,15 @@ export async function runDoctor(): Promise<DoctorReport> {
     project_schema: projectSchemaDiagnostic(),
     env_schema: envSchemaDiagnostic(),
     harness_level_mcps: harnessLevelMcpReport(),
+    evidence_builder: ((): { ready: boolean, detail: string | null } => {
+      const detail = pythonPreflight();
+      return { ready: detail === null, detail };
+    })(),
+    orchestrator: ((): { cli: string | null, state: OrchestratorState } => {
+      const yamlPath = join(REPO_ROOT, '.agents', 'project.yaml');
+      const cli = orchestratorCli(existsSync(yamlPath) ? readFileSync(yamlPath, 'utf8') : '', process.platform, process.env);
+      return { cli, state: orchestratorState(cli) };
+    })(),
     pending_actions: [],
     warnings: [],
   };
@@ -1088,6 +1071,15 @@ export async function runDoctor(): Promise<DoctorReport> {
     });
   }
 
+  // The evidence builder's interpreter: optional, only /evidence-artifact uses it.
+  if (!report.evidence_builder.ready) {
+    report.warnings.push({
+      type: 'shell_command',
+      target: PILLOW_INSTALL,
+      hint: `Only for the evidence pages (/evidence-artifact): ${report.evidence_builder.detail}.`,
+    });
+  }
+
   // .mcp.json / opencode.jsonc presence, only for a harness in use: a project
   // that dropped one deleted its config on purpose (ADR-0012).
   const harnessInUse = (harness: Harness): boolean => agentCompatibility.harnesses.includes(harness);
@@ -1215,6 +1207,15 @@ function printHuman(report: DoctorReport): void {
     return `${icon} ${host.value}${note}`;
   })();
   checks.push(['Atlassian host (.agents/project.yaml)', hostRow]);
+  checks.push(['Evidence builder (Python 3.9+ and Pillow)', report.evidence_builder.ready ? tui.statusIcon('ok') : `${tui.statusIcon('warn')} optional, see below`]);
+  const orca = report.orchestrator;
+  const orcaText: Record<OrchestratorState, string> = {
+    'not-configured': 'no orchestration.orchestrator_cli in .agents/project.yaml',
+    'not-installed': `${orca.cli} not installed`,
+    'unreachable': `${orca.cli} installed, runtime not reachable (open the app)`,
+    'ready': `${orca.cli} ready`,
+  };
+  checks.push(['Orca (only for /sprint-conductor)', `${tui.statusIcon(orca.state === 'ready' ? 'ok' : 'info')} ${orcaText[orca.state]}`]);
   if (report.worktree_of !== null) {
     checks.push(['Linked worktree of', `${tui.statusIcon('info')} ${report.worktree_of}`]);
   }
@@ -1284,7 +1285,7 @@ function printHuman(report: DoctorReport): void {
     ? `standalone binary${es.binary_version ? ` ${es.binary_version}` : ''}`
     : es.binary === 'devDependency'
       ? `devDependency${es.binary_version ? ` ${es.binary_version}` : ''} (enough: the MCP .env loader runs it through bunx)`
-      : 'not found; run bun install (devDependency) or see bun run setup for the standalone binary';
+      : 'not found; run bun install (devDependency) or see bun setup for the standalone binary';
   process.stdout.write(`  ${tui.statusIcon(es.schema_present ? 'ok' : 'fail')} schema files ${es.schema_present ? 'present' : 'missing (bun run vars:schema)'}\n`);
   process.stdout.write(`  ${tui.statusIcon(es.binary === 'missing' ? 'fail' : 'ok')} varlock: ${binaryNote}\n`);
   if (es.validation === 'ok') {
@@ -1320,7 +1321,7 @@ function printHuman(report: DoctorReport): void {
       for (const gap of report.project_schema.gaps) {
         process.stdout.write(`  ${gap.block}${gap.wholeBlock ? ' (whole block)' : ''}: ${gap.paths.join(', ')}\n`);
       }
-      process.stdout.write('  Fix: bun run up  (offers to insert them, one prompt per block, insert-only)\n');
+      process.stdout.write('  Fix: bun sync  (offers to insert them, one prompt per block, insert-only)\n');
     }
     if (report.project_schema.exempt.length > 0) {
       process.stdout.write(`  silenced via updater.schema_exempt: ${report.project_schema.exempt.join(', ')}\n`);
@@ -1340,8 +1341,8 @@ function printHuman(report: DoctorReport): void {
     const note: Record<CommunitySkillRow['status'], string> = {
       'current': 'up to date with upstream',
       'outdated': 'upstream has moved since install',
-      'not-installed': 'declared but absent — run bun run setup',
-      'untracked': 'installed before the baseline existed; re-run bun run setup to start tracking',
+      'not-installed': 'declared but absent — run bun setup',
+      'untracked': 'installed before the baseline existed; re-run bun setup to start tracking',
       'unknown': 'remote unreachable — no verdict',
     };
     const rows = report.community_skills.map(skill => [
@@ -1427,7 +1428,7 @@ async function offerRetiredEnvCleanup(): Promise<void> {
 
 async function main(): Promise<void> {
   if (process.argv.includes('--preflight')) {
-    runPreflight(); // never returns
+    await runPreflight(); // never returns
     return;
   }
 

@@ -21,6 +21,8 @@
  *     tracked by a content hash in `.template/upstream-sha/<slug>.sha`
  *     (one nudge per upstream change, never on dry-run — afterApply is
  *     skipped there).
+ *  4. Except for a BLOCKING entry (a release prerequisite): it fires on every
+ *     run while its arbiter gate still fails, marker or not.
  *
  * The advisory itself (section-level evidence, the copy-paste prompt, the
  * persisted `.agents/prompts/parity-plan.md`) is rendered by
@@ -156,6 +158,44 @@ export function mergeProtectedWatchlist(upstream: readonly ProtectedWatchEntry[]
   return merged;
 }
 
+/** A test file held back because the file it tests is a kept project copy. */
+export interface HeldTestSibling {
+  /** The `.test.*` file the sync did not deliver or overwrite. */
+  path: string
+  /** The protected file it tests. */
+  protectedPath: string
+}
+
+/** `dir/name.ts` -> `dir/name.test.ts` (also `.js`, `.mjs`); null for any other file. */
+export function testSiblingPath(filePath: string): string | null {
+  const match = /^(.*)\.(ts|js|mjs)$/.exec(filePath.replace(/\\/g, '/'));
+  if (match === null || match[1].endsWith('.test')) { return null; }
+  return `${match[1]}.test.${match[2]}`;
+}
+
+/**
+ * The test siblings of protected files that this run must hold back. A test is
+ * written against upstream's copy of the file it tests; delivering it next to a
+ * kept project copy that differs makes `bun test` fail on code nobody changed
+ * (measured: a project protecting `scripts/lint-skills.ts` got upstream's
+ * `lint-skills.test.ts` and five new failures). Held only while the two copies
+ * differ: a protected file still byte-identical to upstream keeps its test
+ * flowing, so a watched entry does not freeze its test in every project.
+ */
+export function testSiblingsToHoldBack(protectedPaths: readonly string[], repoRoot: string, templateDir: string): HeldTestSibling[] {
+  const held: HeldTestSibling[] = [];
+  for (const protectedPath of protectedPaths) {
+    const sibling = testSiblingPath(protectedPath);
+    if (sibling === null || !fs.existsSync(path.join(templateDir, sibling))) { continue; }
+    const local = path.join(repoRoot, protectedPath);
+    const upstream = path.join(templateDir, protectedPath);
+    if (!fs.existsSync(local) || !fs.existsSync(upstream)) { continue; }
+    if (normalizeForCompare(fs.readFileSync(local, 'utf8')) === normalizeForCompare(fs.readFileSync(upstream, 'utf8'))) { continue; }
+    held.push({ path: sibling, protectedPath });
+  }
+  return held;
+}
+
 /** Default marker directory for watchlist entries (one .sha file per entry). */
 const MARKER_DIR = '.template/upstream-sha';
 
@@ -182,17 +222,31 @@ export interface DriftedEntry extends ProtectedWatchEntry {
   upstreamSha: string
   /** True when this is the first advice ever for this entry (no marker yet). */
   firstAdvice: boolean
+  /**
+   * The entry's prerequisite arbiter (a BLOCKING row's gate) still fails:
+   * reported whatever its marker says, and never seeded silently.
+   */
+  arbiterFailing?: boolean
 }
 
 /**
  * Detect which watchlist entries drifted: upstream exists, local exists,
  * local differs from upstream, and upstream changed since the last advice.
  * Pure with respect to markers — does NOT write them (see persistMarkers).
+ *
+ * `arbiterFails` (optional) answers, for an entry that differs from upstream,
+ * whether the gate of its BLOCKING row still fails. Such an entry is reported
+ * even when its marker already holds this upstream's hash: the marker records
+ * "upstream seen", the arbiter records "project resolved", and a release
+ * prerequisite stays on the table until the arbiter passes. Injected rather
+ * than read from the prerequisite table here, so this module stays free of
+ * the parity layer and its tests run no real gate.
  */
 export function detectProtectedDrift(
   entries: readonly ProtectedWatchEntry[],
   tempDir: string,
   cwd: string,
+  arbiterFails?: (entry: ProtectedWatchEntry) => boolean,
 ): DriftedEntry[] {
   const drifted: DriftedEntry[] = [];
   for (const entry of entries) {
@@ -221,9 +275,11 @@ export function detectProtectedDrift(
     }
     catch { /* unreadable marker — treat as first advice */ }
 
-    if (lastSha === upstreamSha) { continue; } // no NEW upstream change since last nudge
+    const failing = arbiterFails?.(entry) === true;
+    // No NEW upstream change since last nudge, and no failing arbiter holding the row open.
+    if (lastSha === upstreamSha && !failing) { continue; }
 
-    drifted.push({ ...entry, upstreamSha, firstAdvice: lastSha === '' });
+    drifted.push({ ...entry, upstreamSha, firstAdvice: lastSha === '', ...(failing ? { arbiterFailing: true } : {}) });
   }
   return drifted;
 }
@@ -281,6 +337,10 @@ export interface SplitFirstAdviceResult {
  *    run noise the project-declared rule above already avoids for a
  *    narrower case. Skipped when `cursorCheck` is omitted or its `lockCursor`
  *    is unknown (no lock yet): first advice is kept, exactly as before.
+ *
+ * Neither seed rule applies to an entry whose arbiter still fails
+ * (`arbiterFailing`): a release prerequisite is never silenced, whatever its
+ * source or the cursor says. It is always advised.
  */
 export function splitFirstProjectAdvice(
   drifted: readonly DriftedEntry[],
@@ -290,6 +350,7 @@ export function splitFirstProjectAdvice(
   const seeded: DriftedEntry[] = [];
   const seededNoUpstreamChange: DriftedEntry[] = [];
   for (const entry of drifted) {
+    if (entry.arbiterFailing === true) { advised.push(entry); continue; }
     if (entry.source === 'project' && entry.firstAdvice) { seeded.push(entry); continue; }
     if (
       entry.firstAdvice

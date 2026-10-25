@@ -1,28 +1,29 @@
 {
   "schemaVersion": 7,
   "templateRepo": "upex-galaxy/agentic-qa-boilerplate",
-  "templateCommit": "fb5c9f275ba413ca6cb43b9065de338e07f6a934",
+  "templateCommit": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
   "perComponentCommit": {
     "claude-config": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
-    "scripts": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
-    "docs": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
-    "cli": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
-    "vscode": "4f3fd69690ec3141dbae890b06d9d3a547327524",
-    "husky": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
-    "agents-docs": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
-    "tooling": "fa79100d98af3e61b350276b0a91c476938474f2",
+    "scripts": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
+    "docs": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
+    "cli": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
+    "vscode": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
+    "husky": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
+    "agents-docs": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
+    "tooling": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
     "commands": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
-    "skills": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
-    "env-template": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
-    "agent-compatibility": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
-    "codex-config": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
-    "agent-root-config": "1e3bc74a1a43d94ecf0f5627abfdc523c366d338",
-    "config-core": "fa79100d98af3e61b350276b0a91c476938474f2",
-    "env-schema": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5",
-    "worktree-include": "fb5c9f275ba413ca6cb43b9065de338e07f6a934",
-    "orca-config": "fb5c9f275ba413ca6cb43b9065de338e07f6a934",
-    "playwright-cli-config": "fb5c9f275ba413ca6cb43b9065de338e07f6a934",
-    "instructions": "0d2fe26e2ed7a928e4f544cefabbc6bdf893a0d5"
+    "skills": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
+    "env-template": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
+    "agent-compatibility": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
+    "codex-config": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
+    "agent-root-config": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
+    "config-core": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
+    "env-schema": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
+    "worktree-include": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
+    "orca-config": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
+    "playwright-cli-config": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
+    "instructions": "682096966a5a97bb5a8e0caf0ca6823fc7306d46",
+    "tests-utils": "682096966a5a97bb5a8e0caf0ca6823fc7306d46"
   },
   "syncedComponents": [],
   "ignoreFileSync": {
@@ -44,7 +45,7 @@
       ]
     },
     ".gitignore": {
-      "lastSyncedSha": "6b57602b158a4c84ab1565849cecc55928402a20",
+      "lastSyncedSha": "3c8c958c485266512b91153a279a7691af0469f5",
       "appendedLines": [
         ".template/claude-md.upstream.sha",
         "/.agents/prompts/",
@@ -87,14 +88,15 @@
         "!.context/PBI/",
         ".agents/skills/skill-creator/",
         ".agents/skills/diagram-design/",
-        "!.env.provider.schema"
+        "!.env.provider.schema",
+        "!.context/sprint/"
       ]
     }
   },
   "packageJsonSync": {
     "package.json": {
       "scripts": {
-        "lastSyncedSha": "2909b1b73a96a0a541948c612b9f0ca778312d29",
+        "lastSyncedSha": "a2437fcbd9d7234155384a0d12bf201a288d2450",
         "appliedKeys": [
           "vars:env:check",
           "agents:compat",
@@ -122,27 +124,36 @@
           "worktree:audit",
           "instructions:check",
           "env:set",
-          "instructions:audit"
+          "instructions:audit",
+          "board",
+          "board:check",
+          "board:up",
+          "browser:profiles",
+          "context:coverage",
+          "evidence",
+          "shared:check",
+          "sync",
+          "xray:payload"
         ]
       },
       "devDependencies": {
-        "lastSyncedSha": "2909b1b73a96a0a541948c612b9f0ca778312d29",
+        "lastSyncedSha": "a2437fcbd9d7234155384a0d12bf201a288d2450",
         "appliedKeys": [
           "allure-js-commons",
           "varlock"
         ]
       },
       "dependencies": {
-        "lastSyncedSha": "2909b1b73a96a0a541948c612b9f0ca778312d29",
+        "lastSyncedSha": "a2437fcbd9d7234155384a0d12bf201a288d2450",
         "appliedKeys": []
       },
       "lint-staged": {
-        "lastSyncedSha": "2909b1b73a96a0a541948c612b9f0ca778312d29",
+        "lastSyncedSha": "a2437fcbd9d7234155384a0d12bf201a288d2450",
         "appliedKeys": []
       }
     }
   },
   "cliVersion": "8.5",
-  "lastSyncedAt": "2026-10-06T10:31:05.007Z",
+  "lastSyncedAt": "2026-10-25T07:31:22.509Z",
   "variableSystemVersion": 1
 }

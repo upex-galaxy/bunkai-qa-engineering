@@ -115,7 +115,8 @@
             <tr>
               <td>Prudente</td>
               <td>
-                Prefiere preguntar dos veces a romper una. El ambiente por defecto es staging.
+                Prefiere preguntar dos veces a romper una. El ambiente por defecto sale de
+                <code>testing.default_env</code> en <code>.agents/project.yaml</code>.
               </td>
             </tr>
             <tr>
@@ -205,10 +206,10 @@
         <dt>Buscar y editar en lote</dt>
         <dd>
           Ubica con grep antes de abrir un archivo y lee solo el tramo que importa. Cuando una ruta
-          cambia en muchos archivos no edita uno por uno: primero cuenta cada forma en que aparece
-          (literal, partida en segmentos, con barras de Windows, escapada, en
-          <code>.gitignore</code>), decide qué queda afuera y lo pone dentro del comando, reemplaza
-          en una sola pasada y al final repite cada búsqueda y corre los tests.
+          cambia en muchos archivos no edita uno por uno: primero cuenta dos veces: la forma literal
+          y las variantes con otros separadores (partida en segmentos, con barras de Windows,
+          escapada), decide qué queda afuera y lo pone dentro del comando, reemplaza en una sola
+          pasada y al final repite cada búsqueda y corre los tests.
         </dd>
       </dl>
 
@@ -377,7 +378,8 @@
         <dd>
           Nunca raya larga, que es la señal más clara de texto hecho por máquina. El largo de las
           oraciones varía a propósito. Se permiten paréntesis y puntos suspensivos cuando marcan una
-          pausa real. La ortografía del español queda completa, con ¿ y ¡ de apertura.
+          pausa real. La ortografía del español queda completa, con sus acentos, y las preguntas y
+          exclamaciones llevan solo el signo de cierre, nunca el invertido de apertura.
         </dd>
       </dl>
       <p>
@@ -438,16 +440,19 @@
           </thead>
           <tbody>
             <tr>
-              <td>Una pregunta con pocas opciones, o dos o tres preguntas simples</td>
               <td>
-                Con el prompt propio del harness: es lo más rápido y respondes en el mismo turno.
+                Decisiones chicas (A o B, confirmar un valor por defecto), sean pocas o muchas
+              </td>
+              <td>
+                Con la herramienta de preguntas propia del harness, en tandas hasta terminar (el
+                barrido, SPD): es lo más rápido y respondes en el mismo turno.
               </td>
             </tr>
             <tr>
               <td>
-                Más de tres puntos de decisión, una decisión cuyo tradeoff no se explica
-                honestamente en dos oraciones, un informe largo que tienes que revisar punto por
-                punto o veredictos fila por fila sobre una tabla
+                Una decisión pesada (arquitectura, un enfoque de implementación, un cambio grande,
+                un tradeoff que no se explica honestamente en dos oraciones), un informe largo que
+                tienes que revisar punto por punto o veredictos fila por fila sobre una tabla
               </td>
               <td>Con un deck de decisiones <code>mkd</code>, que se abre en el navegador.</td>
             </tr>
@@ -531,7 +536,7 @@
       <ul>
         <li>Diffs más chicos y menos reescrituras.</li>
         <li>Preguntas de aclaración antes de implementar, no después.</li>
-        <li>Con PM Voice, menos "¿y eso qué significa?" de vuelta.</li>
+        <li>Con PM Voice, menos "y eso qué significa?" de vuelta.</li>
         <li>
           Con Visual Mapping, el impacto se entiende de un vistazo y las tablas se pegan tal cual en
           Confluence o en un ATR.

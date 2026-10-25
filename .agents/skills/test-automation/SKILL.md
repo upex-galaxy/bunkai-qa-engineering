@@ -52,7 +52,8 @@ Requires `agentic-qa-core`. Loads on demand:
 
 **Test-automation operational rules:**
 
-- Plan → Code → Review, always in order. Only automate `Candidate` verdicts from `/test-documentation`.
+- Plan → Code → Review, always in order, behind the TC source gate (also first on every resume): in scope = the Tests at `candidate` whose `Verdict signed:` ROI comment has Jira `created` AND `updated` older than this run's start; Manual and recorded-Deferred Tests are listed out of scope. STOP and route to `/test-documentation` only on a named TC that is not a signed Candidate, a Test with no verdict, or zero signed Candidates; never sign or wait inside the run. This skill never creates a Test, scores ROI or fires a verdict transition. Signed ROI is a hard gate, never collapsed.
+- A TC reaches `automated` (labels `+automated -automation-candidate`) only when its code is on the production branch (`git_strategy.branches.production`); a merge into an integration branch or a suite trunk is not `automated`. Canon: `agentic-qa-core/references/discovery-driven-doctrine.md` §6.
 - Fixture selection: API-only → `{ api }` (no browser); UI-only → `{ ui }`; hybrid → `{ test }`.
 - ATC = atomic mini-flow; NEVER calls another ATC. Reusable chains → a Steps module.
 - Max 2 positional params (3+ → object param). Locators inline (extract only at 2+ uses). Imports via aliases (`@api/`, `@schemas/`, `@utils/`) — no relative imports.
@@ -79,7 +80,7 @@ If the invocation could mean either explanation or implementation, ask which out
 
 > **Orchestration & Session contracts**: this skill follows `agentic-qa-core/references/orchestration-doctrine.md` (mandatory subagent dispatch — main thread is command center) AND `agentic-qa-core/references/session-management.md` (Phase 0 resume check, plan-first persistence at `.session/<skill-slug>/<scope>/`, archive on completion). Phase 0 (resume check) and Phase 1 (plan write) are NOT optional. The orchestrator also applies the per-stage **Definition-of-Done gates** in `agentic-qa-core/references/stage-gates.md`: verify a stage's DoD (planning stages include the Test-Design Checklist) BEFORE recording its progress checkpoint and advancing.
 
-This skill is **per-scope**: `<scope>` = `<JIRA-KEY>` (ticket-driven / regression-driven) or `<module-slug>` (module-driven). Session state lives at `.session/test-automation/<scope>/{plan.md, progress.md}` per `agentic-qa-core/references/session-management.md` §3 + §9. The session `plan.md` is a thin INDEX that cites the canonical domain artifacts (`spec.md`, `automation-plan.md`, `atc/*.md`) under the Epic's `test-specs/` tree (`.context/PBI/epics/EPIC-<KEY>-<slug>/test-specs/<scope>/`) — domain content stays in the existing PBI tree, not duplicated.
+This skill is **per-scope**: `<scope>` = `<JIRA-KEY>` (ticket-driven / bug-driven / discovery-driven per gap) or `<module-slug>` (module-driven, discovery-driven per module). Scope names: `agentic-qa-core/references/discovery-driven-doctrine.md` §2. Session state lives at `.session/test-automation/<scope>/{plan.md, progress.md}` per `agentic-qa-core/references/session-management.md` §3 + §9. The session `plan.md` is a thin INDEX that cites the canonical domain artifacts (`spec.md`, `automation-plan.md`, `atc/*.md`) under the Epic's `test-specs/` tree (`.context/PBI/epics/EPIC-<KEY>-<slug>/test-specs/<scope>/`) — domain content stays in the existing PBI tree, not duplicated.
 
 This skill is compliant with the doctrine in `AGENTS.md` §3 "Orchestration Mode" and the session contract in `.agents/skills/agentic-qa-core/references/session-management.md`. Every dispatch follows the 7-component briefing format defined in `.agents/skills/agentic-qa-core/references/briefing-template.md`, and the pattern selected per phase matches the decision guide in `.agents/skills/agentic-qa-core/references/dispatch-patterns.md`. The Plan, Code, and Review phases each carry distinct context-isolation needs — Plan keeps KATA architectural reads out of the orchestrator, Code isolates multi-file edits, Review fans out three independent verifiers in parallel.
 
@@ -130,8 +131,8 @@ Canonical reading order for any AI starting cold on a test-automation workflow. 
 | Playwright browsers | REQUIRED | `bunx playwright` resolves + chromium installed (`bun run pw:install`). |
 | OpenAPI MCP (schema read-only) + `api/schemas/` synced | SCOPE — API/integration tests; needed at **Phase 1 Plan** too | Phase 1 explores endpoints (via the `openapi` MCP, schema-read-only) to design ATCs + classify test-data — plan-time, not just run-time. Api components consume OpenAPI-derived types (`api/schemas/`; refresh `bun run api:sync`); authenticated test-code calls use the Playwright API fixture (`.auth/api-state.json` from `bun run api:login`) — no token / MCP injection, no restart. |
 | DBHub MCP | SCOPE — data setup/validation; needed at **Phase 1 Plan** too | Phase 1 explores the schema (via the `dbhub` MCP) to design data fixtures (Discover / Modify / Generate) — plan-time, not just run-time. `dbhub` answers a schema probe; `DBHUB_*` in `.env`. Unset → fill `.env` + RESTART. |
-| Business context map per touched level | REQUIRED — per level in scope, needed at **Phase 1 Plan** | E2E/UI → `business-e2e-context`, API → `business-api-context`, DB/data setup → `business-data-context`: the skill exists AND `bun run context:map <slug> --list` prints sections, not the placeholder notice. RED → STOP and hand the user `project-context` mode `e2e` / `api` / `data`; a missing skill → `bun run up`. |
-| Issue-tracker (`[ISSUE_TRACKER_TOOL]`) | SCOPE — ticket/regression-driven | ATP + AC reads via `bun run jira:sync-issues`; TMS modality for the ATP source. Pure module-driven from an existing spec may not need it. |
+| Business context map per touched level | REQUIRED — per level in scope, needed at **Phase 1 Plan** | E2E/UI → `business-e2e-context`, API → `business-api-context`, DB/data setup → `business-data-context`: the skill exists AND `bun run context:map <slug> --list` prints sections, not the placeholder notice. RED → STOP and hand the user `project-context` mode `e2e` / `api` / `data`; a missing skill → `bun sync`. |
+| Issue-tracker (`[ISSUE_TRACKER_TOOL]`) | SCOPE — ticket/bug/discovery-driven | ATP + AC reads via `bun run jira:sync-issues`; TMS modality for the ATP source. Pure module-driven from an existing spec may not need it. |
 
 Surfaces (UI vs API vs both) follow the chosen planning scope + the ATCs Phase 1 designs — NEVER a user question (reference §5). After the gate clears (generic baseline + the surface tools the scope needs GREEN), continue to Phase 0 below.
 
@@ -141,7 +142,7 @@ Surfaces (UI vs API vs both) follow the chosen planning scope + the ATCs Phase 1
 
 Before picking the planning scope, run the session resume contract from `agentic-qa-core/references/session-management.md` §4:
 
-1. Determine the prospective `<scope>` from the invocation context (ticket key, regression-driven TC, or module slug — see "Pick the planning scope first" below).
+1. Determine the prospective `<scope>` from the invocation context (ticket key, bug-driven TC, or module slug — see "Pick the planning scope first" below).
 2. Check `.session/test-automation/<scope>/progress.md`.
 3. If it does NOT exist → proceed to scope picker + Phase 1.
 4. If it DOES exist:
@@ -149,6 +150,7 @@ Before picking the planning scope, run the session resume contract from `agentic
    - Read the cited canonical `spec.md` / `automation-plan.md` / `atc/*.md` under `.context/PBI/epics/EPIC-<KEY>-<slug>/test-specs/<scope>/` for the domain content.
    - Surface to the user: last completed phase (Plan / Code / Review) + next phase + open Review findings if any.
    - Offer **resume / restart / abort**. On `restart`, archive to `.session/.archive/<YYYY-MM-DD>-test-automation-<scope>-aborted/` before proceeding.
+   - On `resume`, run the TC source gate (below) FIRST, before the phase it resumes: a plan written before the gate existed may list unsigned TCs.
 
 Phase 0 is inline (no subagent).
 
@@ -156,19 +158,35 @@ Phase 0 is inline (no subagent).
 
 ## Pick the planning scope first
 
-Every automation session starts by choosing one of three planning scopes. Pick once, then follow the Plan → Code → Review pipeline.
+Every automation session starts by choosing its planning scope. Pick once, then follow the Plan → Code → Review pipeline. The scope names the ORIGIN; Macro / Medium / Micro only size the work package (canonical: `agentic-qa-core/references/discovery-driven-doctrine.md` §2).
 
 | Scope | Input | Output | Use when |
 |-------|-------|--------|----------|
 | **Module-driven** (Macro) | A module name + list of candidate TCs | One module spec + N ATC specs | Batch-automating an entire module (10+ tests). First pass on a new area. |
 | **Ticket-driven** (Medium) | A single ticket/story ID with scenarios | One implementation plan for that ticket | Automating one user story end-to-end. Default for sprint work. |
-| **Regression-driven** (Micro) | One specific TC (often after a bug fix) | One ATC implementation plan | Adding a single regression test after a fix. Smallest unit of work. |
+| **Bug-driven** (Micro) | One specific TC (often after a bug fix) | One ATC implementation plan | Adding a single regression test after a fix. Smallest unit of work. Legacy name: Regression-driven. |
+| **Discovery-driven** (Macro per module; Medium or Micro per gap) | The signed Candidate TCs of a coverage Tech Story (no Story behind them) | Same outputs as the matching size above | Covering behaviour already in production that no Story specified. Its TCs passed the oracle rule and the ROI upstream; a bare gap is not an input. |
 
 When in doubt, ask the user which scope. Never assume "module" just because multiple TC IDs appear in the briefing.
 
-**These scopes consume the `Candidate` verdicts from `/test-documentation`** (Stage 4) — only `Candidate` TCs reach automation; `Manual` / `Deferred` are terminal. The mapping from that skill's 4 documentation scopes: `Module (Macro) ← module-driven`, `Ticket (Medium) ← ticket-driven`, `Regression-driven (Micro) ← bug-driven`. Candidates from an `ad-hoc / exploratory` documentation session enter under whichever fits — a module batch, or regression-driven for a single TC.
+**These scopes consume the `Candidate` verdicts from `/test-documentation`** (Stage 4) — only `Candidate` TCs reach automation; `Manual` / `Deferred` are terminal. Both skills use the same scope names: `module-driven` (Macro), `ticket-driven` (Medium), `bug-driven` (Micro), `discovery-driven` (sized by its gap). Candidates from an `ad-hoc / exploratory` documentation session enter under whichever fits — a module batch, or a Micro package for a single TC.
 
 ---
+
+## TC source gate (Phase 0 by TC source, MANDATORY before Plan)
+
+Runs after the scope is picked and before the first planning read, and again FIRST on every resume, whatever phase the resume lands on. The TCs come from the TMS, never from this skill. Before reading Jira, append `## Phase 0 — TC source gate — <ts>` to `.session/test-automation/<scope>/progress.md`: that timestamp is this run's start.
+
+| Scope | Tests looked at |
+|---|---|
+| ticket-driven | the Story's Tests (its `ATS:` Test Set membership, or its direct TC→Story links where no ATS can exist) |
+| bug-driven | the Test linked to the bug (`tests / is tested by`) |
+| module-driven | the module's Tests at `{{jira.status.test_case.candidate}}` (JQL by component + status) |
+| discovery-driven | the Tests of the coverage Tech Story's `ATS:` Test Set |
+
+**In scope** = the Tests at `{{jira.status.test_case.candidate}}` (or `in_automation` / `pull_request` on a resume) whose ROI comment carries a `Verdict signed:` line (format and the sign-only pass: `test-documentation/references/tms-conventions.md` §9) and whose Jira `created` AND `updated` timestamps both predate this run's start. Read status and comments this run through `[ISSUE_TRACKER_TOOL]`: the work item view of the `comment` field returns each comment's `id`, `created` and `updated` (the comment-list output does not), and the sync never writes a Test (`test_case` declares `sync: never`). A signature written or edited during this run keeps the gate closed; a local file, a plan, a label or a value this session wrote is not evidence (fail-closed, `agentic-qa-core/references/orchestration-doctrine.md`). While the agent works on the person's own tracker token this is the strongest evidence available; a code check is the follow-up (`agentic-qa-core/references/discovery-driven-doctrine.md` §8).
+
+**Out of scope, listed in the plan, never a stop**: Tests at `{{jira.status.test_case.manual}}`; Tests at `{{jira.status.test_case.ready}}` with a recorded Deferred verdict (their ROI comment, or the mirrored Deferred list on the coverable); Candidates without a valid signature, listed for the sign-only pass. **STOP and report**, routing the scope (Story key, coverage Tech Story key, or gap ids) to `/test-documentation`, only when a TC the request names is not a signed Candidate, a Test in the list has no verdict at all (no ROI record: undocumented or still in design), or the scope yields zero signed Candidates. This skill never runs the sign-only pass, and never waits for it, inside the run it gates: a later run re-reads Jira. Signed ROI is a hard gate with no collapse path (`agentic-qa-core/references/stage-gates.md` §Automation).
 
 ## Batch mode (fleet) — optional second executor
 
@@ -176,7 +194,7 @@ A batch (module-driven, or several ticket-driven scopes queued together) runs **
 
 A **batch fleet** — several persistent sessions working different Work Packages at once, coordinated by a conductor — is opt-in. Enter it only when the user asks for it, or when the batch holds 3+ Work Packages that touch **disjoint modules**. Everything below is a scoping rule; the launch and lifecycle transport lives in `orca-orchestration/SKILL.md` (`[ORCHESTRATION_TOOL]`), never here.
 
-- **Work Package (WP) = one delivery unit = one `test-specs/<ID>/` spec** (`spec.md` + `automation-plan.md` + `atc/*.md` under the Epic's `test-specs/` tree). Sprint origin: the `Candidate` TCs of one Story. Discovery origin: a Tech Story. A batch is a list of WPs, never a list of files.
+- **Work Package (WP) = one delivery unit = one `test-specs/<ID>/` spec** (`spec.md` + `automation-plan.md` + `atc/*.md` under the Epic's `test-specs/` tree). Sprint origin: the `Candidate` TCs of one Story. Discovery origin: the signed Candidates of a coverage Tech Story. The conductor runs the TC source gate before partitioning. A batch is a list of WPs, never a list of files.
 - **Partition by module, not by ticket.** One worker owns every WP that touches a module's components; WPs sharing a module run **sequentially inside that worker**. NEVER two workers on the same module — same-module WPs share Pages / Apis / fixtures and collide in the files with the least merge tolerance.
 - **One worktree per worker.** This skill writes code, and two sessions in one checkout contend on the git index even when their files are disjoint. Branch + PR per `git_strategy` (`sdet` = one trunk, see `.agents/skills/git-flow-master/references/sdet-integration-trunk.md`).
 - **The conductor regenerates `kata-manifest.json` per integration** (`bun run kata:manifest`). It is generated output — never hand-merged, never resolved as a text conflict.
@@ -250,17 +268,17 @@ bun run lint:check                         # ESLint, no errors
 
 If any step fails, fix before moving to Review.
 
-6. **Signal it in the TMS** — per TC, both signals, neither optional:
-   - **Link**: bind the automated test to the manual `Test` it automates via the `test_automation`
-     link type (`{{jira.link_types.test_automation}}`, outward `automation test for` — slug-resolved,
-     never a literal; catalog: `agentic-qa-core/references/traceability-linking.md` §3).
-   - **Labels**: ADD `automated` on the `Test` and REMOVE `automation-candidate` — the two are
+6. **Signal it in the TMS** — per TC:
+   - **No separate automated Test issue.** The `@atc('<TC_KEY>')` id IS the TC's key, so the TC
+     itself is the automated test: each run result is recorded on the TC (one Xray run per ATC,
+     imported by its key; the import never creates a Test, `regression-testing/references/ci-cd-integration.md`).
+     Never create a second "automated" Test, and never link one to the TC.
+   - **Labels**, not optional: ADD `automated` on the `Test` and REMOVE `automation-candidate` — the two are
      mutually exclusive (`test-documentation/SKILL.md` §Labels). Flip them at the point the TC
-     actually reaches **AUTOMATED** (see §Git & TMS handoff: the `merged` transition after the
-     suite PR lands on `main` with CI green), not on a merge into the integration trunk.
+     actually reaches **AUTOMATED** (see §Git & TMS handoff: the `merged` transition once the
+     code is on the production branch with CI green), not on a merge into an integration branch or a suite trunk.
 
 ```
-[ISSUE_TRACKER_TOOL] Link work items: {AUTOMATED_TEST_KEY} -> {TC_KEY}  type: {{jira.link_types.test_automation}}
 [ISSUE_TRACKER_TOOL] Update work item: {TC_KEY}  labels: + automated  - automation-candidate
 ```
 
@@ -295,22 +313,24 @@ Use the dispatch defined in §Subagent Dispatch Strategy: **Parallel** (3 simult
 
 Run the review checklist on the new/modified files. Treat every failed item as a blocker. A clean review is the merge gate. See `references/review-checklists.md` for the full lists (E2E and API have overlapping but distinct checklists).
 
-**Required separate verifier** — before merge, run `/pr-review-lead` or `/judgment-day` against the diff in a clean context (a fresh session/subagent with no memory of how the code was written). This is not opt-in and not limited to high-risk changes: Automation is the only stage whose autonomy reaches 3, and per `agentic-qa-core/references/stage-gates.md` it is the only stage with a mandatory separate verifier — more rope on the way in is paid for with a harder check on the way out. `/judgment-day` runs two blind judges in parallel against the diff and only approves when both agree (see `.agents/skills/judgment-day/SKILL.md`); `/pr-review-lead` runs a QA-lead-style review grounded in KATA doctrine. Pick whichever fits the change; skipping this step is a Review DoD failure, not a shortcut.
+**Required separate verifier** — before merge, run `/pr-review-lead` or `/judgment-day` against the diff in a clean context (a fresh session/subagent with no memory of how the code was written). This is not opt-in and not limited to high-risk changes: Automation is the only stage with a mandatory separate verifier (`agentic-qa-core/references/stage-gates.md`, contract table) and its autonomy rises from 2 to 3 inside the approved plan — more rope on the way in is paid for with a harder check on the way out. `/judgment-day` runs two blind judges in parallel against the diff and only approves when both agree (see `.agents/skills/judgment-day/SKILL.md`); `/pr-review-lead` runs a QA-lead-style review grounded in KATA doctrine. Pick whichever fits the change; skipping this step is a Review DoD failure, not a shortcut.
 
 **Light stage verifier** (closes the Automation stage) — run the eight-line template in `agentic-qa-core/references/artifact-lifecycle.md` §5. Stage-specific lines:
 
 ```
 [ ] Every in-scope TC at {{jira.status.test_case.in_automation}} or beyond (start_automation fired)
-[ ] TCs bound to their automated test via the {{jira.link_types.test_automation}} link
+[ ] Every ATC carries its TC's own key (`@atc('<TC_KEY>')`); no separate automated Test issue created
 [ ] Labels flipped only at the status they belong to (+automated / -automation-candidate
-    at `merged`, never at trunk merge)
+    at `merged`, never at a trunk or integration merge)
 [ ] No TC left at {{jira.status.test_case.candidate}} with code already written for it
+[ ] No TC at {{jira.status.test_case.pull_request}} whose spec is already on the production branch
+    (backstop for the post-promotion `merged` pass, discovery-driven-doctrine.md §6)
 [ ] Any unmapped slug went through the §4 fallback (asked), never a silent skip
 ```
 
 **Progress checkpoint + Archive**: after Phase 3 returns ACCEPT (all 3 Verifiers exit 0), the orchestrator appends `## Phase 3 — Review — <ts>` with `status: completed`, `next: stop` to `.session/test-automation/<scope>/progress.md`, then runs Archive per `agentic-qa-core/references/session-management.md` §8: moves `.session/test-automation/<scope>/` to `.session/.archive/<YYYY-MM-DD>-test-automation-<scope>/` (two-file dir preserved) and calls `mem_session_summary` including the archive path. On REJECT, archive does NOT run — the working directory stays for debug.
 
-#### Git & TMS handoff (sdet integration-trunk suites)
+#### Git & TMS handoff (suites with a trunk or an integration branch)
 
 This skill stops at a clean local review. It does **not** create branches, push, or open PRs — that is `/git-flow-master`'s job. When the repo's git strategy is `sdet` (the standing mode for chained test-automation suites), each ticket flows through the per-ticket loop in `.agents/skills/git-flow-master/references/sdet-integration-trunk.md`:
 
@@ -323,9 +343,9 @@ This skill stops at a clean local review. It does **not** create branches, push,
   |---|---|---|
   | Phase 2 — Code opens | `{{jira.transition.test_case.start_automation}}` | `{{jira.status.test_case.in_automation}}` |
   | ticket PR opens into the trunk | `{{jira.transition.test_case.create_pr}}` | `{{jira.status.test_case.pull_request}}` |
-  | final suite PR merges to `main`, CI green there | `{{jira.transition.test_case.merged}}` | `{{jira.status.test_case.automated}}` |
+  | the code reaches the production branch (`git_strategy.branches.production`; the final suite PR under `sdet`), CI green there | `{{jira.transition.test_case.merged}}` | `{{jira.status.test_case.automated}}` |
 
-  Merging into the trunk is NOT `automated`. Execute transitions via `/test-documentation` + `[ISSUE_TRACKER_TOOL]`; resolve every slug through `.agents/jira-workflows.json`, and on an unmapped slug run the `artifact-lifecycle.md` §4 fallback instead of skipping.
+  Merging into the trunk is NOT `automated`, and the same holds for any strategy with an integration branch (`main-integration` and the like): `automated` means the code is on the production branch (`agentic-qa-core/references/discovery-driven-doctrine.md` §6). Execute transitions via `/test-documentation` + `[ISSUE_TRACKER_TOOL]` (`merged` through its mode `post-promotion`, once the spec is on the production branch); resolve every slug through `.agents/jira-workflows.json`, and on an unmapped slug run the `artifact-lifecycle.md` §4 fallback instead of skipping.
 
 ---
 
@@ -462,7 +482,7 @@ export class UiFixture extends TestContext {
 
 ## Anti-patterns — NEVER do these
 
-**T1.** NEVER auto-generate tests for TCs that `/test-documentation` flagged as Deferred or Manual — only `Candidate` (`to_be_automated`) verdicts proceed to automation. Skipping the ROI verdict produces flaky, low-value suites.
+**T1.** NEVER auto-generate tests for TCs that `/test-documentation` flagged as Deferred or Manual — only `Candidate` (`to_be_automated`) verdicts proceed to automation. Skipping the ROI verdict produces flaky, low-value suites. NEVER create a Test in the TMS to fill a gap either: a missing TC goes to `/test-documentation` (§"TC source gate").
 
 **T2.** NEVER skip the Plan phase. Even for a "simple" regression test, write `spec.md` / `automation-plan.md` (or the per-ATC plan under `.context/PBI/epics/EPIC-<KEY>-<slug>/test-specs/<scope>/`) BEFORE writing any test code. Plan → Code → Review is non-negotiable.
 

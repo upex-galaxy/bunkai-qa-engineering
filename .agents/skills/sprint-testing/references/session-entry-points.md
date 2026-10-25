@@ -188,7 +188,7 @@ These provide business flows, journeys and feature inventory, API contracts + au
 
 The context hierarchy is: Project (system-wide) -> Epic/Module (feature area like Orders, Dashboard — module = Epic, 1:1) -> Story (individual ticket).
 
-Derive `<EPIC_KEY>` from the ticket's parent epic and `<EPIC_SLUG>` from the epic/module field — kebab-case (e.g. "Monthly Statement Improvements" -> `monthly-statement`). The module folder is `epics/EPIC-<EPIC_KEY>-<EPIC_SLUG>/`.
+Derive `<EPIC_KEY>` from the ticket's parent epic and `<EPIC_SLUG>` from the epic/module field — kebab-case (e.g. "Checkout Improvements" -> `checkout`). The module folder is `epics/EPIC-<EPIC_KEY>-<EPIC_SLUG>/`.
 
 **Jira owns the module context.** It lives in the Epic `description`, under a `## Module Context (QA)` heading, and `bun run jira:sync-issues` splits that section out into `module-context.md`. There is no dedicated custom field on purpose: `description` exists on every Jira instance, so this works on a project that never provisions a single custom field.
 
@@ -223,6 +223,8 @@ bun run jira:sync-issues get <EPIC_KEY>          # read the synced epic.md
 # 2. Materialize it back as module-context.md
 bun run jira:sync-issues get <EPIC_KEY>
 ```
+
+**A fleet worker does not publish.** In fleet mode (`fleet-conductor.md` §3) the worker keeps the drafted body, or what it learned about an existing one, under a `## Module Learnings (candidate)` heading in its own `test-session-memory.md`, and the conductor publishes it at the issue close (`fleet-conductor.md` §10 "Module learnings"): several workers replacing one Epic section race, and the last writer erases the others.
 
 If a `## Module Context (QA)` section already exists in the description, REPLACE that section only and leave the rest untouched. Module context is REUSABLE — the next ticket in the same module reads it from Jira and skips exploration, on any machine, not just the one that explored.
 
@@ -423,18 +425,18 @@ Actions:
    - API on `{{API_URL}}` via `[API_TOOL]`.
    - DB cross-validation via `[DB_TOOL]` on `{{DB_MCP}}`.
 3. Use TCs as guides but explore beyond them (edge cases, boundaries, data variations, user perspectives). Create new TCs for significant discoveries.
-4. Update TC statuses in the TMS (PASSED / FAILED).
+4. Update TC statuses in the TMS: PASSED / FAILED only when observed in the precondition's environment, else NOT RUN with its ladder reason.
 5. Bug reporting — file any issues per `references/reporting-templates.md` (Bug Report template).
-6. Decision: PASSED -> Stage 3. BLOCKED -> wait, retry. FAILED -> triage first (a FAIL is not auto-Critical). A **blocking** failure (smoke/env down, data integrity, security-exploitable) stops the pass and is surfaced now; a **non-blocking** finding is logged, the TC marked FAILED, and the pass continues — surface it at Stage 2 close. See `exploration-patterns.md` "Finding triage".
+6. Decision: PASSED (incl. recorded deferrals) -> Stage 3. BLOCKED -> run the blocking ladder (recreate -> QA defers with a follow-up task -> developers -> owner if unsure; `agentic-qa-core/references/discovery-driven-doctrine.md` §5), never an open-ended wait. FAILED -> triage first (a FAIL is not auto-Critical). A **blocking** failure (smoke/env down, data integrity, security-exploitable) stops the pass and is surfaced now; a **non-blocking** finding is logged, the TC marked FAILED, and the pass continues — surface it at Stage 2 close. See `exploration-patterns.md` "Finding triage".
 
 Output checkpoint:
 
 ```markdown
 ## Stage 2 Complete
 - [ ] Smoke: PASSED / FAILED
-- [ ] Deep exploration: PASSED / FAILED / BLOCKED
+- [ ] Deep exploration: PASSED / FAILED / NOT RUN (BLOCKED or DEFERRED (execution), reason recorded)
 - [ ] Bugs created: N (or none)
-- [ ] Recommendation: APPROVE / REJECT / WAIT
+- [ ] Recommendation: APPROVE / REJECT / LADDER (a case still BLOCKED: name the ladder step it is on, never an open-ended wait)
 ```
 
 ### Stage 3 — Reporting (overview)
@@ -449,7 +451,7 @@ Actions:
 2. Fill the ATR Test Report via `[TMS_TOOL] atr update {ATR-ID} --report "..."` (or write `{{jira.acceptance_test_results}}` / fallback comment in Modality jira-native). Mark ATR complete.
 3. Materialize the read-only cache (never hand-written) per modality: jira-native -> `bun run jira:sync-issues get <KEY> --include-comments` -> `acceptance-test-results.md` in the STORY folder; jira-xray -> `bun run jira:sync-issues get <ATR_KEY>` -> `.context/PBI/test-executions/ATR-<ATR_KEY>-<slug>.md`.
 4. Post the QA comment to the ticket via `[ISSUE_TRACKER_TOOL]`. Use the user-story templates (PASSED / FAILED) from `reporting-templates.md`.
-5. Transition the ticket via substrate. Decision tree: Story PASSED -> `{{jira.transition.story.qa_sign_off}}`; Bug PASSED -> `{{jira.transition.bug.retest_passed}}`; Story FAILED with `{{FORMAL_BLOCKED_GATE}}=true` -> `{{jira.transition.story.defect_reported}}` (`in_test` -> `blocked`); Story FAILED non-strict (flag false or no `blocked` slug) -> leave in `{{jira.status.story.in_test}}` with linked bug; Bug FAILED -> leave in `{{jira.status.bug.ready_for_qa}}` (or `back` / `re_open` if previously closed). See `sprint-orchestration.md` Briefing 4 Step 5 for the full decision tree.
+5. Transition the ticket via substrate. Decision tree: Story PASSED (every case PASSED, or `DEFERRED (execution)` listed in the QA comment for the signer) -> `{{jira.transition.story.qa_sign_off}}`; Bug PASSED -> `{{jira.transition.bug.retest_passed}}`; Story FAILED with `{{FORMAL_BLOCKED_GATE}}=true` -> `{{jira.transition.story.defect_reported}}` (`in_test` -> `blocked`); Story FAILED non-strict (flag false or no `blocked` slug) -> leave in `{{jira.status.story.in_test}}` with linked bug; Bug FAILED -> leave in `{{jira.status.bug.ready_for_qa}}` (or `back` / `re_open` if previously closed). See `sprint-orchestration.md` Briefing 4 Step 5 for the full decision tree.
 6. Attach evidence screenshot paths for the user.
 
 Output checkpoint:
