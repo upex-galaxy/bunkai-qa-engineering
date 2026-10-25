@@ -25,8 +25,14 @@ test.describe('BK-1079: Zero-scope token guard (API)', { tag: ['@regression'] },
       await api.token.issueTokenWithoutScopes(name);
     }
     finally {
-      for (const leakedId of await api.token.findActiveTokenIds(name)) {
-        await api.auth.revokeToken(leakedId);
+      // Safety net only: a cleanup failure must not replace the test's own error.
+      try {
+        for (const leakedId of await api.token.findActiveTokenIds(name)) {
+          await api.auth.revokeToken(leakedId);
+        }
+      }
+      catch (error) {
+        console.warn(`[BK-1231] token cleanup failed for ${name}:`, error);
       }
     }
   });

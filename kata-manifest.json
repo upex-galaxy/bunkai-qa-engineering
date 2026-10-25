@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-10-25T21:10:05.628Z",
+  "generatedAt": "2026-10-25T21:18:46.195Z",
   "components": {
     "api": [
       {
@@ -81,7 +81,7 @@
           {
             "id": "BK-1042",
             "method": "submitTokenWithoutScopes",
-            "line": 73
+            "line": 74
           }
         ]
       }

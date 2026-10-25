@@ -15,6 +15,7 @@
  *   - Create     → [data-testid="issue-token-create"], disabled while the form is invalid
  */
 
+import type { Request } from '@playwright/test';
 import type { TestContextOptions } from '@TestContext';
 
 import { expect } from '@playwright/test';
@@ -62,10 +63,10 @@ export class TokensPage extends UiBase {
    *
    * IMPORTANT: Call goto() before this ATC.
    * Opens the dialog, types a name with every scope unchecked, then tries to
-   * submit twice (Enter in the name field, a forced click on the disabled
-   * Create button). Verifies the inline error copy, the disabled Create button,
-   * the fieldset's aria-invalid + aria-describedby link to the error, and that
-   * no POST /tokens left the browser. Checking a scope must clear the error;
+   * submit twice (Enter in the name field, a click on Create with its disabled
+   * attribute stripped, which reaches the submit handler's own guard). Verifies
+   * the inline error copy, the disabled Create button, the aria-invalid +
+   * aria-describedby links to the error, and that no POST /tokens left the browser. Checking a scope must clear the error;
    * the dialog is then cancelled so nothing is created.
    *
    * @param name - Unique token name for this run (e.g. `qa-tc18-<run id>`)
@@ -73,46 +74,58 @@ export class TokensPage extends UiBase {
   @atc('BK-1042')
   async submitTokenWithoutScopes(name: string): Promise<void> {
     const tokenPosts: string[] = [];
-    this.page.on('request', (request) => {
+    const recordTokenPost = (request: Request): void => {
       if (request.method() === 'POST' && /\/api\/v1\/tokens(?:\?|$)/.test(request.url())) {
         tokenPosts.push(request.url());
       }
-    });
+    };
+    this.page.on('request', recordTokenPost);
 
-    await this.page.getByTestId('issue-token-open').click();
-    const dialog = this.page.getByTestId('issue-token-modal');
-    await expect(dialog).toBeVisible();
+    try {
+      await this.page.getByTestId('issue-token-open').click();
+      const dialog = this.page.getByTestId('issue-token-modal');
+      await expect(dialog).toBeVisible();
 
-    const scopes = dialog.getByRole('checkbox');
-    await expect(scopes.first()).toBeVisible();
-    for (const scope of await scopes.all()) {
-      await expect(scope).not.toBeChecked();
+      const scopes = dialog.getByRole('checkbox');
+      await expect(scopes.first()).toBeVisible();
+      for (const scope of await scopes.all()) {
+        await expect(scope).not.toBeChecked();
+      }
+
+      const nameInput = dialog.getByTestId('issue-token-name');
+      const create = dialog.getByTestId('issue-token-create');
+      await nameInput.fill(name);
+      await nameInput.press('Enter');
+
+      // Fixed assertions - the form is blocked and says why
+      const fieldset = dialog.getByRole('group', { name: /^Scopes/ });
+      const error = dialog.locator(`#${SCOPES_ERROR_ID}`);
+      await expect(error).toHaveText(SCOPES_REQUIRED_MESSAGE);
+      await expect(create).toBeDisabled();
+      await expect(fieldset).toHaveAttribute('aria-invalid', 'true');
+      await expect(fieldset).toHaveAttribute('aria-describedby', SCOPES_ERROR_ID);
+      await expect(create).toHaveAttribute('aria-describedby', SCOPES_ERROR_ID);
+
+      // A browser never dispatches a click to a disabled button, even forced: strip the
+      // attribute so the click reaches the submit handler's own zero-scope guard.
+      await create.evaluate(button => button.removeAttribute('disabled'));
+      await create.click();
+      await expect(dialog).toBeVisible();
+      await expect(error).toHaveText(SCOPES_REQUIRED_MESSAGE);
+
+      // Checking a scope clears the error and enables Create
+      await scopes.first().check();
+      await expect(error).toBeHidden();
+      await expect(fieldset).not.toHaveAttribute('aria-invalid', 'true');
+      await expect(create).toBeEnabled();
+
+      // Leave without creating: Cancel closes the dialog
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+      await expect(dialog).toBeHidden();
     }
-
-    const nameInput = dialog.getByTestId('issue-token-name');
-    await nameInput.fill(name);
-    await nameInput.press('Enter');
-    const create = dialog.getByTestId('issue-token-create');
-    await create.click({ force: true });
-
-    // Fixed assertions - the form is blocked and says why
-    const fieldset = dialog.getByRole('group', { name: /^Scopes/ });
-    const error = dialog.locator(`#${SCOPES_ERROR_ID}`);
-    await expect(error).toHaveText(SCOPES_REQUIRED_MESSAGE);
-    await expect(create).toBeDisabled();
-    await expect(fieldset).toHaveAttribute('aria-invalid', 'true');
-    await expect(fieldset).toHaveAttribute('aria-describedby', SCOPES_ERROR_ID);
-    await expect(dialog).toBeVisible();
-
-    // Checking a scope clears the error and enables Create
-    await scopes.first().check();
-    await expect(error).toBeHidden();
-    await expect(fieldset).not.toHaveAttribute('aria-invalid', 'true');
-    await expect(create).toBeEnabled();
-
-    // Leave without creating: Cancel closes the dialog
-    await dialog.getByRole('button', { name: 'Cancel' }).click();
-    await expect(dialog).toBeHidden();
+    finally {
+      this.page.off('request', recordTokenPost);
+    }
 
     expect(tokenPosts, 'no POST /api/v1/tokens may leave the browser').toEqual([]);
   }

@@ -6,9 +6,9 @@
  * Scopes fieldset for assistive technology (absorbs the a11y check of BK-1230).
  *
  * Runs on the member session of `ui-auth.setup.ts`. The read-back of the token
- * list goes through the page's cookie session: the Bearer from api-state.json
- * is cleared first because that PAT is revoked by the teardown of any earlier
- * integration run. Nothing is created when the test passes; if a regression
+ * list goes through `page.request`, which shares the browser context cookies.
+ * The Bearer from api-state.json is cleared first: that PAT is revoked by the
+ * teardown of any earlier integration run. Nothing is created when the test passes; if a regression
  * ever issues the token, the `finally` block revokes it by id.
  */
 
@@ -26,8 +26,14 @@ test.describe('BK-1079: Zero-scope token guard (UI)', { tag: ['@regression'] }, 
       expect(await kata.api.token.findActiveTokenIds(name)).toEqual([]);
     }
     finally {
-      for (const leakedId of await kata.api.token.findActiveTokenIds(name)) {
-        await kata.api.auth.revokeToken(leakedId);
+      // Safety net only: a cleanup failure must not replace the test's own error.
+      try {
+        for (const leakedId of await kata.api.token.findActiveTokenIds(name)) {
+          await kata.api.auth.revokeToken(leakedId);
+        }
+      }
+      catch (error) {
+        console.warn(`[BK-1042] token cleanup failed for ${name}:`, error);
       }
     }
   });
