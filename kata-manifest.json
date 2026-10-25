@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-10-25T22:02:45.566Z",
+  "generatedAt": "2026-10-25T22:05:40.381Z",
   "components": {
     "api": [
       {
@@ -11,17 +11,17 @@
           {
             "id": "BK-1090",
             "method": "searchAtcs",
-            "line": 147
+            "line": 167
           },
           {
             "id": "BK-149",
             "method": "createAtc",
-            "line": 72
+            "line": 92
           },
           {
             "id": "BK-156",
             "method": "updateAtc",
-            "line": 111
+            "line": 131
           }
         ]
       },
@@ -43,6 +43,35 @@
         ]
       },
       {
+        "name": "CoverageApi",
+        "file": "CoverageApi.ts",
+        "relativePath": "tests/components/api/CoverageApi.ts",
+        "atcs": [
+          {
+            "id": "BK-1070",
+            "method": "readCoverageKpis",
+            "line": 108
+          },
+          {
+            "id": "BK-1071",
+            "method": "readAcceptanceCriterionState",
+            "line": 152
+          }
+        ]
+      },
+      {
+        "name": "ProjectApi",
+        "file": "ProjectApi.ts",
+        "relativePath": "tests/components/api/ProjectApi.ts",
+        "atcs": []
+      },
+      {
+        "name": "RunApi",
+        "file": "RunApi.ts",
+        "relativePath": "tests/components/api/RunApi.ts",
+        "atcs": []
+      },
+      {
         "name": "TokenApi",
         "file": "TokenApi.ts",
         "relativePath": "tests/components/api/TokenApi.ts",
@@ -53,6 +82,12 @@
             "line": 78
           }
         ]
+      },
+      {
+        "name": "WorkspaceApi",
+        "file": "WorkspaceApi.ts",
+        "relativePath": "tests/components/api/WorkspaceApi.ts",
+        "atcs": []
       }
     ],
     "ui": [
@@ -87,12 +122,24 @@
       }
     ]
   },
-  "steps": [],
+  "steps": [
+    {
+      "name": "SandboxSteps",
+      "file": "SandboxSteps.ts",
+      "relativePath": "tests/components/steps/SandboxSteps.ts",
+      "methods": [
+        "bindAtc",
+        "close",
+        "createSingleAtcTest",
+        "open"
+      ]
+    }
+  ],
   "summary": {
-    "totalComponents": 5,
-    "totalATCs": 9,
-    "apiComponents": 3,
+    "totalComponents": 9,
+    "totalATCs": 11,
+    "apiComponents": 7,
     "uiComponents": 2,
-    "stepsModules": 0
+    "stepsModules": 1
   }
 }

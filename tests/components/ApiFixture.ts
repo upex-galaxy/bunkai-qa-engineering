@@ -19,7 +19,11 @@ import type { TestContextOptions } from '@TestContext';
 import { ApiBase } from '@api/ApiBase';
 import { AtcApi } from '@api/AtcApi';
 import { AuthApi } from '@api/AuthApi';
+import { CoverageApi } from '@api/CoverageApi';
+import { ProjectApi } from '@api/ProjectApi';
+import { RunApi } from '@api/RunApi';
 import { TokenApi } from '@api/TokenApi';
+import { WorkspaceApi } from '@api/WorkspaceApi';
 
 // ============================================
 // API Fixture Class
@@ -35,6 +39,18 @@ export class ApiFixture extends ApiBase {
   /** Token component - personal access token issuing and listing */
   readonly token: TokenApi;
 
+  /** Workspace component - sandbox workspaces and their projects */
+  readonly workspace: WorkspaceApi;
+
+  /** Project component - modules, user stories, acceptance criteria, environments */
+  readonly project: ProjectApi;
+
+  /** Run component - Tests and manual Runs driven to a chosen outcome */
+  readonly run: RunApi;
+
+  /** Coverage component - project and workspace coverage rollups */
+  readonly coverage: CoverageApi;
+
   constructor(options: TestContextOptions) {
     super(options);
 
@@ -42,6 +58,10 @@ export class ApiFixture extends ApiBase {
     this.auth = new AuthApi(options);
     this.atc = new AtcApi(options);
     this.token = new TokenApi(options);
+    this.workspace = new WorkspaceApi(options);
+    this.project = new ProjectApi(options);
+    this.run = new RunApi(options);
+    this.coverage = new CoverageApi(options);
   }
 
   // ============================================
@@ -57,6 +77,10 @@ export class ApiFixture extends ApiBase {
     this.auth.setAuthToken(token);
     this.atc.setAuthToken(token);
     this.token.setAuthToken(token);
+    this.workspace.setAuthToken(token);
+    this.project.setAuthToken(token);
+    this.run.setAuthToken(token);
+    this.coverage.setAuthToken(token);
   }
 
   /**
@@ -67,5 +91,9 @@ export class ApiFixture extends ApiBase {
     this.auth.clearAuthToken();
     this.atc.clearAuthToken();
     this.token.clearAuthToken();
+    this.workspace.clearAuthToken();
+    this.project.clearAuthToken();
+    this.run.clearAuthToken();
+    this.coverage.clearAuthToken();
   }
 }
