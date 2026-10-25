@@ -107,8 +107,11 @@ required:
     fallback: { target: comment, label: Feature Test Plan (QA) }
     description: |
       Epic-level QA test plan (strategy + coverage approach for the whole feature/epic).
-      Authored by sprint-testing/feature-test-planning, written to this field, then synced
-      to `.context/PBI/epics/EPIC-<KEY>-<slug>/feature-test-plan.md`.
+      Authored by sprint-testing/feature-test-planning. ITEM-FIRST: the home of the FTP body
+      is the `FTP: {EPIC-KEY}: {feature}` Test Plan item (parent: QA Master Test Plan), which
+      syncs to `.context/PBI/test-plans/FTP-<KEY>-<slug>.md`. THIS FIELD IS THE FALLBACK ONLY,
+      for an instance without the Test Plan work type; when used, it syncs to
+      `.context/PBI/epics/EPIC-<KEY>-<slug>/feature-test-plan.md`.
     used_by: [sprint-testing, sync-jira-issues]
 
   feature_implementation_plan:
@@ -271,8 +274,10 @@ unmapped:
 # .fallback. Creation doctrine + the acli --out/--in inversion gotcha live in
 # agentic-qa-core/references/traceability-linking.md.
 #
-# NOTE: Test↔Test Set membership is NOT a Jira issuelink — it is Xray-internal;
-# handle via /xray-cli, never `acli link create`.
+# NOTE: membership of the Story's ATS is a `test` issuelink (ATS is tested by TC) in
+# BOTH modalities; Modality jira-xray also writes the Xray-internal membership via
+# /xray-cli. Plan / Execution membership stays Xray-internal only. Canon:
+# agentic-qa-core/references/traceability-linking.md §9.
 link_types:
   required:
     test:
@@ -285,7 +290,6 @@ link_types:
       fallback: relates
       used_by:
         - sprint-testing
-        - shift-left-testing
         - test-documentation
         - regression-testing
 
@@ -354,13 +358,13 @@ link_types:
       inward: is automated by
       description: Links a manual Test to its automation.
       fallback: relates
-      used_by: [test-automation]
+      used_by: []
 
     blocking:
       name: Blocking
       outward: blocks
       inward: is blocked by
-      description: Duplicate of Blocks in this workspace (separate id); fallback for blocks.
+      description: Alias of Blocks on instances that define both (separate id); fallback for blocks.
       fallback: blocks
       used_by: [sprint-testing]
 
@@ -833,43 +837,119 @@ work_types:
 
   test_plan:
     jira_issue_type: Test Plan
-    description: Xray Test Plan — holds the ATP body in its description (role atp)
+    description: |
+      Xray Test Plan — holds the ATP body in its description (role atp). Altitude guard
+      (sync-jira-issues): only a Plan titled `ATP:*` syncs as a Story's acceptance-test-plan.md;
+      `FTP:*` / `STP:*` / `RTP:*` Plans are higher ladder altitudes and are skipped with an info line.
+      No `MTP:*` guard: the Master Test Plan is an Epic, never a Test Plan (defect-management
+      doctrine Part 4), so no Plan can legitimately carry that prefix. Unprefixed titles keep
+      the legacy behavior (any linked Plan counts). Higher altitudes still MATERIALIZE — the
+      QA-process-epic sweep writes them to test-plans/ as FTP-/STP-/RTP-/ATP-<KEY>-<slug>.md
+      (non-conforming titles fall back to TESTPLAN-).
     sync: discovery
     role: atp
     content: description
     local_dir: test-plans
+    # Lifecycle: the ATP / STP / FTP / RTP all ride this workflow. Moved by
+    # /sprint-testing (ATP: Planning -> Reporting; STP: Session Start -> sprint close),
+    # /sprint-testing feature-test-planning (FTP) and /test-documentation (RTP, which
+    # stops at `ready` — it is long-lived and never completed). Doctrine:
+    # agentic-qa-core/references/artifact-lifecycle.md
+    required_statuses:
+      planning: { description: 'Plan created, body not yet designed (Create lands here)' }
+      ready: { description: Plan designed and ready to execute against }
+      completed: { description: Plan closed out after its results are in (terminal) }
+    required_transitions:
+      designed: { from: planning, to: ready, description: Plan body authored and scope agreed }
+      complete: { from: ready, to: completed, description: Plan closed out once results are in }
 
   test_execution:
     jira_issue_type: Test Execution
-    description: Xray Test Execution — holds the ATR body in its description (role atr)
+    description: |
+      Xray Test Execution — holds the ATR body in its description (role atr). Altitude guard
+      (sync-jira-issues): only an Execution titled `ATR:*` / `ReTest:*` syncs as a Story's
+      acceptance-test-results.md; `STR:*` / `RTR:*` / `FTR:*` Executions are skipped with an
+      info line (`FTR` stays in the skip list for pre-migration data). Unprefixed titles keep
+      the legacy behavior (any linked Execution counts). Higher
+      altitudes still MATERIALIZE — the QA-process-epic sweep writes them to test-executions/
+      as STR-/RTR-/ATR-<KEY>-<slug>.md (non-conforming titles fall back to TESTEXEC-).
     sync: discovery
     role: atr
     content: description
     local_dir: test-executions
+    # Lifecycle: the ATR, the STR and the RTR all ride this workflow. Moved by /sprint-testing
+    # Reporting (ATR), by whoever closes the sprint (STR — /sprint-testing batch close or
+    # /regression-testing) and by /regression-testing after each verdict (RTR: one per
+    # verdict, closed once the GO / CAUTION / NO-GO comment is posted).
+    # Doctrine: agentic-qa-core/references/artifact-lifecycle.md
+    required_statuses:
+      active: { description: 'Execution open, runs still being recorded (Create lands here)' }
+      close: { description: Execution closed after every run status is recorded (terminal) }
+    required_transitions:
+      complete:
+        { from: active, to: close, description: All run statuses recorded — close the Execution }
 
   re_test_execution:
     jira_issue_type: Re-Test Execution
-    description: Xray Re-Test Execution (subtask) — retest ATR (role atr)
+    description: |
+      Xray Re-Test Execution (subtask) — retest ATR (role atr, same altitude guard as
+      test_execution). Files as RETEST-<KEY>-<slug>.md when titled `ReTest:*`, else RETESTEXEC-.
     sync: discovery
     role: atr
     content: description
     local_dir: test-executions
+    # Lifecycle: moved by /sprint-testing bug retest, once the repro Test's run is
+    # recorded PASSED/FAILED. Optional in practice — a project with no Re-Test Execution
+    # work type records the retest in a plain Test Execution instead.
+    # Doctrine: agentic-qa-core/references/artifact-lifecycle.md
+    required_statuses:
+      active: { description: 'Retest open, repro run not yet recorded (Create lands here)' }
+      close: { description: Retest closed after the repro run is recorded (terminal) }
+    required_transitions:
+      complete:
+        { from: active, to: close, description: Repro run recorded — close the Re-Test Execution }
 
   test_set:
     jira_issue_type: Test Set
-    description: Xray Test Set — grouping of tests (not synced)
-    sync: never
+    description: |
+      Xray Test Set — grouping of tests. A Set titled `ATS:*` linked to a coverable issue feeds
+      cascade rung 1 of sync-jira-issues: its member Tests (the TC→ATS Jira links, required in
+      both modalities, unioned with the Xray GraphQL membership when credentials allow)
+      materialize under that issue's test-cases/.
+      Feature-level `TS:*` Sets stay ignored by the cascade.
+      `sync: discovery` — reachable by an explicit `get <KEY>` / `jql`, and swept from the QA
+      Test Artifacts epic, but never by a plain type sweep. Declaration and behavior agree: a
+      `sync: never` type is refused by the sync, so this one is declared `discovery`.
+    sync: discovery
     local_dir: test-sets
+    # Lifecycle: the Story's ATS is closed by /sprint-testing Reporting once its
+    # membership is final. A feature-level `TS:*` Set stays `designing` for the life of
+    # the feature and closes only with its Epic.
+    # Doctrine: agentic-qa-core/references/artifact-lifecycle.md
+    required_statuses:
+      designing: { description: Set still accepting members (Create lands here) }
+      close: { description: Membership final — Set closed (terminal) }
+    required_transitions:
+      done: { from: designing, to: close, description: Membership final — close the Set }
 
   precondition:
     jira_issue_type: Precondition
-    description: Xray Precondition — reusable test prerequisite (not synced)
-    sync: never
+    description: |
+      Xray Precondition — reusable test prerequisite. `sync: discovery` — reachable by an
+      explicit `get <KEY>` / `jql`, and swept from the QA Test Artifacts epic, but never by a
+      plain type sweep. Declared `discovery` because the sync refuses to write a `sync: never` type.
+    sync: discovery
     local_dir: preconditions
+    # Lifecycle: none. The Precondition workflow exposes `create` and NOTHING else, so a
+    # Precondition lives and dies `active` — that is correct, not a missing transition.
+    # Doctrine: agentic-qa-core/references/artifact-lifecycle.md
+    required_statuses:
+      active: { description: Precondition in use (Create lands here; the only status) }
+
   subtask:
     # `A | B | C` = ordered alternatives; the first one the project actually has
     # wins. The subtask level is named differently per instance: Jira's default is
-    # "Sub-task", the BK instance calls it "Task", a Spanish-localized instance
+    # "Sub-task", some instances call it "Task", a Spanish-localized instance
     # calls it "Subtarea". Declaring a single name made every other spelling a
     # silent skip in jira:sync-workflows — which is exactly why this work_type was
     # missing from the catalog while being declared right here. Add your own
@@ -880,3 +960,16 @@ work_types:
     jira_issue_type: Sub-task | Task | Subtarea
     description: Generic subtask under a Story — tracking-only, never synced as its own folder
     sync: never
+    # Lifecycle: moved by /shift-left-testing — Phase 1 creates the `[QA] Shift-Left Review`
+    # subtask, the handoff closes it after the exhaustive session annotations are posted on
+    # it. Optional in practice: a project with no subtask-level type skips both steps with a
+    # warning. NOTE the status NAMES here are `ACTIVE` / `Close`, not `In Progress` / `Done`.
+    # Doctrine: agentic-qa-core/references/artifact-lifecycle.md
+    required_statuses:
+      active: { description: 'Subtask open, QA working it (Create lands here)' }
+      close: { description: Subtask closed at hand-off (terminal) }
+    required_transitions:
+      complete:
+        { from: active, to: close, description: Annotations posted — close the tracking subtask }
+      reactive:
+        { from: close, to: active, description: Re-open a closed tracking subtask (refresh run) }
