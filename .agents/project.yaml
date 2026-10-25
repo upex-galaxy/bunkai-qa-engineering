@@ -121,7 +121,7 @@ qa:
 board:
   source: auto # auto | jira-xray | jira-native | none. auto follows testing.tms_cli (bun xray = jira-xray, anything else = jira-native); none = the tickets_file below
   tickets_file: .context/sprint/tickets.yaml # read by the `none` source only: with no tracker this versioned file IS the system of record
-  jql: null # ticket query for the jira sources (e.g. project = PROJ AND sprint in openSprints() AND issuetype = Story)
+  jql: project = BK AND sprint in openSprints() AND issuetype = Story # ticket query for the jira sources (e.g. project = PROJ AND sprint in openSprints() AND issuetype = Story)
   bug_jql: null # the sprint's own bug rows (Bugs view); null = derived from jql, its issuetype clause swapped for the bug types (e.g. project = PROJ AND sprint in openSprints() AND issuetype in (Bug, Defect))
   ticket_key_pattern: null # null = derived ^<project_key>-\d+$; override when tickets span keys (e.g. '^(PROJ|OPS)-\d+$')
   timezone: null # IANA zone for day boundaries and report times (e.g. America/New_York); null = the machine's zone
@@ -133,16 +133,16 @@ board:
   # statuses no bucket lists yet. [] = no status belongs there.
   statuses:
     tickets:
-      not_ready: null # not in the test environment yet (e.g. [to_do, in_progress])
-      in_test: null # in the test environment, QA's turn (e.g. [ready_for_qa, in_test])
-      tested: null # past the QA gate (e.g. [qa_approved, done])
-      blocked: null # e.g. [blocked]
-      dropped: null # cancelled, never counted as tested (e.g. [aborted])
+      not_ready: [backlog, to_do, estimation, shift_left_qa, ready_for_dev, in_progress, in_review] # not in the test environment yet (e.g. [to_do, in_progress])
+      in_test: [ready_for_qa, in_test] # in the test environment, QA's turn (e.g. [ready_for_qa, in_test])
+      tested: [qa_approved, ready_for_release, deployed_to_production, automated, completed, fixed] # past the QA gate (e.g. [qa_approved, done])
+      blocked: [blocked] # e.g. [blocked]
+      dropped: [aborted] # cancelled, never counted as tested (e.g. [aborted])
     bugs:
-      open: null # the defect still exists (e.g. [open, in_progress])
-      fixed: null # fixed, waiting for its retest (e.g. [ready_for_qa])
-      resolved: null # retested and closed (e.g. [closed])
-      discarded: null # not a defect after all (e.g. [rejected, duplicated])
+      open: [open, in_progress, in_review, deferred] # the defect still exists (e.g. [open, in_progress])
+      fixed: [ready_for_qa] # fixed, waiting for its retest (e.g. [ready_for_qa])
+      resolved: [closed] # retested and closed (e.g. [closed])
+      discarded: [rejected, duplicated, cannot_reproduce, enhancement, aborted] # not a defect after all (e.g. [rejected, duplicated])
     # Raw test outcome -> PASSED | FAILED | NOT RUN | BLOCKED | DEFERRED. The shipped
     # lists are Xray's built-in run statuses and the jira-native test_status options
     # (.agents/jira-required.yaml); an aborted Xray run was not observed, so NOT RUN.
