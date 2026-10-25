@@ -41,7 +41,7 @@ paths: []
 | Modality | `[TMS_TOOL]` resolves to | TMS entities |
 |---|---|---|
 | A: Xray on Jira | `/xray-cli` for Xray entities; `[ISSUE_TRACKER_TOOL]` for generic Jira | Test, Test Plan, Test Execution, Pre-Condition |
-| B: Jira-native (no Xray) | NOT resolvable → falls through to `[ISSUE_TRACKER_TOOL]` (`/acli`) | ATP/ATR = Story custom fields + comments; TCs = Jira `Test` issues. See `test-documentation/references/jira-setup.md` |
+| B: Jira-native (no Xray) | NOT resolvable → falls through to `[ISSUE_TRACKER_TOOL]` (`/acli`) | ATP/ATR = native `Test Plan` / `Test Execution` items by excellence (the Story custom field + comment is the fallback only when that work type is absent); TCs = Jira `Test` issues. See `test-documentation/references/jira-setup.md` |
 
 Skills using `[TMS_TOOL]` MUST include parallel pseudocode branches for both modalities (labeled "Modality jira-native"). (binding: `/test-documentation`)
 
@@ -59,7 +59,6 @@ Skills using `[TMS_TOOL]` MUST include parallel pseudocode branches for both mod
 | `bunx allure` (run/agent/generate/open/watch) | `/regression-testing` (in-repo) + `/test-automation` (in-repo) |
 | `resend` | `/resend-cli` (community PROJECT) |
 | `jq` | `/acli` (primary consumer of jq pipelines) |
-| `bun` | `/bun` (community USER) |
 | `bun xray` | `/xray-cli` (in-repo). `test enrich` backfills the synced Test `.md` cache with the Xray-internal associations the REST sync cannot see: inlined Preconditions + Test Set membership |
 | `supabase` / `wrangler` / `vercel` | `/regression-testing` (in-repo — private report hosting; protocol: `regression-testing/references/private-hosting-setup.md`) |
 | `orca` | `/orca-orchestration` (in-repo). That skill holds WHEN/WHAT; the stubs in `orchestration.orchestrator_skills` load ALONGSIDE it (they are small), and the DEEP topics stay served by the binary on demand, never copied into the repo |

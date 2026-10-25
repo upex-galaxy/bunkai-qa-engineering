@@ -78,6 +78,13 @@
  * Fields without a corresponding env var keep their current value. Validation
  * is identical to the interactive flow; failures print to stderr and exit 1.
  *
+ * BOARD STATUSES: when `.agents/jira-workflows.json` exists and the board source is
+ * a Jira one, the workflow statuses no `board.statuses` bucket lists yet are shown
+ * with a suggested bucket (from the status category and its name,
+ * `cli/lib/sprint-source/suggest-statuses.ts`). The interactive flow asks once and
+ * appends the accepted ones to their bucket lines; --non-interactive only prints
+ * them. No catalog yet: one line says to run `bun run jira:sync-workflows` first.
+ *
  * ============================================================================
  * EXIT CODES
  * ============================================================================
@@ -89,13 +96,17 @@
  * ============================================================================
  */
 
+import type { StatusSuggestion } from '../cli/lib/sprint-source/suggest-statuses.ts';
 import { execSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
+
 import { confirm, input, select } from '@inquirer/prompts';
 import { parse as parseYaml } from 'yaml';
 
 import { classifyProjectYaml, SCHEMA_FILE, seedFromSchema } from '../cli/lib/agents-schema.ts';
+import { boardStatusPlan, defaultBoardJql, fillBoardIfValid, loadSyncedCatalogs } from '../cli/lib/board-setup.ts';
+import { currentBuckets } from '../cli/lib/sprint-source/suggest-statuses.ts';
 
 // ============================================================================
 // CONSTANTS
@@ -302,8 +313,8 @@ INTERACTIVE FLOW (default):
   - For each environment, prompts for the four env-scoped vars.
   - Validates that default_env matches a real env (re-prompts if not).
   - For unfilled fields: prompts with the # TODO: description as helper text,
-    suggests the example value as a default, and validates input. Empty input
-    keeps the field as null (skip).
+    shows the example next to the question (never as the default), and
+    validates input. Empty input keeps the field as null (skip).
   - For filled fields: shows current value and asks keep / change / clear.
   - At the end: shows a summary, asks for confirmation, then writes the file
     back preserving every comment, blank line and section header.
@@ -337,6 +348,11 @@ VALIDATION RULES:
   *_repo                    non-empty (warns if path does not exist locally)
   default_env               must match a key under \`environments:\`
   all others                non-empty
+
+BOARD STATUSES:
+  Workflow statuses no board.statuses bucket lists yet are shown with a suggested
+  bucket; interactive mode asks once and appends the accepted ones, --non-interactive
+  only prints them. Needs .agents/jira-workflows.json (bun run jira:sync-workflows).
 
 OUTPUT:
   .agents/project.yaml is rewritten in place. Comments are preserved
@@ -599,9 +615,11 @@ async function promptFlatField(
   }
 
   while (true) {
+    // The example is shown, never pre-filled: Enter on an empty field must not
+    // write a made-up value (analysis §8 #12).
     const answer = await input({
-      message: `${field.section}.${field.key} — ${desc}`,
-      default: currentValue ?? example ?? undefined,
+      message: `${field.section}.${field.key} — ${desc}${!currentValue && example ? ` (e.g. ${example})` : ''}`,
+      default: currentValue ?? undefined,
     });
     if (!answer.trim()) {
       log.dim('  (skipped — kept as null)');
@@ -652,8 +670,8 @@ async function promptEnvScopedField(
 
   while (true) {
     const answer = await input({
-      message: `environments.${envName}.${field.key} — ${desc}`,
-      default: currentValue ?? example ?? undefined,
+      message: `environments.${envName}.${field.key} — ${desc}${!currentValue && example ? ` (e.g. ${example})` : ''}`,
+      default: currentValue ?? undefined,
     });
     if (!answer.trim()) {
       log.dim('  (skipped — kept as null)');
@@ -1125,6 +1143,9 @@ async function runInteractive(loaded: LoadedConfig, dryRun: boolean): Promise<vo
     }
   }
 
+  // Step 5: workflow statuses no board bucket lists yet, and the board's ticket query.
+  const boardChoice = await promptBoard(loaded.rawText, newFlat.project_key ?? null);
+
   printSummary(newFlat, desiredEnvs, newEnvValues);
 
   const proceed = await confirm({
@@ -1138,7 +1159,7 @@ async function runInteractive(loaded: LoadedConfig, dryRun: boolean): Promise<vo
   }
 
   const updates = buildUpdateMap(newFlat, newEnvValues);
-  const updated = renderUpdatedYaml(loaded.rawText, desiredEnvs, updates);
+  const updated = withBoard(renderUpdatedYaml(loaded.rawText, desiredEnvs, updates), boardChoice);
   if (dryRun) {
     out(updated);
     log.success('Dry run complete — file NOT written.');
@@ -1149,11 +1170,86 @@ async function runInteractive(loaded: LoadedConfig, dryRun: boolean): Promise<vo
 }
 
 // ============================================================================
+// BOARD STATUSES — suggested buckets for the workflow statuses no bucket lists
+// ============================================================================
+
+function printStatusSuggestions(suggestions: readonly StatusSuggestion[]): void {
+  log.header('[board.statuses]');
+  log.info(`${suggestions.length} workflow status(es) are in no bucket yet; a ticket or bug in one fails the board snapshot. Suggested from the status category and its name:`);
+  for (const s of suggestions) {
+    err(`  ${s.domain.padEnd(8)} ${s.slug.padEnd(28)} ${(s.category ?? '?').padEnd(14)} -> ${s.bucket}`);
+  }
+}
+
+/** What the interactive run decided for the `board:` block; `write: false` leaves it untouched. */
+interface BoardChoice { suggestions: StatusSuggestion[], jql: string | null, write: boolean }
+
+const NO_BOARD_CHANGE: BoardChoice = { suggestions: [], jql: null, write: false };
+
+/** Whether any ticket or bug bucket is already filled (the board is adopted). */
+function boardAdopted(rawText: string): boolean {
+  try {
+    const buckets = currentBuckets(parseYaml(rawText));
+    return [...Object.values(buckets.tickets), ...Object.values(buckets.bugs)].some(ids => ids !== null);
+  }
+  catch { return false; }
+}
+
+/**
+ * Interactive: show the suggested buckets and ask once; then, for a Jira source
+ * whose `board.jql` is still null, ask the ticket query (default built from the
+ * project key typed in this run). Also asked when the board is already adopted
+ * and only the query is missing.
+ */
+async function promptBoard(rawText: string, projectKey: string | null): Promise<BoardChoice> {
+  const plan = boardStatusPlan(rawText, loadSyncedCatalogs(REPO_ROOT).workflows);
+  if (plan.note !== null) { log.warn(plan.note); }
+  let suggestions: StatusSuggestion[] = [];
+  if (plan.suggestions.length > 0) {
+    printStatusSuggestions(plan.suggestions);
+    const accept = await confirm({ message: 'Add these statuses to their suggested buckets? (empty buckets become [], bun run board:check validates the result)', default: true });
+    if (!accept) { return NO_BOARD_CHANGE; }
+    suggestions = plan.suggestions;
+  }
+  else if (!boardAdopted(rawText)) {
+    return NO_BOARD_CHANGE;
+  }
+  let jql: string | null = null;
+  if (plan.needsJql) {
+    const fallback = defaultBoardJql(projectKey);
+    const answer = await input({ message: 'Sprint Board ticket query (board.jql):', ...(fallback !== null ? { default: fallback } : {}) });
+    jql = answer.trim() === '' ? null : answer.trim();
+  }
+  return { suggestions, jql, write: true };
+}
+
+/** Write the board choice, only if `board:check` would accept the result; otherwise the text stays as it was. */
+function withBoard(text: string, choice: BoardChoice): string {
+  if (!choice.write) { return text; }
+  const result = fillBoardIfValid(text, choice, loadSyncedCatalogs(REPO_ROOT));
+  if (!result.ok) {
+    log.warn('board: not written, because bun run board:check would refuse the result:');
+    for (const e of result.errors) { log.dim(`  ${e}`); }
+    log.dim('Fill what it names, then run bun run agents:setup again.');
+    return text;
+  }
+  log.success(`board: ${choice.suggestions.length} status(es) bucketed, empty buckets set to []${choice.jql !== null ? ', board.jql set' : ''}. Check it with bun run board:check.`);
+  return result.text;
+}
+
+// ============================================================================
 // FLOW: NON-INTERACTIVE
 // ============================================================================
 
 function runNonInteractive(loaded: LoadedConfig, dryRun: boolean): void {
   log.header('agents-setup — non-interactive mode');
+  // Suggested board buckets are printed, never written without a person confirming them.
+  const { suggestions, note } = boardStatusPlan(loaded.rawText, loadSyncedCatalogs(REPO_ROOT).workflows);
+  if (note !== null) { log.warn(note); }
+  if (suggestions.length > 0) {
+    printStatusSuggestions(suggestions);
+    log.dim('Not written in --non-interactive mode: run bun run agents:setup to confirm them, or copy them into board.statuses.');
+  }
   const newFlat: Record<string, string | null> = { ...loaded.flatValues };
   const newEnvValues: Record<string, Record<string, string | null>> = {};
   // Seed with existing envs.

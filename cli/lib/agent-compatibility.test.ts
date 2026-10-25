@@ -710,7 +710,13 @@ describe('agent identity', () => {
 
   test('orcaAvailable never spawns a process and tolerates an empty PATH', () => {
     const home = temporaryRoot('agent identity path ');
-    write(home, 'bin/orca', '');
+    // Linux probes `orca-ide`: a bare `orca` there is the GNOME screen reader
+    const cliName = process.platform === 'linux' ? 'orca-ide' : 'orca';
+    write(home, `bin/${cliName}`, '');
+    if (process.platform === 'linux') {
+      write(home, 'reader/orca', '');
+      expect(orcaAvailable({ PATH: join(home, 'reader') })).toBe(false);
+    }
 
     expect(orcaAvailable({ PATH: join(home, 'bin') })).toBe(true);
     expect(orcaAvailable({ PATH: join(home, 'missing') })).toBe(false);
@@ -1512,7 +1518,7 @@ describe('Claude skills alias', () => {
 
   test('reclaims the skills CLI per-skill symlink shim without losing a skill body', () => {
     // `bunx skills add` (project level) writes the body to .agents/skills/<slug>/ and then
-    // creates .claude/skills/ as a REAL directory of per-skill symlinks. `bun run setup`
+    // creates .claude/skills/ as a REAL directory of per-skill symlinks. `bun setup`
     // installs community skills BEFORE repairing compatibility, so this is what a clean
     // clone actually looks like at repair time. Refusing here aborted the install.
     const root = repositoryFixture();

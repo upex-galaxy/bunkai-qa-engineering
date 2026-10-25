@@ -6,7 +6,7 @@
     <title>Este repo y el IQL</title>
     <meta
       name="description"
-      content="Cómo este boilerplate implementa el IQL: los 8 stages y sus skills, la escalera de artefactos, dónde vive la doctrina, las integraciones, los MCPs y el árbol .context/PBI."
+      content="Cómo este boilerplate implementa el IQL: los stages y sus skills, la escalera de artefactos, dónde vive la doctrina, las integraciones, los MCPs y el árbol .context/PBI."
     />
     <meta name="docs-order" content="60" />
     <link rel="stylesheet" href="../../assets/docs.css" />
@@ -33,7 +33,7 @@
         <strong>En esta página</strong>
         <ol>
           <li><a href="#metodo-e-implementacion">Método e implementación</a></li>
-          <li><a href="#stages">Los 8 stages y quién los ejecuta</a></li>
+          <li><a href="#stages">Los stages y quién los ejecuta</a></li>
           <li><a href="#perfiles">Perfil manual y perfil agéntico</a></li>
           <li><a href="#escalera">La escalera de artefactos</a></li>
           <li><a href="#quality-gate">El quality gate: GO / CAUTION / NO-GO</a></li>
@@ -52,8 +52,8 @@
       <p>
         El <a href="iql.html">IQL (Integrated Quality Lifecycle)</a> es la metodología de UPEX: 15
         steps agrupados en tres fases (<a href="early-game.html">Early-Game</a>,
-        <a href="mid-game.html">Mid-Game</a> y <a href="late-game.html">Late-Game</a>) y ocho stages
-        que se ejecutan y se gatean. La versión oficial está en
+        <a href="mid-game.html">Mid-Game</a> y <a href="late-game.html">Late-Game</a>) y una
+        escalera de stages que se ejecutan y se gatean. La versión oficial está en
         <a href="https://www.upexgalaxy.com/metodologia" target="_blank" rel="noopener"
           >upexgalaxy.com/metodologia</a
         >.
@@ -66,7 +66,7 @@
         agente ejecuta, la evidencia prueba cada conclusión y la persona toma la decisión.
       </p>
 
-      <h2 id="stages">Los 8 stages y quién los ejecuta</h2>
+      <h2 id="stages">Los stages y quién los ejecuta</h2>
       <p>
         Los stages tienen nombre y nunca número. La numeración vieja chocaba con los steps del IQL,
         así que sobrevive en un solo lugar: la tabla de equivalencias de
@@ -75,11 +75,14 @@
 
       <figure>
         <div class="frame scroll on-dark">
-          <img src="../../assets/iql/iql-loop.svg" alt="El bucle del IQL: 8 stages en 4 momentos" />
+          <img
+            src="../../assets/iql/iql-loop.svg"
+            alt="El bucle del IQL: los stages en cuatro momentos"
+          />
         </div>
         <figcaption>
-          Los ocho stages agrupados en cuatro momentos. Producción vuelve a alimentar el análisis
-          del ciclo siguiente.
+          Los stages agrupados en cuatro momentos. Producción vuelve a alimentar el análisis del
+          ciclo siguiente.
           <a href="../../assets/iql/iql-loop.svg" target="_blank" rel="noopener"
             >Ver a tamaño completo</a
           >
@@ -127,6 +130,18 @@
               <td>
                 Smoke primero como Go/No-Go, exploración por UI, API y DB (la "trifuerza"),
                 evidencia en la carpeta <code>evidence/</code> y bugs propuestos con su severidad
+              </td>
+              <td>3</td>
+            </tr>
+            <tr>
+              <td><strong>Execution</strong> sin ticket</td>
+              <td>A demanda, en el sprint o después</td>
+              <td><code>exploratory-testing</code></td>
+              <td>
+                Charter, reconocimiento en paralelo por UI, API y DB, un pase que intenta refutar
+                cada hallazgo y escenarios candidatos marcados NEW, WEAK o COVERED contra la
+                cobertura existente, con <code>oracle: observed</code> hasta que una persona los
+                confirma
               </td>
               <td>3</td>
             </tr>
@@ -181,6 +196,16 @@
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <div class="callout">
+        <span class="callout-title">Un sprint en flota no es un stage nuevo</span>
+        <p>
+          <code>sprint-conductor</code> corre Planning, Execution y Reporting con un worker de
+          <code>sprint-testing</code> por ticket y el Sprint Board como único punto de control. Cada
+          worker cumple los gates de su stage; el conductor suma una verificación en cada cierre:
+          relee el estado del ticket él mismo y revisa los artefactos, nunca solo el reporte.
+        </p>
       </div>
 
       <div class="callout warn">
@@ -469,7 +494,7 @@ components    -&gt;  módulo del producto  (qué parte del producto toca)</code>
           La skill que le da al agente el índice de esta metodología: por qué el proceso tiene los
           stages que tiene, qué es cada artefacto de la escalera, dónde se hace cumplir cada
           invariante. Es conocimiento puro, nunca ejecuta un stage, y se carga sola cuando preguntas
-          "¿por qué se hace así?". Cada proyecto la adapta en dos lugares:
+          "por qué se hace así?". Cada proyecto la adapta en dos lugares:
           <code>qa.methodology</code> en <code>.agents/project.yaml</code> (qué stages corre y con
           qué rigor) y <code>.agents/skills/iql-context/references/project-overrides.md</code> (sus
           reglas y excepciones propias).
@@ -534,10 +559,11 @@ components    -&gt;  módulo del producto  (qué parte del producto toca)</code>
       <p>
         Dos filas de ejemplo; la tabla completa, con todas las etiquetas, es la de
         <code>.agents/instructions/agent-tool-resolution.md</code>. La modalidad del TMS se decide
-        una vez por proyecto. En <strong>jira-xray</strong>, ATP y ATR son Test Plan y Test
-        Execution de Xray. En <strong>jira-native</strong> (sin Xray) viven en custom fields de la
-        historia y comentarios, y los test cases son issues de tipo Test. Las guías de conexión
-        están en <a href="../setup/jira-xray.html">Jira y Xray</a>,
+        una vez por proyecto. En las dos, ATP y ATR son ítems Test Plan y Test Execution: de Xray en
+        <strong>jira-xray</strong>, work types nativos de Jira en <strong>jira-native</strong> (sin
+        Xray). Solo cuando ese work type falta en una instancia jira-native se usan el custom field
+        de la historia y, sin campo, un comentario. Los test cases son issues de tipo Test. Las
+        guías de conexión están en <a href="../setup/jira-xray.html">Jira y Xray</a>,
         <a href="../setup/dbhub.html">DBHub</a>, <a href="../setup/openapi.html">OpenAPI</a> y
         <a href="../exploracion/postman.html">Postman</a>.
       </p>
@@ -576,7 +602,7 @@ components    -&gt;  módulo del producto  (qué parte del producto toca)</code>
             <tr>
               <th>Tier</th>
               <th>Fuente de verdad</th>
-              <th>¿En git?</th>
+              <th>En git?</th>
               <th>Cómo se recupera</th>
             </tr>
           </thead>

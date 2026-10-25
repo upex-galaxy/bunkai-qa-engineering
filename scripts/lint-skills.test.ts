@@ -30,11 +30,13 @@ function write(root: string, relativePath: string, content: string): void {
   writeFileSync(destination, content);
 }
 
-/** The five workflow skills plus the gateway: every one is session-retrofitted. */
+/** The seven workflow skills plus the gateway: every one is session-retrofitted. */
 const T1_SKILLS = [
   'framework-development',
   'shift-left-testing',
   'sprint-testing',
+  'exploratory-testing',
+  'sprint-conductor',
   'test-automation',
   'regression-testing',
   'test-documentation',
@@ -98,6 +100,8 @@ interface FixtureOptions {
   staleT1Body?: boolean
   sprintTestingKind?: string | null
   extraSkills?: Array<{ slug: string, kind?: string, capabilities?: string[], body?: string }>
+  /** Slugs rendered into `USER_LEVEL_SKILLS` (T4). Omitted = the array is empty. */
+  userLevelSkills?: string[]
 }
 
 function fixture(options: FixtureOptions): string {
@@ -108,7 +112,7 @@ function fixture(options: FixtureOptions): string {
     'const PROJECT_LEVEL_SKILLS: ReadonlyArray<CommunitySkill> = [',
     '  { package: \'https://github.com/resend/resend-skills\', skill: \'resend-cli\' },',
     '];',
-    'const USER_LEVEL_SKILLS: ReadonlyArray<CommunitySkill> = [];',
+    `const USER_LEVEL_SKILLS: ReadonlyArray<CommunitySkill> = [${(options.userLevelSkills ?? []).map(s => `{ package: 'https://example.com/${s}', skill: '${s}' }`).join(', ')}];`,
     '',
   ].join('\n'));
 
@@ -367,10 +371,33 @@ describe('lint-skills STALE-PATH on `.context/` (kind-scoped)', () => {
   });
 
   test('a committed `.context/` path no generator owns must exist for every skill', () => {
-    const { exitCode, output } = runLint(fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-flow', kind: 'workflow', body: committedDead }] }));
+    const { exitCode, output } = runLint(fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-flow', kind: 'workflow', body: 'See `.context/guidelines/nope.md` for the rule.' }] }));
+
+    expect(output).toContain('[acme-flow] STALE-PATH: `.context/guidelines/nope.md`');
+    expect(exitCode).toBe(1);
+  });
+
+  // The scaffolder prunes every recorded ADR from a new project while the shipped
+  // skills keep citing them: downstream the cite is exempt, in the boilerplate it
+  // must resolve.
+  test('in the boilerplate checkout a recorded ADR cite must resolve', () => {
+    const root = fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-flow', kind: 'workflow', body: committedDead }] });
+    write(root, 'package.json', JSON.stringify({ name: 'agentic-qa-boilerplate' }));
+    write(root, '.agents/project.yaml', '# MAINTAINER COPY: fixture\nproject:\n  project_name: x\n');
+    const { exitCode, output } = runLint(root);
 
     expect(output).toContain('[acme-flow] STALE-PATH: `.context/ADR/ADR-9999-nope.md`');
     expect(exitCode).toBe(1);
+  });
+
+  test('in a scaffolded project a pruned recorded ADR cite is exempt, the template still resolves', () => {
+    const body = `${committedDead}\nCopy \`.context/ADR/ADR-NNNN-template.md\` to start one.`;
+    const root = fixture({ listCommunityInAgentsMd: true, extraSkills: [{ slug: 'acme-flow', kind: 'workflow', body }] });
+    write(root, '.context/ADR/ADR-NNNN-template.md', '# Template\n');
+    const { exitCode, output } = runLint(root);
+
+    expect(output).not.toContain('STALE-PATH:');
+    expect(exitCode).toBe(0);
   });
 });
 
@@ -418,6 +445,26 @@ describe('lint-skills volatile facts (Critical Rule #17, checks 20-21)', () => {
 
     expect(output).not.toContain('FILE-LINE:');
     expect(output).not.toContain('CURRENT-STATE:');
+  });
+});
+
+describe('lint-skills session scopes (check 12)', () => {
+  test('an exploratory-testing round is a dated scope; a ticket key under it is SESSION-SCOPE-INVALID', () => {
+    const root = fixture({ listCommunityInAgentsMd: true });
+    mkdirSync(join(root, '.session/exploratory-testing/2026-05-20-orders'), { recursive: true });
+    mkdirSync(join(root, '.session/exploratory-testing/PROJ-7012'), { recursive: true });
+    const { output } = runLint(root);
+    expect(output).toContain('SESSION-SCOPE-INVALID: .session/exploratory-testing/PROJ-7012/');
+    expect(output).not.toContain('.session/exploratory-testing/2026-05-20-orders/');
+  });
+
+  test('a sprint-conductor session is a sprint scope; a ticket key under it is SESSION-SCOPE-INVALID', () => {
+    const root = fixture({ listCommunityInAgentsMd: true });
+    mkdirSync(join(root, '.session/sprint-conductor/sprint-7'), { recursive: true });
+    mkdirSync(join(root, '.session/sprint-conductor/PROJ-7012'), { recursive: true });
+    const { output } = runLint(root);
+    expect(output).toContain('SESSION-SCOPE-INVALID: .session/sprint-conductor/PROJ-7012/');
+    expect(output).not.toContain('.session/sprint-conductor/sprint-7/');
   });
 });
 
@@ -515,5 +562,71 @@ describe('lint-skills context write scope (check 23, CONTEXT-WRITES)', () => {
 
     expect(output).not.toMatch(CAPABILITY_VIOLATION);
     expect(exitCode).toBe(0);
+  });
+});
+
+describe('lint-skills T4 loaders (check 24, T4-LOADER)', () => {
+  /** The onboard skill with its user-level loader table, one row per entry. */
+  function onboard(rows: Array<[slug: string, loader: string]>): { slug: string, kind: string, body: string } {
+    return {
+      slug: 'agentic-qa-onboard',
+      kind: 'core',
+      body: [
+        '## Community skills installed at user level',
+        '',
+        '| Skill | Source | Loaded by / when |',
+        '| --- | --- | --- |',
+        ...rows.map(([slug, loader]) => `| \`${slug}\` | example.com | ${loader} |`),
+        '',
+        '## Next steps',
+        '',
+        '| `late-skill` | example.com | `/sprint-testing` |',
+        '',
+      ].join('\n'),
+    };
+  }
+
+  test('every user-level skill with a cited loader or "user-invoked only" passes', () => {
+    const { exitCode, output } = runLint(fixture({
+      listCommunityInAgentsMd: true,
+      userLevelSkills: ['deck-tool', 'slides-tool'],
+      extraSkills: [onboard([
+        ['deck-tool', 'any flow past the threshold in `/sprint-testing`'],
+        ['slides-tool', '**user-invoked only.**'],
+      ])],
+    }));
+
+    expect(output).not.toContain('T4-LOADER:');
+    expect(exitCode).toBe(0);
+  });
+
+  test('a user-level skill with no row fails, and a row outside the section does not count', () => {
+    const { exitCode, output } = runLint(fixture({
+      listCommunityInAgentsMd: true,
+      userLevelSkills: ['deck-tool', 'late-skill'],
+      extraSkills: [onboard([['deck-tool', '`/sprint-testing`']])],
+    }));
+
+    expect(output).toContain('[late-skill] T4-LOADER: in USER_LEVEL_SKILLS but has no row');
+    expect(output).not.toContain('[deck-tool] T4-LOADER:');
+    expect(exitCode).toBe(1);
+  });
+
+  test('a row whose loader cell cites nothing fails', () => {
+    const { exitCode, output } = runLint(fixture({
+      listCommunityInAgentsMd: true,
+      userLevelSkills: ['deck-tool'],
+      extraSkills: [onboard([['deck-tool', 'any flow that needs it']])],
+    }));
+
+    expect(output).toContain('[deck-tool] T4-LOADER: the "Loaded by / when" cell');
+    expect(exitCode).toBe(1);
+  });
+
+  test('user-level skills without the onboard skill fail once, naming the file', () => {
+    const { exitCode, output } = runLint(fixture({ listCommunityInAgentsMd: true, userLevelSkills: ['deck-tool'] }));
+
+    expect(output).toContain('T4-LOADER: .agents/skills/agentic-qa-onboard/SKILL.md is missing');
+    expect(exitCode).toBe(1);
   });
 });

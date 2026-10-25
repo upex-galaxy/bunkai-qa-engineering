@@ -158,6 +158,14 @@
  *      the Jira resolution tags (`[ISSUE_TRACKER_TOOL]`, `[TMS_TOOL]`): a
  *      context skill edits its own map, never a tracker. ERROR severity.
  *
+ *  24. T4-LOADER — every slug in cli/install.ts:USER_LEVEL_SKILLS must have a
+ *      row in the "Loaded by / when" table of `agentic-qa-onboard/SKILL.md`
+ *      §"Community skills installed at user level", and the row's loader cell
+ *      must either cite its loader in backticks (the skill or doctrine that
+ *      names this T4 skill for a moment, which is what lets it load without
+ *      asking: skill-composition-strategy.md §3.2) or say "user-invoked only".
+ *      No-op when USER_LEVEL_SKILLS is empty. ERROR severity.
+ *
  * Usage: bun run scripts/lint-skills.ts   (or: bun run skills:check)
  */
 
@@ -165,6 +173,7 @@ import type { VolatileKind } from './lib/volatile-facts';
 import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from 'node:fs';
 
 import { dirname, join } from 'node:path';
+import { contractsEnforced } from './lib/doc-contracts';
 import { skillRouterSource } from './lib/instructions';
 import { relativePosix } from './lib/posix-path';
 import { isVolatileExemptPath, scanVolatile, volatileRemedy } from './lib/volatile-facts';
@@ -277,6 +286,8 @@ const JIRA_WRITE_TAGS = ['[ISSUE_TRACKER_TOOL]', '[TMS_TOOL]'];
 const ANTI_LEAK_SKILLS = [
   'shift-left-testing',
   'sprint-testing',
+  'exploratory-testing',
+  'sprint-conductor',
   'test-automation',
   'regression-testing',
   'test-documentation',
@@ -330,6 +341,8 @@ const SESSION_RETROFITTED_SKILLS: Record<string, RegExp | null> = {
   // module-slug alternative, so no separate branch is needed.
   'test-documentation': /^([A-Z]+-\d+|[a-z0-9][a-z0-9-]*)$/,
   'shift-left-testing': /^\d{4}-\d{2}-\d{2}-[a-z0-9][a-z0-9-]*$/,
+  'exploratory-testing': /^\d{4}-\d{2}-\d{2}-[a-z0-9][a-z0-9-]*$/,
+  'sprint-conductor': /^sprint-\d+$/,
 };
 
 /**
@@ -839,7 +852,7 @@ const STALE_PATH_ALLOWED = new Set<string>([
   // Gitignored generated/config artifacts (see .gitignore)
   'api/openapi.json',
   'api/.openapi-config.json',
-  // Gitignored single-use prompts `bun run up` writes (cited by the updater-parity reference)
+  // Gitignored single-use prompts `bun sync` writes (cited by the updater-parity reference)
   '.agents/prompts/parity-plan.md',
   '.agents/prompts/pbi-cache-migration.md',
   // Illustrative examples (docs teach a naming shape, not a real file)
@@ -908,6 +921,21 @@ function isExampleArtifact(path: string): boolean {
 }
 
 /**
+ * A recorded boilerplate ADR (`ADR-<digits>-<slug>.md`). The scaffolder prunes
+ * every one of them from a new project (the template `ADR-NNNN-template.md` has
+ * no digit, so it is never matched), yet the shipped skills cite them as the
+ * why of a rule. Outside the boilerplate's own checkout (`contractsEnforced`)
+ * such a cite is correct and simply has no file to resolve to: left to the
+ * existence check, every commit of a scaffolded project was refused by its own
+ * pre-commit hook. In the boilerplate the cite must still resolve.
+ */
+const BOILERPLATE_ADR = /^\.context\/ADR\/ADR-\d+-/;
+
+function isPrunedBoilerplateAdr(path: string, repoRoot: string): boolean {
+  return BOILERPLATE_ADR.test(path) && !contractsEnforced(repoRoot);
+}
+
+/**
  * `strictContext` is true for a `metadata.kind: context` skill: its `.context/`
  * cites must resolve on disk (only the gitignored `.context/PBI/` cache is
  * exempt). Every other skill gets the generator-output exemption.
@@ -933,6 +961,7 @@ function checkStalePaths(
     if (STALE_PATH_ALLOWED.has(path)) { continue; } // gitignored artifact / intentional example
     if (isExampleArtifact(path)) { continue; } // shipped here, deleted once adapted
     if (path.startsWith('.context/') && isGeneratedContextPath(path, strictContext)) { continue; } // written per project by a generator
+    if (isPrunedBoilerplateAdr(path, repoRoot)) { continue; } // pruned by the scaffolder, cited as the why
     // Skill-dir-first resolution: shorthand like `scripts/foo.ts` inside a skill
     // body should resolve against the skill's own directory; fall back to repo
     // root for paths that are genuinely repo-rooted (e.g. `.agents/skills/...`).
@@ -999,6 +1028,60 @@ function checkDuplicateTier(
     }
   }
 
+  return result;
+}
+
+// --- Check 24: T4-LOADER ---
+
+const ONBOARD_SKILL_REL = '.agents/skills/agentic-qa-onboard/SKILL.md';
+const T4_LOADER_HEADING = '## Community skills installed at user level';
+/** `| \`slug\` | source | loader |`: the slug, then the last cell. */
+const T4_LOADER_ROW = /^\|\s*`([\w-]+)`\s*\|.*\|([^|]*)\|\s*$/;
+const T4_LOADER_USER_ONLY = /user-invoked only/i;
+const T4_LOADER_CITATION = /`[^`]+`/;
+
+/** Check 24: every USER_LEVEL_SKILLS slug has a loader row in the onboard table. */
+function checkT4Loaders(t4Slugs: Set<string>, repoRoot: string): Violation[] {
+  if (t4Slugs.size === 0) { return []; }
+  const onboardPath = join(repoRoot, ONBOARD_SKILL_REL);
+  if (!existsSync(onboardPath)) {
+    return [{
+      severity: 'ERROR',
+      scope: 'USER_LEVEL_SKILLS',
+      msg: `T4-LOADER: ${ONBOARD_SKILL_REL} is missing, so no user-level skill has a declared loader`,
+    }];
+  }
+
+  const loaders = new Map<string, string>();
+  let inSection = false;
+  for (const line of readFileSync(onboardPath, 'utf8').split('\n')) {
+    if (line.startsWith('## ')) {
+      inSection = line.trim() === T4_LOADER_HEADING;
+      continue;
+    }
+    if (!inSection) { continue; }
+    const m = T4_LOADER_ROW.exec(line);
+    if (m) { loaders.set(m[1], m[2].trim()); }
+  }
+
+  const result: Violation[] = [];
+  for (const slug of [...t4Slugs].sort()) {
+    const loader = loaders.get(slug);
+    if (loader === undefined) {
+      result.push({
+        severity: 'ERROR',
+        scope: slug,
+        msg: `T4-LOADER: in USER_LEVEL_SKILLS but has no row in ${ONBOARD_SKILL_REL} §"Community skills installed at user level" — add one naming its loader, or "user-invoked only"`,
+      });
+    }
+    else if (!T4_LOADER_USER_ONLY.test(loader) && !T4_LOADER_CITATION.test(loader)) {
+      result.push({
+        severity: 'ERROR',
+        scope: slug,
+        msg: `T4-LOADER: the "Loaded by / when" cell in ${ONBOARD_SKILL_REL} neither cites its loader in backticks nor says "user-invoked only"`,
+      });
+    }
+  }
   return result;
 }
 
@@ -1530,6 +1613,9 @@ function main(): void {
   // Check 9: DUPLICATE-TIER
   violations.push(...checkDuplicateTier(t2Slugs, t3Slugs, t4Slugs));
 
+  // Check 24: T4-LOADER
+  violations.push(...checkT4Loaders(t4Slugs, REPO_ROOT));
+
   // Checks 11–14: session-management contract
   for (const skill of t1Skills) {
     violations.push(...checkSessionBanner(skill.slug, skill.body));
@@ -1575,6 +1661,7 @@ function main(): void {
     `CURRENT-STATE (today / as of / dated measurement / since <version> / tool version in the same prose; ${VOLATILE_SEVERITY['CURRENT-STATE']})`,
     'STAGE-OWNER-DISPATCH (`metadata.stage_owner: true` without a `## Subagent Dispatch Strategy` section)',
     'CONTEXT-WRITES (`metadata.writes` outside a context skill, outside its own `references/`, without `references/refresh.md`, or next to a Jira tag)',
+    'T4-LOADER (USER_LEVEL_SKILLS slug without a loader row in the agentic-qa-onboard table)',
   ];
 
   if (violations.length === 0) {

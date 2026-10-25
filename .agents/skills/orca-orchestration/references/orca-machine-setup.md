@@ -3,7 +3,7 @@
 > Loaded by: whoever sets up a new machine, once.
 > **None of this is versionable.** Every item below lives in the app's own settings store on THIS
 > computer. There is no repo file that carries it, no CLI command that sets it, and therefore no
-> way for `bun run up` or a fresh clone to restore it. That is the reason this file exists: so the
+> way for `bun sync` or a fresh clone to restore it. That is the reason this file exists: so the
 > list is at least written down, even though it cannot be automated.
 
 ---
@@ -38,9 +38,10 @@ orca skills install --skill orchestration --skill orca-cli --agent universal
 orca skills installed
 ```
 
-These are **optional and never required**. The stubs teach WHEN, not HOW; the grammar is served by
-the binary on demand (`orca skills get <topic>`), which is what this repo's references ask for on the DEEP topics; the stubs themselves are loaded, not fetched (`.agents/instructions/agent-skills-and-mcps.md`).
-Install them if you want the user-level trigger words; skip them and nothing breaks.
+These are **optional and never required**. The stubs carry the command grammar and are loaded alongside
+`orca-orchestration` (the list is `orchestration.orchestrator_skills` in `.agents/project.yaml`); the binary
+serves the DEEP topics a stub points at on demand (`orca skills get <topic>`). Skip them and nothing breaks:
+the binary still answers for the grammar.
 
 Note `orca skills install --local` installs into the current project instead of globally. In THIS
 repo, do not use `--local`: a stub landing inside the project skill store would show up as an

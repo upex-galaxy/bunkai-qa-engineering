@@ -72,7 +72,10 @@
       "mcp__exa__*",
       "Skill(test-framework-adaptation)",
       "mcp__tavily__*",
-      "mcp__postman__*"
+      "mcp__postman__*",
+      "Skill(sprint-conductor)",
+      "Skill(exploratory-testing)",
+      "Skill(evidence-artifact)"
     ],
     "deny": [
       "Bash(rm -rf *)",

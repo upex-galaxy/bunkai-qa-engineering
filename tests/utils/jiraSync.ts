@@ -4,12 +4,20 @@
  * Syncs ATC results to Test Management Systems.
  * Supports: X-Ray Cloud, Jira Direct
  *
- * Usage:
- *   bun run test:sync
- *   AUTO_SYNC=true bun test
+ * Usage: run it AFTER the Playwright process exits, gated on AUTO_SYNC=true.
+ *
+ *   bun run test           # writes reports/atc_results.json on exit
+ *   bun run test:sync      # reads that file and writes the results back
+ *
+ * It is deliberately NOT called from tests/teardown/global.teardown.ts: the
+ * report it reads is written by KataReporter.onEnd(), which fires after the
+ * teardown project, so an in-process call reads a stale file or none at all.
  */
 
 import type { AtcResult } from '@utils/decorators';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { buildXrayTests, findKeyProblems, keyProblemLine, readRunReport } from '@utils/xrayResults';
 import { config, env } from '@variables';
 
 // ============================================
@@ -20,6 +28,37 @@ interface XrayTestExecution {
   testKey: string
   status: 'PASSED' | 'FAILED' | 'TODO'
   comment: string
+}
+
+/**
+ * Body of `POST /api/v2/import/execution` (Xray JSON result format).
+ *
+ * Two mutually exclusive modes:
+ *   - `testExecutionKey` — write the runs onto an EXISTING Test Execution.
+ *   - `info` — let Xray create a new one from these fields.
+ *
+ * The `info` schema is closed (`additionalProperties: false`) and admits only
+ * project / summary / description / version / revision / user / startDate /
+ * finishDate / testPlanKey / testEnvironments. There is NO parent field, so an
+ * Execution created here CANNOT be attached to the "QA Test Artifacts" epic by
+ * this call — only `testExecutionKey`, pointing at an item somebody already
+ * parented, satisfies the artifact doctrine. See the comment on `payload` below.
+ */
+interface XrayImportPayload {
+  testExecutionKey?: string
+  info?: {
+    project: string
+    summary: string
+    description: string
+    testEnvironments: string[]
+    /**
+     * Key of the Test Plan the minted Execution is linked to (the RTP). Set
+     * only when `RTP_KEY` is non-empty: the schema is closed and an empty
+     * string is a value Xray rejects, not an absent field.
+     */
+    testPlanKey?: string
+  }
+  tests: XrayTestExecution[]
 }
 
 interface SyncResult {
@@ -35,19 +74,45 @@ interface SyncResult {
 
 export async function syncResults(reportPath = 'reports/atc_results.json'): Promise<SyncResult> {
   if (!config.tms.autoSync) {
-    console.log('[SKIP] TMS sync disabled. Set AUTO_SYNC=true to enable.');
+    console.log(
+      '[SKIP] TMS sync is OFF — no result was written back to the TMS. Enable it with AUTO_SYNC=true.',
+    );
     return { provider: 'none', success: true, message: 'Sync disabled' };
   }
 
   let results: Record<string, AtcResult[]>;
 
   const reportFile = Bun.file(reportPath);
-  if (await reportFile.exists()) {
-    const reportData = (await reportFile.json()) as { results?: Record<string, AtcResult[]> };
-    results = reportData.results ?? {};
+  // The sibling test-outcomes.json alone is enough: when every ATC of the run
+  // hung, it is the only record that they ran (tests/utils/xrayResults.ts).
+  if (await reportFile.exists() || existsSync(join(dirname(reportPath), 'test-outcomes.json'))) {
+    const read = readRunReport(reportPath);
+    if (read.problems.length > 0) {
+      const message = read.problems.join('; ');
+      console.error(`[ERROR] Nothing was written back: ${message}.`);
+      return { provider: config.tms.provider, success: false, message };
+    }
+    results = read.results;
   }
   else {
-    console.warn('[WARN] ATC report file not found:', reportPath);
+    // A missing report in CI means the pipeline is wired wrong: this command
+    // runs AFTER the Playwright process, so KataReporter.onEnd() has already
+    // written the file. Failing loudly is the whole point of the fix for #27 —
+    // the old silent return is how the write-back went unnoticed for months.
+    // Locally the same state is ordinary (no suite has been run yet), so it
+    // stays a warning there.
+    const message = `ATC report file not found: ${reportPath}`;
+
+    if (env.isCI) {
+      console.error(
+        `[ERROR] ${message}. It is written by KataReporter.onEnd() when the `
+        + 'Playwright process exits, so run `bun run test:sync` as a step AFTER '
+        + 'the test step, not before it and not inside the suite.',
+      );
+      return { provider: config.tms.provider, success: false, message };
+    }
+
+    console.warn(`[WARN] ${message} — run the suite first, then \`bun run test:sync\`.`);
     results = {};
   }
 
@@ -75,14 +140,96 @@ export async function syncResults(reportPath = 'reports/atc_results.json'): Prom
 // X-Ray Cloud Sync
 // ============================================
 
+/**
+ * Read the Jira issue type of `issueKey`, or null when it cannot be determined.
+ *
+ * Diagnostic only. The Xray provider needs no Atlassian credentials of its own,
+ * so a missing credential, an unreachable Jira or an unexpected payload all
+ * return null — a diagnostic must never become a new blocker.
+ */
+async function readIssueType(issueKey: string): Promise<string | null> {
+  const { url, user, apiToken } = config.tms.jira;
+
+  if (!url || !user || !apiToken) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(`${url}/rest/api/3/issue/${issueKey}?fields=issuetype`, {
+      headers: {
+        Authorization: `Basic ${btoa(`${user}:${apiToken}`)}`,
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const issue = (await response.json()) as { fields?: { issuetype?: { name?: string } } };
+    return issue.fields?.issuetype?.name ?? null;
+  }
+  catch {
+    return null;
+  }
+}
+
 async function syncToXray(results: Record<string, AtcResult[]>): Promise<SyncResult> {
+  // Same rule as the CI payload step: an id that is not a Test key stops the
+  // write-back before any network call.
+  const keyProblems = findKeyProblems(results);
+  if (keyProblems.length > 0) {
+    console.error(`[ERROR] ${keyProblemLine(keyProblems)}`);
+    return { provider: 'xray', success: false, message: 'Not a Test key' };
+  }
+  // Every ATC skipped at runtime: Xray's schema needs at least one entry.
+  if (buildXrayTests(results).length === 0) {
+    console.log('[WARN] No ATC result left to sync (every ATC was skipped)');
+    return { provider: 'xray', success: true, message: 'No results to sync' };
+  }
+
   const { clientId, clientSecret, projectKey } = config.tms.xray;
+  const stpExecutionKey = config.tms.stpExecutionKey;
 
   if (!clientId || !clientSecret) {
     console.error(
       '[ERROR] Missing X-Ray credentials. Check XRAY_CLIENT_ID and XRAY_CLIENT_SECRET.',
     );
     return { provider: 'xray', success: false, message: 'Missing credentials' };
+  }
+
+  // Guard the one mistake the variable NAME invites: handing it the STP key.
+  // Xray writes runs into Test EXECUTIONS only; a Test Plan derives its status
+  // from them, so an import aimed at one lands nowhere useful.
+  if (stpExecutionKey) {
+    const issueType = await readIssueType(stpExecutionKey);
+    const kind = issueType?.toLowerCase() ?? '';
+
+    if (issueType === null) {
+      console.log(
+        `[INFO] Could not read the issue type of ${stpExecutionKey} (no Atlassian `
+        + 'credentials, or Jira unreachable): importing without the Plan-vs-Execution check.',
+      );
+    }
+    else if (kind.includes('test plan')) {
+      console.error(
+        `[ERROR] STP_EXECUTION_KEY=${stpExecutionKey} is a "${issueType}": that is the `
+        + 'key OF a Plan (the RTP or the STP). Pass the key of the RTR (or the sprint-close '
+        + 'STR) instead: the Test Execution this run imports into. A Test Plan derives '
+        + 'its status from its Executions, so results are never written into one.',
+      );
+      return {
+        provider: 'xray',
+        success: false,
+        message: 'STP_EXECUTION_KEY points at a Test Plan, not at the RTR / STR Test Execution',
+      };
+    }
+    else if (!kind.includes('test execution')) {
+      console.warn(
+        `[WARN] STP_EXECUTION_KEY=${stpExecutionKey} is a "${issueType}", not a Test `
+        + 'Execution. Importing anyway — Xray decides whether it accepts the target.',
+      );
+    }
   }
 
   try {
@@ -105,35 +252,59 @@ async function syncToXray(results: Record<string, AtcResult[]>): Promise<SyncRes
 
     const token = await authResponse.json();
 
-    const tests: XrayTestExecution[] = [];
+    // One entry per ATC, `testKey` only: no `testInfo`, so Xray cannot create a
+    // Test from this import (tests/utils/xrayResults.ts, shared with CI).
+    const tests: XrayTestExecution[] = buildXrayTests(results);
 
-    for (const [testId, executions] of Object.entries(results)) {
-      const finalStatus = executions.every(e => e.status === 'PASS') ? 'PASSED' : 'FAILED';
-      const lastExecution = executions[executions.length - 1];
+    // Preferred path: write onto an Execution that already exists in Jira. That
+    // item is the RTR /regression-testing created for this run (or the
+    // sprint-close STR), so it already carries its parent ("QA Test Artifacts"
+    // epic), its Test Environment, its `testPlan` link to the RTP and a title in
+    // the ratified grammar. Nothing is invented here.
+    //
+    // Fallback path (no STP_EXECUTION_KEY): Xray creates the Execution from
+    // `info`. That schema has no parent field, so the item lands UNPARENTED and
+    // no later call in this file can adopt it: reparenting is a Jira REST
+    // `PUT /issue/{key}` on the parent field, which needs Atlassian credentials
+    // the Xray provider does not have. We do what the API does allow: the
+    // ratified RTR title shape, the Test Environment from the active env and,
+    // when RTP_KEY is set, the `testPlanKey` link so the minted RTR is at least
+    // plan-linked. The key is added only when non-empty: `info` is a closed
+    // schema and an empty string is a value Xray rejects, not an absent field.
+    const rtpKey = config.tms.rtpKey;
+    const payload: XrayImportPayload = stpExecutionKey
+      ? { testExecutionKey: stpExecutionKey, tests }
+      : {
+          info: {
+            project: projectKey,
+            // {ACRONYM}: {scope-id}: {descriptor}: .agents/skills/agentic-qa-core/references/planning-ladder.md
+            summary: `RTR: Build#${env.buildId}: Regression Testing`,
+            description:
+              `Automated test execution via KATA Architecture\nEnvironment: ${env.current}\n\n`
+              + 'Created by the test run itself, so it has no parent Epic. Set '
+              + 'STP_EXECUTION_KEY to the RTR (or the sprint-close STR): an existing Test '
+              + 'Execution under the "QA Test Artifacts" epic, to keep results on a '
+              + 'parented item instead.',
+            testEnvironments: [env.current],
+            ...(rtpKey ? { testPlanKey: rtpKey } : {}),
+          },
+          tests,
+        };
 
-      tests.push({
-        testKey: testId,
-        status: finalStatus,
-        comment:
-          `KATA ATC: ${lastExecution.methodName}\n`
-          + `Executions: ${executions.length}\n`
-          + `Duration: ${lastExecution.duration}ms\n`
-          + `Last run: ${lastExecution.executedAt}\n${
-            lastExecution.error !== null ? `\nError:\n${lastExecution.error}` : ''
-          }`,
-      });
+    if (stpExecutionKey) {
+      console.log(`[UPLOAD] Importing results into existing Test Execution ${stpExecutionKey}...`);
     }
-
-    const payload = {
-      info: {
-        project: projectKey,
-        summary: `KATA Execution - ${env.buildId}`,
-        description: `Automated test execution via KATA Architecture\nEnvironment: ${env.current}`,
-      },
-      tests,
-    };
-
-    console.log('[UPLOAD] Importing results to X-Ray...');
+    else {
+      const planNote = rtpKey
+        ? `The minted item is linked to the RTP ${rtpKey} (RTP_KEY).`
+        : 'Set RTP_KEY so the minted item is at least linked to the RTP.';
+      console.warn(
+        '[WARN] STP_EXECUTION_KEY is not set: Xray will create a NEW, unparented '
+        + 'Test Execution for this run. Point it at the RTR (or the sprint-close STR) '
+        + `under the "QA Test Artifacts" epic to avoid orphan executions. ${planNote}`,
+      );
+      console.log('[UPLOAD] Importing results to X-Ray...');
+    }
 
     const importResponse = await fetch('https://xray.cloud.getxray.app/api/v2/import/execution', {
       method: 'POST',
@@ -175,12 +346,49 @@ async function syncToXray(results: Record<string, AtcResult[]>): Promise<SyncRes
 // Jira Direct Sync
 // ============================================
 
+/**
+ * Resolve the Jira custom field that holds a test's run status.
+ *
+ * Custom-field ids are per-instance data: they differ between workspaces and
+ * are reassigned by a site migration. The catalog `.agents/jira-fields.json`
+ * is their single source of truth, so the id is never hardcoded in config or
+ * docs. `JIRA_TEST_STATUS_FIELD` stays available as an explicit override.
+ *
+ * Returns null when neither source provides one — the caller aborts rather
+ * than PUT an empty field key, which Jira answers with an opaque 400.
+ */
+function resolveTestStatusField(): string | null {
+  if (config.tms.jira.testStatusField) {
+    return config.tms.jira.testStatusField;
+  }
+
+  try {
+    const catalogPath = join(process.cwd(), '.agents', 'jira-fields.json');
+    const catalog = JSON.parse(readFileSync(catalogPath, 'utf8')) as Record<string, { id?: string }>;
+    return catalog.test_status?.id ?? null;
+  }
+  catch {
+    return null;
+  }
+}
+
 async function syncToJiraDirect(results: Record<string, AtcResult[]>): Promise<SyncResult> {
-  const { url, user, apiToken, testStatusField } = config.tms.jira;
+  const { url, user, apiToken } = config.tms.jira;
 
   if (!url || !user || !apiToken) {
     console.error('[ERROR] Missing Atlassian config. Check issue_tracker.atlassian_url in .agents/project.yaml, and ATLASSIAN_EMAIL, ATLASSIAN_API_TOKEN in .env.');
     return { provider: 'jira', success: false, message: 'Missing credentials' };
+  }
+
+  const testStatusField = resolveTestStatusField();
+
+  if (!testStatusField) {
+    console.error(
+      '[ERROR] Could not resolve the test status field. Regenerate the catalog with '
+      + '`bun run jira:sync-fields --force` so `.agents/jira-fields.json` carries a '
+      + '`test_status` slug, or set JIRA_TEST_STATUS_FIELD in .env to override it.',
+    );
+    return { provider: 'jira', success: false, message: 'Unresolved test status field' };
   }
 
   const auth = btoa(`${user}:${apiToken}`);
@@ -193,7 +401,11 @@ async function syncToJiraDirect(results: Record<string, AtcResult[]>): Promise<S
   let failCount = 0;
 
   for (const [testId, executions] of Object.entries(results)) {
-    const finalStatus = executions.every(e => e.status === 'PASS') ? 'PASS' : 'FAIL';
+    // Every execution skipped at runtime = NOT RUN (ADR-0020): nothing to write.
+    if (executions.every(e => e.status === 'SKIP')) {
+      continue;
+    }
+    const finalStatus = executions.some(e => e.status === 'FAIL') ? 'FAIL' : 'PASS';
     const lastExecution = executions[executions.length - 1];
 
     try {

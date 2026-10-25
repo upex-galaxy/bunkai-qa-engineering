@@ -198,3 +198,6 @@ storage-state-*.json
 
 # ----- 2026-10-05 (sync) -----
 !.env.provider.schema
+
+# ----- 2026-10-25 (sync) -----
+!.context/sprint/

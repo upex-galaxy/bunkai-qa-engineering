@@ -55,6 +55,7 @@ Each row states ONE invariant and cites where it comes from. "web" = the anchor 
 | Shift-Left → `shift-left-testing` | pre-sprint, in batch, zero TMS entities; the ATP goes into the Story field; the Story stops at Estimation; the `[QA] Shift-Left Review` subtask tracks the pass | `#stages`, `/early-game` | `agentic-qa-core/references/stage-gates.md` §"Shift-Left"; `.agents/skills/shift-left-testing/SKILL.md` |
 | Planning → `sprint-testing` | in-sprint; Set-first (ATS, then ATP, then ATR); the ATP item is born FROM the field; an ATR without Test Environment fails the DoD; STP / FTP find-or-create | `#stages`, `/diagramas/sprint-testing` | `agentic-qa-core/references/stage-gates.md` §"Planning" |
 | Execution → `sprint-testing` | smoke as Go / No-Go first, then the Trifuerza beyond the plan; every finding classified before filing; a human agrees to every filing | `#stages`, `#trifuerza` | `agentic-qa-core/references/stage-gates.md` §"Execution"; `agentic-qa-core/references/defect-management-doctrine.md` Part 1 |
+| Execution without a ticket → `exploratory-testing` | the same stage entered by scope (flow, module, sweep): a charter, parallel recon, refutation, a main-thread tie-break; every candidate executed live, marked NEW / WEAK / COVERED and `oracle: observed` until a person confirms it; a repo addition the web does not draw | none: repo addition | `agentic-qa-core/references/stage-gates.md` §"Execution (exploration without a ticket)"; `agentic-qa-core/references/discovery-driven-doctrine.md` §1, §4 |
 | Reporting → `sprint-testing` | the ATR is a Test Execution item; a QA comment; links verified in direction; the human signs the transition | `#stages` | `agentic-qa-core/references/stage-gates.md` §"Reporting"; `agentic-qa-core/references/traceability-linking.md` §10 |
 | Documentation → `test-documentation` | a ROI gate over already-validated behaviour: exactly one verdict per scenario, most Deferred; a second-agent verifier recommended | `#stages`, `/mid-game` | `agentic-qa-core/references/stage-gates.md` §"Documentation" |
 | Automation → `test-automation` | Candidates only; the plan is approved before code; verifiers green; the only stage with a mandatory separate verifier | `#stages`, `/diagramas/automatizacion-de-tests` | `agentic-qa-core/references/stage-gates.md` §"Automation" |
@@ -104,7 +105,7 @@ Each row states ONE invariant and cites where it comes from. "web" = the anchor 
 
 | Kind of adaptation | Seam | Mechanism |
 |---|---|---|
-| Values: which stages the project runs, gate strictness, execution profile | `.agents/project.yaml` → `qa.methodology` | the yaml is bootstrap-only and schema-diffed, so a key upstream adds later is offered insert-only by `bun run up` |
+| Values: which stages the project runs, gate strictness, execution profile | `.agents/project.yaml` → `qa.methodology` | the yaml is bootstrap-only and schema-diffed, so a key upstream adds later is offered insert-only by `bun sync` |
 | Prose: a project rule, a local exception, a renamed artifact | `references/project-overrides.md` | delivered once when missing, never overwritten (bootstrap-only), project-owned |
 | The skill body and the other references | none | synced verbatim; a direct edit gets a parity row on the next sync, and the fix is a refinement proposal upstream |
 

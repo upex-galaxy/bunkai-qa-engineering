@@ -88,14 +88,15 @@ _RELATED STORIES_
 * Blocks: [other issues]
 ```
 
-**Attach visual evidence** (screenshot of the failing UI, console capture, repro recording). `![](path)` does NOT embed in Jira — use the bundled helper, which uploads the file and posts it inline as a real image:
+**Attach visual evidence.** The bug's evidence is its evidence page (the `evidence-artifact` skill): its link goes under `## Evidence`, and the bug keeps ONE annotated thumbnail in its Description, embedded after the link is written and read back before anyone says it is there:
 
 ```bash
-bun .agents/skills/acli/scripts/jira-attach-media.ts {{PROJECT_KEY}}-<bug> ./evidence/repro-step-3.png \
-  --caption "Step 3 — validation error not shown" --publish
+bun run evidence build --pack <PBI>/evidence/evidence-pack-<BUG>.json \
+  --thumb <PBI>/evidence/evidence-artifact/<BUG>/<BUG>-thumbnail.png
+bun run evidence attach --pack <PBI>/evidence/evidence-pack-<BUG>.json
 ```
 
-One call per evidence file (the image is embedded as a comment on the bug). Full recipe + when-to-use in `../../acli/references/adf-authoring-style.md` §media. This is the high-value case: a reviewer sees the failing screen inline instead of clicking through to the Attachments panel.
+`![](path)` does NOT embed in Jira; `attach` uploads the PNG with the bundled media helper and appends it to the end of the Description (`evidence-artifact/references/workflow.md` §4). Nothing else is attached by hand. Without an evidence page (no pack for this bug), the helper alone posts one image as a comment: `bun .agents/skills/acli/scripts/jira-attach-media.ts {{PROJECT_KEY}}-<bug> <png> --caption "<what it shows>" --publish` (full recipe in `../../acli/references/adf-authoring-style.md` §media). Either way a reviewer sees the failing screen inline instead of clicking through to the Attachments panel.
 
 ### 1.4 Severity matrix
 
@@ -285,7 +286,7 @@ Before calling `[ISSUE_TRACKER_TOOL] Create issue`, present the full draft (titl
 
 ### 2.1 Prerequisites
 
-- All Stage 2 TCs have final status PASSED or FAILED (no NOT RUN).
+- Every Stage 2 TC is PASSED, FAILED, or NOT RUN with a recorded `DEFERRED (execution)`; an open `BLOCKED` is not reportable (`agentic-qa-core/references/discovery-driven-doctrine.md` §5).
 - Evidence under `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/evidence/`.
 - Bugs, if any, already filed per §1.
 - TMS modality resolved in Session Start (§0) and persisted in `test-session-memory.md`.
@@ -297,9 +298,9 @@ The same body text is used in both modalities; only the container differs (§2.4
 ```
 {{PROJECT_KEY}}-{number} TEST RESULTS
 Tested: {date}
-Environment: {Staging | localhost}
+Environment: {the environment the cases were observed in (the ATR Test Environment)}
 Tester: {name/email}
-Result: {PASSED | FAILED | PASSED WITH ISSUES} ({passed}/{total})
+Result: {PASSED | FAILED | PASSED WITH ISSUES | PASSED WITH DEFERRALS} ({passed}/{total})
 
 SUMMARY
   {Brief description of what was tested}
@@ -309,11 +310,17 @@ TEST CASES
   TC-{id}: {name} ... {status}
   TC-{id}: {name} ... {status}
 
+DEFERRED (EXECUTION) CASES
+  {None | TC-{id}: DEFERRED (execution) {date} by QA decision: {reason}; follow-up {KEY}}
+
 TEST DATA
   {Entity}: {name} (ID: {id})
 
 BUGS FOUND
   {None | list with {BUG-KEY} - severity}
+
+EVIDENCE HANDOFF
+  {the §3.5 block: the evidence page URL, one line per bug page, the ranked deep links}
 
 OBSERVATIONS
   {Notable findings, edge cases, UX feedback}
@@ -322,7 +329,7 @@ RECOMMENDATIONS
   {Automation candidates, future testing, improvements}
 ```
 
-"Result" values: `PASSED` (all TCs pass), `FAILED` (one or more fail), `PASSED WITH ISSUES` (all pass but with notable observations). The per-TC statuses come from the Execution Status field (Run), not the Test Status workflow — see `test-documentation/references/tms-conventions.md` §IQL.
+"Result" values: `PASSED` (all TCs pass), `FAILED` (one or more fail), `PASSED WITH ISSUES` (all pass but with notable observations, or a FAIL recalibrated to GO-with-debt per §5.0), `PASSED WITH DEFERRALS` (none FAILED, and every case that did not pass is a recorded `DEFERRED (execution)` listed under DEFERRED (EXECUTION) CASES). The per-TC statuses come from the Execution Status field (Run), not the Test Status workflow — see `test-documentation/references/tms-conventions.md` §IQL.
 
 ### 2.3 Upload by modality
 
@@ -380,10 +387,10 @@ for each {TEST_KEY, result} in run:
   [ISSUE_TRACKER_TOOL] Update Issue:
     issue: {TEST_KEY}
     fields:
-      Test Status: PASSED | FAILED | BLOCKED  # terminal-set caveat: §2.4
+      Test Status: PASSED | FAILED | NOT RUN  # NOT RUN carries its DEFERRED (execution) reason in the comment; terminal-set caveat: §2.4
   [ISSUE_TRACKER_TOOL] Add Comment:
     issue: {TEST_KEY}
-    body: "Run {date}: {result}. Env: {env}. Session: {STORY_KEY}"
+    body: "Run {date}: {result}. Env: {env}. Session: {STORY_KEY}"  # NOT RUN: append "DEFERRED (execution) {date} by QA decision: {reason}; follow-up {KEY}"
 ```
 
 ### 2.4 "Mark ATR complete" semantics
@@ -392,8 +399,8 @@ for each {TEST_KEY, result} in run:
 
 | Modality | Completion signal |
 |----------|-------------------|
-| A (Xray) | All Test Runs at a terminal status (PASS/FAIL/BLOCKED/ABORTED, not TODO/EXECUTING), THEN the Test Execution issue transitioned via `{{jira.transition.test_execution.complete}}` to `{{jira.status.test_execution.close}}` (the status is named `Close`, not `Done`). A bug retest closes its `ReTest:` Execution with `{{jira.transition.re_test_execution.complete}}`. The terminal set is whatever THIS instance configures — a project limited to PASSED/FAILED records a blocked case as FAILED plus `BLOCKED — <reason>` in the ATR body (see `sprint-orchestration.md` Stage 3 step 3-bis). |
-| B (Jira-native) | `{{jira.acceptance_test_results}}` populated with full body (not placeholder), or the `## Acceptance Test Results (ATR)` fallback comment when the field is absent; every linked TC has a terminal Test Status. No Execution item exists at this altitude — state that as the N/A. |
+| A (Xray) | Every Test Run at a terminal status (PASS/FAIL/BLOCKED/ABORTED, not TODO/EXECUTING), or left `TODO` with its `DEFERRED (execution)` line in the ATR body, THEN the Test Execution issue transitioned via `{{jira.transition.test_execution.complete}}` to `{{jira.status.test_execution.close}}` (the status is named `Close`, not `Done`). A bug retest closes its `ReTest:` Execution with `{{jira.transition.re_test_execution.complete}}`. The terminal set is whatever THIS instance configures. An unexecuted case is never recorded FAILED: its run stays `TODO` (or `BLOCKED` where the instance defines it) and the ATR body carries `DEFERRED (execution) <date> by QA decision: <reason>; follow-up <KEY>`. The Execution closes once every non-terminal run carries such a line (see `sprint-orchestration.md` Stage 3 step 3-bis). |
+| B (Jira-native) | `{{jira.acceptance_test_results}}` populated with full body (not placeholder), or the `## Acceptance Test Results (ATR)` fallback comment when the field is absent; every linked TC has a terminal Test Status, or stays `NOT RUN` with its `DEFERRED (execution)` line in the ATR. No Execution item exists at this altitude — state that as the N/A. |
 
 Stage 3 closes the ATS and the ATP in the same pass (Modality jira-xray): ATS via `{{jira.transition.test_set.done}}` → `{{jira.status.test_set.close}}` (membership final), ATP via `{{jira.transition.test_plan.complete}}` → `{{jira.status.test_plan.completed}}` (results are in; fire `{{jira.transition.test_plan.designed}}` first if Stage 1 left it at `planning`). On an unmapped slug run the `artifact-lifecycle.md` §4 fallback — ask, never skip silently.
 
@@ -411,7 +418,7 @@ Also append to `context.md`:
 ```markdown
 ## Final Status
 
-**Result:** {PASSED | FAILED | BLOCKED}
+**Result:** {PASSED | PASSED WITH ISSUES | PASSED WITH DEFERRALS | FAILED}
 **Workflow Complete:** {date}
 **Next:** {{{jira.status.story.qa_approved}} | Wait for fixes}
 ```
@@ -433,7 +440,7 @@ Four comment templates cover the two paths (Story, Bug) and two outcomes (pass, 
 ```
 QA Testing Complete - {{PROJECT_KEY}}-{number}
 
-Environment: {Staging | localhost}
+Environment: {the environment the cases were observed in (the ATR Test Environment)}
 Result: PASSED ({passed}/{total} TCs)
 
 TEST DATA USED:
@@ -442,6 +449,10 @@ TEST DATA USED:
 VERIFIED BEHAVIORS:
 - AC1: {brief description} - VERIFIED
 - AC2: {brief description} - VERIFIED
+
+{If any case was deferred:}
+DEFERRED (EXECUTION) CASES (not observed; QA decision, follow-up open):
+- TC-{id}: {reason} - follow-up {KEY}
 
 {If clarifications obtained:}
 CLARIFICATIONS:
@@ -457,7 +468,7 @@ Use only after AI and user agree the defect is real.
 ```
 QA Testing Complete - {{PROJECT_KEY}}-{number}
 
-Environment: {Staging | localhost}
+Environment: {the environment the cases were observed in (the ATR Test Environment)}
 Result: FAILED ({passed}/{total} TCs)
 
 TEST DATA USED:
@@ -482,7 +493,7 @@ Artifacts: ATP-{id}, ATR-{id}, TC-{ids}
 ```
 QA Bug Verification - {{PROJECT_KEY}}-{number}
 
-Environment: {Staging | localhost}
+Environment: {the environment the cases were observed in (the ATR Test Environment)}
 Result: VERIFIED - Bug fix confirmed
 
 TEST DATA USED:
@@ -503,7 +514,7 @@ Use only after AI and user agree the bug still reproduces.
 ```
 QA Bug Verification - {{PROJECT_KEY}}-{number}
 
-Environment: {Staging | localhost}
+Environment: {the environment the cases were observed in (the ATR Test Environment)}
 Result: NOT FIXED - Issue persists
 
 TEST DATA USED:
@@ -519,38 +530,43 @@ Returning to dev for review.
 Artifacts: ATP-{id}, ATR-{id}
 ```
 
-### 3.5 Evidence Handoff (emit at Stage 3 close whenever UI or API evidence exists)
+### 3.5 Evidence Handoff (emit at Stage 3 close whenever UI, API or DB evidence exists)
 
-A ranked, captioned shortlist of exactly what belongs on the ticket, emitted in chat after the Template A-D comment posts — **on ANY verdict** (pass, fail, bug, open question): a reader trusts a finding far more when they can see it, UI work especially. It never goes inside the Jira comment body itself.
+All evidence a reader needs lives on the ticket's **evidence page**: one private page per story ticket under test and one per bug filed, built from the evidence pack the session wrote during Stage 2 (annotated screenshots, expected vs actual, API requests, SQL results). The `evidence-artifact` skill owns it: build and publish per its `references/workflow.md` §3 BEFORE composing this handoff, so every line below carries a real URL. The handoff is ALWAYS produced when evidence exists, on ANY verdict (pass, fail, bug, open question).
 
-Format:
+This block is for the human (printed in chat) and it is also the ATR's ONE evidence list: it goes into the ATR body as its `EVIDENCE HANDOFF` section in the same update that marks the ATR complete (§2). The ATR never carries a second list. The QA comment carries only the page link, in its footer (`Evidence → [evidence page](<url>)`); each TC's notes get their own deep link (`evidence-artifact/references/workflow.md` §3 step 6). The tracker keeps one image per bug: the thumbnail in the bug's Description (§1.3); nothing else is attached by hand.
+
+What to emit:
+
+1. **Evidence pages**: the ticket's page URL, then one line per bug page (`{BUG} — {title} — <url>`), plus the owner line: "Published private: share it from the page's Share menu."
+2. **What the page proves (ranked)**: 1-4 lines, each a business caption naming its case, with the case's deep link (`<url>#{KEY}.{TC}`): the headline proof first, then edge cases and controls.
+3. **Local pack**: the absolute path of `evidence/evidence-pack.json` and the screenshot folder, for the operator on this machine. Never in the tracker.
+
+Format (chat + the `EVIDENCE HANDOFF` section of the ATR):
 
 ```
-### Evidence Handoff — evidence for the {KEY} thread
-Evidence folder: {absolute path}/evidence/
+### Evidence Handoff — {KEY}
+Evidence page: <url>   (published private; share it from the page's Share menu)
+Bug pages: {BUG} — {title} — <url>
 
-Recommended (in this order):
-1. {file} — {business caption}
-2. {file} — {business caption}
+What it proves:
+1. {TC} — {business caption} — <url>#{KEY}.{TC}
+2. {TC} — {business caption} — <url>#{KEY}.{TC}
 
-Skipped (available, not needed): {smoke shot}, raw console/page logs.
-
-API evidence (paste as a thread reply):       <- only if the API was tested
-    GET /api/{endpoint}?{params}
-    Authorization: <redacted>
-    -> 200 · {proving field}: {value}
+Local pack: {absolute path}/evidence/evidence-pack.json (screenshots beside it)
 ```
 
-**Delivery — this repo can auto-embed.** Jira accepts inline images via the bundled helper (§1.3), so after emitting the ranked list, OFFER to publish the recommended images directly onto the target issue (one helper call per file, human confirms first); the human-attaches path stays as fallback for surfaces the helper can't reach. Either way the AI never claims an attachment happened unless the helper call verifiably succeeded.
+**When the page could not be published.** The Artifact tool is unavailable in the session, or the build stopped (it names the field). Say so in the handoff (and in the mailbox for a fleet worker): the conductor publishes from the pack (`evidence-artifact/references/workflow.md` §3). Until then the handoff lists the ranked screenshot files by absolute path with the same captions, `ls`-verified, and the ATR line says the page is pending; replace it once the URL exists.
 
 Rules:
 
-- **Curate ruthlessly — do not dump the folder.** 1-4 shots is typical. Lead with the headline / "money" shot; if a bug got an annotated capture via the `bug-screenshot-annotation` skill, that annotated PNG IS the money shot — rank it first, ahead of the raw capture. Then edge cases / controls. For bugs show the fix working (Template C) or the persisting failure (Template D); for stories show key ACs verified; never list intermediate navigation shots.
+- ALWAYS emitted when UI, API or DB evidence exists, independent of the verdict.
 - **Captions are business outcomes, not mechanism** — "discount now its own line, total unchanged", NOT "panel screenshot at 1280px".
-- **Verify each file exists on disk first** (`ls` the evidence dir) — never recommend a capture a subagent only claimed to take (`../../agentic-qa-core/references/evidence-conventions.md` §3).
-- **Skip list, one line** — name the captured-but-not-recommended files so the human knows they were considered, not forgotten.
-- **API evidence blocks carry ZERO credentials** — redact `Authorization` / Bearer / cookies / API keys / passwords / session tokens → `<redacted>`; drop any token query-param. Show only what proves the behavior (status + the one field that makes the point).
-- **Absolute paths here** (the human may open the OS file browser to drag files); the session-footer consolidated list (`../../agentic-qa-core/references/session-footer-contract.md`) uses repo-relative paths — produce both where both apply.
+- **Verify each file exists on disk first** (`ls` the evidence dir) — never cite a capture a subagent only claimed to take (`../../agentic-qa-core/references/evidence-conventions.md` §3).
+- The page holds the API and SQL proof, credentials redacted when the pack was written (`evidence-artifact/references/privacy.md`); the handoff does not repeat request blocks.
+- A link is the published page URL; the COMMENT never carries a local path.
+- The AI never claims the owner shared the page; it says the page was published private.
+- **Never hand over or embed a Playwright trace, HAR or raw network dump**, in the tracker, a PR or an evidence page. A trace bundles every network response the run captured, including unrelated data. Traces stay on the machine, gitignored, for local debugging.
 
 Naming: files in `evidence/` follow §1.11 (`{KEY}-step{NN}-{action}.{ext}`) or the Stage 2 exploration family; annotated images use the dedicated suffix — full model in `../../agentic-qa-core/references/evidence-conventions.md` §2.
 
@@ -601,8 +617,8 @@ Record the gate outcome (hypothesis, cited fact, decision) in the ATR Observatio
 
 1. ATR marked complete in TMS via `[TMS_TOOL]`, then TRANSITIONED to `{{jira.status.test_execution.close}}` per §2.4 — together with the ATS (→ `{{jira.status.test_set.close}}`) and the ATP (→ `{{jira.status.test_plan.completed}}`). Leaving any of the three where `create` dropped it is a Reporting DoD failure (sprint-testing anti-pattern S18).
 2. QA comment posted (Template A, B, C or D) via `[ISSUE_TRACKER_TOOL]`.
-3. Evidence Handoff emitted per §3.5 (ranked + captioned, absolute paths, auto-embed offered via the §1.3 helper).
-4. Ticket transitioned — Story PASSED -> `{{jira.status.story.qa_approved}}` (via `{{jira.transition.story.qa_sign_off}}`); Bug VERIFIED -> `{{jira.status.bug.closed}}` (via `{{jira.transition.bug.retest_passed}}`); Story FAILED **(run the §5.0 recalibration gate first for any security/auth/framework-default FAIL — a recalibrated finding becomes GO-with-debt and takes the PASSED path, not a blocking transition)** with `{{FORMAL_BLOCKED_GATE}}=true` -> `{{jira.status.story.blocked}}` (via `{{jira.transition.story.defect_reported}}`); Story FAILED non-strict -> left in `{{jira.status.story.in_test}}` with linked bug; Bug NOT FIXED -> left in `{{jira.status.bug.ready_for_qa}}` pending dev. See `sprint-orchestration.md` Briefing 4 Step 5 for the full decision tree.
+3. Evidence Handoff emitted per §3.5 (the page URLs, ranked deep links, the local pack; the same block is the ATR's evidence section).
+4. Ticket transitioned — Story PASSED (every case PASSED, or `DEFERRED (execution)` listed in the QA comment for the signer) -> `{{jira.status.story.qa_approved}}` (via `{{jira.transition.story.qa_sign_off}}`); Bug VERIFIED -> `{{jira.status.bug.closed}}` (via `{{jira.transition.bug.retest_passed}}`); Story FAILED **(run the §5.0 recalibration gate first for any security/auth/framework-default FAIL — a recalibrated finding becomes GO-with-debt and takes the PASSED path, not a blocking transition)** with `{{FORMAL_BLOCKED_GATE}}=true` -> `{{jira.status.story.blocked}}` (via `{{jira.transition.story.defect_reported}}`); Story FAILED non-strict -> left in `{{jira.status.story.in_test}}` with linked bug; Bug NOT FIXED -> left in `{{jira.status.bug.ready_for_qa}}` pending dev. See `sprint-orchestration.md` Briefing 4 Step 5 for the full decision tree.
 5. **Create the blocking traceability link — Story `is blocked by` Bug.** Whenever the `defect_reported` → `blocked` gate fires (`{{FORMAL_BLOCKED_GATE}}=true`), the status transition alone does not record the dependency; create the issuelink so the block gate and coverage consumers can walk it:
 
    ```
@@ -625,19 +641,19 @@ Record the gate outcome (hypothesis, cited fact, decision) in the ATR Observatio
 | Story PASSED with TCs worth automating | Formalize TCs + ROI | `test-documentation` (Stage 4) |
 | Story PASSED but all TCs Manual-only | Close, no handoff | — |
 | Story FAILED | Wait for fix -> re-run Stage 2 on failed TCs -> repeat Stage 3 | (loop) |
-| Bug VERIFIED | Optionally add regression ATC | `test-automation` (Stage 5) |
+| Bug VERIFIED | Bug-driven decision (golden rule + ROI + the person's signature), then automate a signed Candidate | `test-documentation` (Stage 4), then `test-automation` (Stage 5) |
 | Bug NOT FIXED | Return to dev | — |
 | Release window near | CI regression suite | `regression-testing` (Stage 6) |
 
 ### 5.3 Mixed results
 
-When some TCs pass and others fail, set ATR result to `PASSED WITH ISSUES`. File bugs for the failures. Do not block handoff to Stage 4 — the passing TCs are still eligible for ROI evaluation.
+When some TCs pass and others fail, set ATR result to `FAILED` (one or more fail, per the §2.2 "Result" values); `PASSED WITH ISSUES` is only for a FAIL recalibrated per §5.0. File bugs for the failures. Do not block handoff to Stage 4 — the passing TCs are still eligible for ROI evaluation.
 
 ### 5.4 Error handling
 
 | Situation | Action |
 |-----------|--------|
-| TCs still NOT RUN | Return to Stage 2, do not report yet |
+| TCs NOT RUN without a recorded deferral | Run the blocking ladder (`agentic-qa-core/references/discovery-driven-doctrine.md` §5); do not report yet |
 | ATR does not exist in TMS | Stage 1 was skipped — return and run `acceptance-test-planning.md` |
 | Cannot update ATR via `[TMS_TOOL]` | Check auth, retry; on persistent failure stop and inform user |
 | Custom-field creation error on bug | Create bug without that field, note the failure in a bug comment, inform user to contact Jira admin |
@@ -647,12 +663,12 @@ When some TCs pass and others fail, set ATR result to `PASSED WITH ISSUES`. File
 
 ## 6. Pre-flight checklist
 
-- [ ] All Stage 2 TCs have final status PASSED or FAILED
+- [ ] Every Stage 2 TC is PASSED / FAILED on observation, or NOT RUN with a recorded `DEFERRED (execution)`; no open `BLOCKED`
 - [ ] Bugs, if any, filed with complete custom fields (§1.10) and human confirmation
 - [ ] ATR body written in the §2.2 plain-text format and uploaded via `[TMS_TOOL]` (or to `{{jira.acceptance_test_results}}` / `## Acceptance Test Results (ATR)` fallback comment)
 - [ ] Synced ATR cache materialized (not hand-written) — jira-native: `acceptance-test-results.md` via `bun run jira:sync-issues get <STORY_KEY> --include-comments`; jira-xray: `test-executions/ATR-<ATR_KEY>-<slug>.md` via `bun run jira:sync-issues get <ATR_KEY>` (per-TC run results read via `[TMS_TOOL]`, not synced)
 - [ ] Correct QA comment template chosen (A/B/C/D) and posted via `[ISSUE_TRACKER_TOOL]`
-- [ ] Evidence Handoff emitted (§3.5): ranked 1-4 shots with business captions, skip list, API blocks redacted, files ls-verified; auto-embed offered
+- [ ] Evidence Handoff emitted (§3.5) and written as the ATR's `EVIDENCE HANDOFF` section: page URLs, ranked deep links with business captions, local pack path; each bug's ONE thumbnail embedded with `bun run evidence attach` and read back
 - [ ] Blocking/defect ticket mentions in the posted comment are real links, not bare keys (§3 real-link rule)
 - [ ] Ticket transitioned (story PASSED -> `{{jira.status.story.qa_approved}}`; bug VERIFIED -> `{{jira.status.bug.closed}}`)
 - [ ] `context.md` updated with Final Status block

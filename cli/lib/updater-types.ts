@@ -244,6 +244,10 @@ export interface RunSummary {
   localEditsOverwritten?: LocalEditOverwritten[]
   /** `package.json` keys kept at the project's value this run (upstream differs). */
   packageJsonKept?: PackageJsonKeptKey[]
+  /** `package.json` keys appended this run (planned, on a dry-run), with their upstream value. */
+  packageJsonAppended?: { file: string, section: string, key: string, value: string }[]
+  /** Test siblings of protected files the run did not deliver or overwrite. */
+  testSiblingsHeldBack?: { path: string, protectedPath: string }[]
   /** Paths recorded in `.template/last-apply.json`: the updater's own uncommitted output, exempt from the next dirty-tree guard. */
   lastApplyPaths?: number
   /** Set by the wrapper's parity hook when it saved the prompt file (`UpdaterConfig.promptFile`). */
@@ -326,7 +330,7 @@ export interface IgnoreDelta {
  * package you may not use appears in your manifest" — whereas the cost of
  * excluding it is that the `cli` component, which is synced wholesale and
  * imports several packages declared only here, ships code without the package
- * and leaves `bun run up` crashing on import in every downstream repo.
+ * and leaves `bun sync` crashing on import in every downstream repo.
  *
  * `lint-staged` is included for the same reason: `.husky/pre-commit` is synced
  * and shells out to `bunx lint-staged`, whose config lives in package.json and
@@ -502,6 +506,12 @@ export interface UpdaterConfig {
   deprecatedFiles: DeprecatedFile[]
   bootstrapOnlyPaths: string[]
   /**
+   * Protected files whose `.test.*` sibling is held back while the project's
+   * copy differs from upstream's (`testSiblingsToHoldBack`). The wrapper passes
+   * the resolved watchlist.
+   */
+  holdTestSiblingsOf?: string[]
+  /**
    * Generated, per-repo files that live INSIDE a synced component but must NEVER
    * be synced (each repo regenerates its own). Matched by exact repo-relative
    * path. Excluded from every detection path — bootstrap, content reconcile, and
@@ -525,7 +535,7 @@ export interface UpdaterConfig {
    *
    * The scaffold side is enforced separately by `TEMPLATE_EXCLUDES` in
    * `packages/create-agentic-qa/src/prepare.ts`; a sync-reachable entry
-   * usually belongs in both, or `bun run up` re-delivers what the scaffold
+   * usually belongs in both, or `bun sync` re-delivers what the scaffold
    * pruned.
    */
   repoOnlyPaths?: string[]
@@ -554,5 +564,13 @@ export interface UpdaterConfig {
   hooks?: {
     afterApply?: (summary: RunSummary) => Promise<void>
     skillsResolver?: (templateDir: string) => string[]
+    /**
+     * Runs right before the process hands itself to another updater (the
+     * self-update re-exec, or the upstream updater a `--dry-run` previews
+     * with). The parent's event loop is blocked while the child runs, so a
+     * live page must be handed over here: the hook stops what it serves and
+     * returns the env the child needs to pick it up (installer-ui plan §6).
+     */
+    beforeReexec?: (info: { kind: 'self-update' | 'preview', from: string, to: string }) => Promise<Record<string, string>>
   }
 }

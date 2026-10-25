@@ -6,6 +6,30 @@
   },
   "prompts": [
     {
+      "prompt": "boot the sprint conductor for sprint 7 and keep watching the test environment from the board",
+      "expect": ["context-map", "project-variables", ".agents/project.yaml"]
+    },
+    {
+      "prompt": "arranca el conductor del sprint 7 y vigila el entorno de pruebas desde el board",
+      "expect": ["context-map", "project-variables", ".agents/project.yaml"]
+    },
+    {
+      "prompt": "the laptop rebooted, resume the conductor: three workers were still running",
+      "expect": ["context-map", "orchestration-detail"]
+    },
+    {
+      "prompt": "run exploratory testing on the orders module, no ticket, and tell me what is worth a regression test",
+      "expect": ["context-map"]
+    },
+    {
+      "prompt": "hagamos testing exploratorio del módulo de reportes sin ticket",
+      "expect": ["context-map"]
+    },
+    {
+      "prompt": "explore the checkout flow and hunt for bugs",
+      "expect": ["context-map"]
+    },
+    {
       "prompt": "commit and push these changes",
       "expect": ["git"]
     },
@@ -154,6 +178,10 @@
       "expect": ["harnesses"]
     },
     {
+      "prompt": "corré bun sync para traer los cambios del boilerplate",
+      "expect": ["harnesses", "package.json"]
+    },
+    {
       "prompt": "corré bun run up para traer los cambios del boilerplate",
       "expect": ["harnesses", "package.json"]
     },
@@ -248,6 +276,14 @@
     {
       "prompt": "the router keeps missing these prompts, tune the triggers of that instruction section",
       "expect": ["harnesses"]
+    },
+    {
+      "prompt": "build the coverage gap list: which behaviours have no test that exercises them?",
+      "expect": ["context-map"]
+    },
+    {
+      "prompt": "armá el inventario de cobertura y decime qué comportamientos no tienen tests",
+      "expect": ["context-map"]
     }
   ]
 }
