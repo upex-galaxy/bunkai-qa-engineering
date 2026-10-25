@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-10-25T21:55:48.740Z",
+  "generatedAt": "2026-10-25T22:05:40.381Z",
   "components": {
     "api": [
       {
@@ -72,6 +72,18 @@
         "atcs": []
       },
       {
+        "name": "TokenApi",
+        "file": "TokenApi.ts",
+        "relativePath": "tests/components/api/TokenApi.ts",
+        "atcs": [
+          {
+            "id": "BK-1231",
+            "method": "issueTokenWithoutScopes",
+            "line": 78
+          }
+        ]
+      },
+      {
         "name": "WorkspaceApi",
         "file": "WorkspaceApi.ts",
         "relativePath": "tests/components/api/WorkspaceApi.ts",
@@ -95,6 +107,18 @@
             "line": 132
           }
         ]
+      },
+      {
+        "name": "TokensPage",
+        "file": "TokensPage.ts",
+        "relativePath": "tests/components/ui/TokensPage.ts",
+        "atcs": [
+          {
+            "id": "BK-1042",
+            "method": "submitTokenWithoutScopes",
+            "line": 77
+          }
+        ]
       }
     ]
   },
@@ -112,10 +136,10 @@
     }
   ],
   "summary": {
-    "totalComponents": 7,
-    "totalATCs": 9,
-    "apiComponents": 6,
-    "uiComponents": 1,
+    "totalComponents": 9,
+    "totalATCs": 11,
+    "apiComponents": 7,
+    "uiComponents": 2,
     "stepsModules": 1
   }
 }

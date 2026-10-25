@@ -22,6 +22,7 @@ import { AuthApi } from '@api/AuthApi';
 import { CoverageApi } from '@api/CoverageApi';
 import { ProjectApi } from '@api/ProjectApi';
 import { RunApi } from '@api/RunApi';
+import { TokenApi } from '@api/TokenApi';
 import { WorkspaceApi } from '@api/WorkspaceApi';
 
 // ============================================
@@ -34,6 +35,9 @@ export class ApiFixture extends ApiBase {
 
   /** ATC component - Atomic Test Component CRUD + search */
   readonly atc: AtcApi;
+
+  /** Token component - personal access token issuing and listing */
+  readonly token: TokenApi;
 
   /** Workspace component - sandbox workspaces and their projects */
   readonly workspace: WorkspaceApi;
@@ -53,6 +57,7 @@ export class ApiFixture extends ApiBase {
     // All components receive the same options (same request context)
     this.auth = new AuthApi(options);
     this.atc = new AtcApi(options);
+    this.token = new TokenApi(options);
     this.workspace = new WorkspaceApi(options);
     this.project = new ProjectApi(options);
     this.run = new RunApi(options);
@@ -71,6 +76,7 @@ export class ApiFixture extends ApiBase {
     super.setAuthToken(token);
     this.auth.setAuthToken(token);
     this.atc.setAuthToken(token);
+    this.token.setAuthToken(token);
     this.workspace.setAuthToken(token);
     this.project.setAuthToken(token);
     this.run.setAuthToken(token);
@@ -84,6 +90,7 @@ export class ApiFixture extends ApiBase {
     super.clearAuthToken();
     this.auth.clearAuthToken();
     this.atc.clearAuthToken();
+    this.token.clearAuthToken();
     this.workspace.clearAuthToken();
     this.project.clearAuthToken();
     this.run.clearAuthToken();
