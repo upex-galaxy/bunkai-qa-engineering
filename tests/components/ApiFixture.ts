@@ -19,6 +19,7 @@ import type { TestContextOptions } from '@TestContext';
 import { ApiBase } from '@api/ApiBase';
 import { AtcApi } from '@api/AtcApi';
 import { AuthApi } from '@api/AuthApi';
+import { TokenApi } from '@api/TokenApi';
 
 // ============================================
 // API Fixture Class
@@ -31,12 +32,16 @@ export class ApiFixture extends ApiBase {
   /** ATC component - Atomic Test Component CRUD + search */
   readonly atc: AtcApi;
 
+  /** Token component - personal access token issuing and listing */
+  readonly token: TokenApi;
+
   constructor(options: TestContextOptions) {
     super(options);
 
     // All components receive the same options (same request context)
     this.auth = new AuthApi(options);
     this.atc = new AtcApi(options);
+    this.token = new TokenApi(options);
   }
 
   // ============================================
@@ -51,6 +56,7 @@ export class ApiFixture extends ApiBase {
     super.setAuthToken(token);
     this.auth.setAuthToken(token);
     this.atc.setAuthToken(token);
+    this.token.setAuthToken(token);
   }
 
   /**
@@ -60,5 +66,6 @@ export class ApiFixture extends ApiBase {
     super.clearAuthToken();
     this.auth.clearAuthToken();
     this.atc.clearAuthToken();
+    this.token.clearAuthToken();
   }
 }

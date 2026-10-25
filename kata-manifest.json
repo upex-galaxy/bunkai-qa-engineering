@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-10-25T17:39:52.704Z",
+  "generatedAt": "2026-10-25T21:10:05.628Z",
   "components": {
     "api": [
       {
@@ -41,6 +41,18 @@
             "line": 183
           }
         ]
+      },
+      {
+        "name": "TokenApi",
+        "file": "TokenApi.ts",
+        "relativePath": "tests/components/api/TokenApi.ts",
+        "atcs": [
+          {
+            "id": "BK-1231",
+            "method": "issueTokenWithoutScopes",
+            "line": 78
+          }
+        ]
       }
     ],
     "ui": [
@@ -60,15 +72,27 @@
             "line": 132
           }
         ]
+      },
+      {
+        "name": "TokensPage",
+        "file": "TokensPage.ts",
+        "relativePath": "tests/components/ui/TokensPage.ts",
+        "atcs": [
+          {
+            "id": "BK-1042",
+            "method": "submitTokenWithoutScopes",
+            "line": 73
+          }
+        ]
       }
     ]
   },
   "steps": [],
   "summary": {
-    "totalComponents": 3,
-    "totalATCs": 7,
-    "apiComponents": 2,
-    "uiComponents": 1,
+    "totalComponents": 5,
+    "totalATCs": 9,
+    "apiComponents": 3,
+    "uiComponents": 2,
     "stepsModules": 0
   }
 }

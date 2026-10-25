@@ -12,6 +12,7 @@
 
 export type * from './atc.types';
 export type * from './auth.types';
+export type * from './token.types';
 
 // Add new domain facades here:
 // export type * from './bookings.types';
