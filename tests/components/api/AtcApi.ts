@@ -15,6 +15,7 @@
  * Endpoints are relative to config.apiUrl (which already ends in /api/v1).
  */
 
+import type { RequestOptions } from '@api/ApiBase';
 import type { APIResponse } from '@playwright/test';
 import type {
   Atc,
@@ -61,16 +62,22 @@ export class AtcApi extends ApiBase {
    * Verifies the new ATC starts at version 1, carries every sent step (in
    * position order) and assertion, and gets a `<module-slug>/atc-<8 hex>` slug.
    *
+   * The create carries an `Idempotency-Key` (a fresh UUID unless `options` names one),
+   * which the endpoint requires since BK-667.
+   *
    * @param body - Full create payload (atc + steps + assertions + AC links)
+   * @param options - `idempotencyKey`: replay this exact key on purpose
    * @returns Tuple with response, parsed body, and sent payload
    */
   @atc('BK-149')
   async createAtc(
     body: AtcCreateRequest,
+    options: Pick<RequestOptions, 'idempotencyKey'> = {},
   ): Promise<[APIResponse, AtcCreateResponse, AtcCreateRequest]> {
     const [response, parsed, sentPayload] = await this.apiPOST<AtcCreateResponse, AtcCreateRequest>(
       '/atcs',
       body,
+      { idempotencyKey: options.idempotencyKey },
     );
     const sentAssertions = body.assertions ?? [];
 

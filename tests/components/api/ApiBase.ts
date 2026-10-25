@@ -25,7 +25,16 @@ export interface RequestOptions {
   headers?: Record<string, string>
   params?: Record<string, string>
   timeout?: number
+  /**
+   * POST only. Value of the `Idempotency-Key` header. Omitted -> a fresh
+   * `crypto.randomUUID()` per call (one logical create = one key). A string
+   * replays that key on purpose; `null` sends no key, to assert the refusal.
+   * An explicit `headers['Idempotency-Key']` wins over this option.
+   */
+  idempotencyKey?: string | null
 }
+
+export const IDEMPOTENCY_KEY_HEADER = 'Idempotency-Key';
 
 // ============================================
 // API Base Class
@@ -118,6 +127,21 @@ export class ApiBase extends TestContext {
   }
 
   // ============================================
+  // Idempotency
+  // ============================================
+
+  /**
+   * Header object for one POST: the caller's key, a fresh UUID, or nothing.
+   * `undefined` -> fresh UUID per call; a string -> that exact key; `null` -> no header.
+   */
+  protected buildIdempotencyHeader(options: RequestOptions): Record<string, string> {
+    if (options.idempotencyKey === null) {
+      return {};
+    }
+    return { [IDEMPOTENCY_KEY_HEADER]: options.idempotencyKey ?? crypto.randomUUID() };
+  }
+
+  // ============================================
   // HTTP Methods - Type Safe with Tuples
   // ============================================
 
@@ -169,8 +193,12 @@ export class ApiBase extends TestContext {
    *
    * @param endpoint - The API endpoint URL
    * @param data - Request payload data
-   * @param options - Optional request options (headers, params, timeout)
+   * @param options - Optional request options (headers, params, timeout, idempotencyKey)
    * @returns Tuple [APIResponse, TBody, TPayload] - Response, parsed body, and original payload
+   *
+   * Every POST carries an `Idempotency-Key` header (the create endpoints of
+   * workspaces, projects, user-stories, atcs and bugs refuse a create without
+   * one since BK-667). See `RequestOptions.idempotencyKey` to replay or omit it.
    *
    * @example
    * const [response, result, payload] = await this.apiPOST<CreateResponse, CreatePayload>(
@@ -184,7 +212,7 @@ export class ApiBase extends TestContext {
     options: RequestOptions = {},
   ): Promise<[APIResponse, TBody, TPayload]> {
     const url = this.apiEndpoint(endpoint);
-    const headers = this.buildHeaders(options.headers);
+    const headers = this.buildHeaders({ ...this.buildIdempotencyHeader(options), ...options.headers });
 
     const response = await this.request.post(url, {
       headers,
