@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-10-25T06:20:57.570Z",
+  "generatedAt": "2026-10-25T17:39:52.704Z",
   "components": {
     "api": [
       {
@@ -11,17 +11,17 @@
           {
             "id": "BK-1090",
             "method": "searchAtcs",
-            "line": 140
+            "line": 147
           },
           {
             "id": "BK-149",
             "method": "createAtc",
-            "line": 67
+            "line": 72
           },
           {
             "id": "BK-156",
             "method": "updateAtc",
-            "line": 104
+            "line": 111
           }
         ]
       },
