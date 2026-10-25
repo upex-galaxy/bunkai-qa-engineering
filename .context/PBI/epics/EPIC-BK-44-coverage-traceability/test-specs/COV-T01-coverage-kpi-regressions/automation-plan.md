@@ -74,4 +74,4 @@ Run statuses map: skipped = `abort`, blocked = `mark blocked` then finish, pendi
 ## 9. Known limits
 
 - BK-1070 guards the clamping rule through its API proxy (the workspace rollup, which calls the same `clampedPercent`). A change that stopped the project Metrics screen (`ProjectCoverageView.tsx`) from calling `percentLabel` would not fail this suite; the UI tile stays a manual check.
-- BK-1070 takes about 5.5 minutes (60s memo between states). Its cadence (every PR or nightly) is the owner's call.
+- BK-1070 takes about 5.5 to 6.5 minutes (60s memo between states). Decided 2026-10-25 (conductor, owner-delegated): tagged `@slow`, nightly / pre-release like BK-780 (plan D2a). The nightly `regression.yml` runs the whole integration project, so it keeps running there; a quick run skips it with `--grep-invert @slow`.
