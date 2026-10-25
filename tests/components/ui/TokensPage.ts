@@ -62,12 +62,15 @@ export class TokensPage extends UiBase {
    * ATC: Submit the issue-token form with no scope selected - expects it blocked
    *
    * IMPORTANT: Call goto() before this ATC.
-   * Opens the dialog, types a name with every scope unchecked, then tries to
-   * submit twice (Enter in the name field, a click on Create with its disabled
-   * attribute stripped, which reaches the submit handler's own guard). Verifies
-   * the inline error copy, the disabled Create button, the aria-invalid +
-   * aria-describedby links to the error, and that no POST /tokens left the browser. Checking a scope must clear the error;
-   * the dialog is then cancelled so nothing is created.
+   * Opens the dialog, types a name with every scope unchecked, then makes the
+   * two submit attempts of the TC: Enter in the name field and a forced click
+   * on Create. Today neither can submit (the dialog has no <form>, and React
+   * drops clicks on a button whose `disabled` prop is true), so the zero-POST
+   * check guards a future change such as wrapping the dialog in a form; the
+   * server-side rule is BK-1231's. Verifies the inline error copy, the disabled
+   * Create button, the aria-invalid + aria-describedby links to the error, and
+   * that no POST /tokens left the browser. Checking a scope must clear the
+   * error and enable Create; the dialog is then cancelled so nothing is created.
    *
    * @param name - Unique token name for this run (e.g. `qa-tc18-<run id>`)
    */
@@ -96,6 +99,7 @@ export class TokensPage extends UiBase {
       const create = dialog.getByTestId('issue-token-create');
       await nameInput.fill(name);
       await nameInput.press('Enter');
+      await create.click({ force: true });
 
       // Fixed assertions - the form is blocked and says why
       const fieldset = dialog.getByRole('group', { name: /^Scopes/ });
@@ -105,13 +109,7 @@ export class TokensPage extends UiBase {
       await expect(fieldset).toHaveAttribute('aria-invalid', 'true');
       await expect(fieldset).toHaveAttribute('aria-describedby', SCOPES_ERROR_ID);
       await expect(create).toHaveAttribute('aria-describedby', SCOPES_ERROR_ID);
-
-      // A browser never dispatches a click to a disabled button, even forced: strip the
-      // attribute so the click reaches the submit handler's own zero-scope guard.
-      await create.evaluate(button => button.removeAttribute('disabled'));
-      await create.click();
       await expect(dialog).toBeVisible();
-      await expect(error).toHaveText(SCOPES_REQUIRED_MESSAGE);
 
       // Checking a scope clears the error and enables Create
       await scopes.first().check();
