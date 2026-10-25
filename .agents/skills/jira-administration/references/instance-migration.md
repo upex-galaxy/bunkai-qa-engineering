@@ -195,6 +195,8 @@ wt() { awk '/^work_types:/{f=1;next} f&&/^[a-z_]+:/{f=0} f&&/^  [a-z_]+:/{print 
 diff <(wt .agents/jira-required.yaml) <(wt /tmp/jira-required.upstream.yaml)
 ```
 
+Then diff the whole file (`diff .agents/jira-required.yaml /tmp/jira-required.upstream.yaml`): nested `required_statuses`, `required_transitions` and `fallback:` changes inside an existing work type are invisible to the key lists.
+
 The same `wt` shape works on the `required:` / `optional:` sections by changing the anchor — check those too, not just `work_types:`. A missing field slug is quieter than a missing work type but breaks the skill that references it.
 
 Report the delta and **stop for a decision** — do not merge it silently. The file is genuinely co-owned: upstream owns the baseline contract (which work types and slugs the skills reference), the project owns its adaptations (fields its Jira lacks, `fallback:` declarations). Blindly adopting upstream clobbers real local customization; ignoring the delta ships an amputated catalog. Present both sides and let the operator choose per work type.
