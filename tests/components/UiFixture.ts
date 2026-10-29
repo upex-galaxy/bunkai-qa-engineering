@@ -17,6 +17,7 @@
 import type { TestContextOptions } from '@TestContext';
 
 import { LoginPage } from '@ui/LoginPage';
+import { SettingsPage } from '@ui/SettingsPage';
 import { TokensPage } from '@ui/TokensPage';
 import { UiBase } from '@ui/UiBase';
 
@@ -31,11 +32,15 @@ export class UiFixture extends UiBase {
   /** Settings > Tokens page component - personal access token form */
   readonly tokens: TokensPage;
 
+  /** Settings > Account page component - identity card, workspace list, auth guard */
+  readonly settings: SettingsPage;
+
   constructor(options: TestContextOptions) {
     super(options);
 
     // All components receive the same options (same page context)
     this.login = new LoginPage(options);
     this.tokens = new TokensPage(options);
+    this.settings = new SettingsPage(options);
   }
 }
