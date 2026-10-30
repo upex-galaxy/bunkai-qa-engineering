@@ -32,6 +32,7 @@ import {
   isIdentityPath,
   isMaintainerCopy,
   isSchemaOwner,
+  isUnsetValue,
   locateLeaf,
   originIsUpstream,
   planInsertions,
@@ -510,8 +511,12 @@ describe('projectDelta', () => {
     expect(delta.gaps[0].block).toBe('orchestration');
     expect(delta.gaps[0].wholeBlock).toBe(true);
     // Every leaf of the block, whatever the count: asserting a hardcoded
-    // number here just breaks the day someone legitimately adds a key.
-    const blockLeaves = [...schemaKeyPaths(schema)!.keys()].filter(k => k.startsWith('orchestration.'));
+    // number here just breaks the day someone legitimately adds a key. A
+    // nested map (`permission_modes`) is a container, not a leaf: the delta
+    // lists its children, so the container path is left out here too.
+    const walk = yamlLeafWalk(schema)!;
+    const blockLeaves = [...schemaKeyPaths(schema)!.keys()]
+      .filter(k => k.startsWith('orchestration.') && !walk.containers.includes(k));
     expect(delta.gaps[0].paths.sort()).toEqual(blockLeaves.sort());
     expect(delta.gaps[0].paths.length).toBeGreaterThan(3);
   });
@@ -620,6 +625,62 @@ describe('insertion', () => {
     expect(text).not.toContain('# NEW in null');
   });
 
+  // The marker used to say `unset` for every key, also for one that arrives
+  // with a real upstream default (a model id, a map of modes).
+  describe('the marker says unset only for an unset value', () => {
+    const miniSchema = [
+      'kept:',
+      '  a: 1',
+      'blank:',
+      '  key: null # TODO: e.g. PROJ',
+      '  name: \'\' # e.g. Acme',
+      '  list: []',
+      'defaulted:',
+      '  model: claude-opus-5-5',
+      '  modes:',
+      '    worker: bypass',
+      '  empty: null',
+      '',
+    ].join('\n');
+    const miniProject = 'kept:\n  a: 1\n';
+    const markerFor = (target: string): string | undefined => {
+      const { text, error } = applyInsertions(miniProject, planInsertions(miniProject, miniSchema, [target], '9.9.9'));
+      expect(error).toBeNull();
+      return text.split('\n').find(l => l.includes('# NEW in 9.9.9'));
+    };
+
+    test('a block of null, blank and empty leaves is marked unset', () => {
+      const marker = markerFor('blank');
+      expect(marker).toContain(', unset.');
+      expect(marker).not.toContain('upstream default');
+    });
+
+    test('a block carrying a real default is marked upstream default', () => {
+      const marker = markerFor('defaulted');
+      expect(marker).toContain(', upstream default.');
+      expect(marker).not.toContain('unset');
+    });
+
+    test('a single leaf follows its own value', () => {
+      const project = `${miniProject}defaulted:\n  modes:\n    worker: bypass\n`;
+      const mark = (target: string): string | undefined => applyInsertions(project, planInsertions(project, miniSchema, [target], '9.9.9'))
+        .text
+        .split('\n')
+        .find(l => l.includes('# NEW in 9.9.9'));
+      expect(mark('defaulted.model')).toContain(', upstream default.');
+      expect(mark('defaulted.empty')).toContain(', unset.');
+    });
+
+    test('isUnsetValue reads null, blank, empty and all-unset blocks as unset', () => {
+      for (const value of [null, undefined, '', '  ', [], {}, { a: null, b: { c: '' } }]) {
+        expect(isUnsetValue(value)).toBe(true);
+      }
+      for (const value of ['sonnet', 0, false, ['x'], { a: null, b: 'auto' }]) {
+        expect(isUnsetValue(value)).toBe(false);
+      }
+    });
+  });
+
   // The case the parent-offset bug produced: a first child has no preceding
   // sibling, so it anchors to the top of the parent's body — and a block's
   // value node starts AFTER the indent, so a naive splice lands mid-indent.
@@ -672,12 +733,14 @@ describe('insertion', () => {
 
   test.skipIf(!MAINTAINER_CHECKOUT)('several keys anchored to the same spot keep the schema\'s order', () => {
     const old = source
-      .replace(/ {2}default_model: ''[^\n]*\n/, '')
+      .replace(/ {2}default_model: [^\n]*\n/, '')
       .replace(/ {2}default_effort: high[^\n]*\n/, '');
     const plan = planInsertions(old, schema, ['orchestration.default_model', 'orchestration.default_effort'], null);
     const { text, error } = applyInsertions(old, plan);
     expect(error).toBeNull();
-    expect(text.indexOf('default_model')).toBeLessThan(text.indexOf('default_effort'));
+    // The key lines, not the bare words: the comments around them name both.
+    expect(text.indexOf('  default_model:')).toBeGreaterThan(-1);
+    expect(text.indexOf('  default_model:')).toBeLessThan(text.indexOf('  default_effort:'));
   });
 
   test.skipIf(!MAINTAINER_CHECKOUT)('a path absent from the schema is reported, never silently dropped', () => {
