@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generatedAt": "2026-10-25T22:49:02.320Z",
+  "generatedAt": "2026-10-29T03:46:07.488Z",
   "components": {
     "api": [
       {
@@ -109,6 +109,28 @@
         ]
       },
       {
+        "name": "SettingsPage",
+        "file": "SettingsPage.ts",
+        "relativePath": "tests/components/ui/SettingsPage.ts",
+        "atcs": [
+          {
+            "id": "BK-790",
+            "method": "viewAccountIdentity",
+            "line": 121
+          },
+          {
+            "id": "BK-791",
+            "method": "viewWorkspaceList",
+            "line": 151
+          },
+          {
+            "id": "BK-793",
+            "method": "openSettingsWithoutSession",
+            "line": 186
+          }
+        ]
+      },
+      {
         "name": "TokensPage",
         "file": "TokensPage.ts",
         "relativePath": "tests/components/ui/TokensPage.ts",
@@ -136,10 +158,10 @@
     }
   ],
   "summary": {
-    "totalComponents": 9,
-    "totalATCs": 11,
+    "totalComponents": 10,
+    "totalATCs": 14,
     "apiComponents": 7,
-    "uiComponents": 2,
+    "uiComponents": 3,
     "stepsModules": 1
   }
 }
