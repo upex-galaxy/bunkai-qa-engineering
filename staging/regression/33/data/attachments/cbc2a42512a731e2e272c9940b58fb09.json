@@ -1,0 +1,21 @@
+{
+  "kpis": {
+    "ac_bound": 1,
+    "ac_total": 1,
+    "ac_executed": 0,
+    "modules_total": 1,
+    "modules_fully_covered": 0
+  },
+  "modules": [
+    {
+      "status": "not_run",
+      "ac_total": 1,
+      "module_id": "4e776988-c5a2-4a4b-b6ab-53181b860554",
+      "ac_not_run": 1,
+      "ac_executed": 0,
+      "module_name": "Row 1 none skipped",
+      "ac_uncovered": 0
+    }
+  ],
+  "no_coverage": []
+}

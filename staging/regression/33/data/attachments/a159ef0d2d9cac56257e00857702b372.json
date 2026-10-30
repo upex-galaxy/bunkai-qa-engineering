@@ -1,0 +1,12 @@
+{
+  "module": {
+    "id": "644e8f15-e546-4cd5-84f6-01e5440be52d",
+    "project_id": "e1439499-4fd5-402c-9e55-65ba4a0ad550",
+    "parent_module_id": null,
+    "path": "coverage-kpi-rounding",
+    "name": "Coverage KPI rounding",
+    "position": 0,
+    "description": null,
+    "created_at": "2026-10-30T20:00:25.606774+00:00"
+  }
+}

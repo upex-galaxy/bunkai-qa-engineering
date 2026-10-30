@@ -1,0 +1,20 @@
+{
+  "title": "ATC C (criterion 201)",
+  "module_id": "644e8f15-e546-4cd5-84f6-01e5440be52d",
+  "user_story_id": "02d8bf1a-634e-43bc-b284-cb9e030b819b",
+  "acceptance_criterion_ids": [
+    "1b623b8f-9f0c-4a46-b026-b851e1d6adc5"
+  ],
+  "layer": "API",
+  "steps": [
+    {
+      "position": 1,
+      "content": "Exercise the bound acceptance criteria"
+    }
+  ],
+  "assertions": [
+    {
+      "content": "The bound acceptance criteria hold"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "title": "ATC for row 1: none then skipped",
+  "module_id": "4e776988-c5a2-4a4b-b6ab-53181b860554",
+  "user_story_id": "1fa2e4eb-ba2d-420a-8307-dc3ed30d3272",
+  "acceptance_criterion_ids": [
+    "037e8b59-571c-4b46-a38f-d6c491ea6817"
+  ],
+  "layer": "API",
+  "steps": [
+    {
+      "position": 1,
+      "content": "Exercise the bound acceptance criteria"
+    }
+  ],
+  "assertions": [
+    {
+      "content": "The bound acceptance criteria hold"
+    }
+  ]
+}

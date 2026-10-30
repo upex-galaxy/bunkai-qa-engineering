@@ -1,0 +1,75 @@
+{
+  "kpis": {
+    "ac_bound": 7,
+    "ac_total": 7,
+    "ac_executed": 3,
+    "modules_total": 7,
+    "modules_fully_covered": 3
+  },
+  "modules": [
+    {
+      "status": "not_run",
+      "ac_total": 1,
+      "module_id": "4e776988-c5a2-4a4b-b6ab-53181b860554",
+      "ac_not_run": 1,
+      "ac_executed": 0,
+      "module_name": "Row 1 none skipped",
+      "ac_uncovered": 0
+    },
+    {
+      "status": "not_run",
+      "ac_total": 1,
+      "module_id": "260547a4-d75b-4fce-9ed5-5d06ae358480",
+      "ac_not_run": 1,
+      "ac_executed": 0,
+      "module_name": "Row 2 none blocked",
+      "ac_uncovered": 0
+    },
+    {
+      "status": "not_run",
+      "ac_total": 1,
+      "module_id": "5e3e4466-332c-40f3-a441-2a9c0c64729b",
+      "ac_not_run": 1,
+      "ac_executed": 0,
+      "module_name": "Row 3 none pending",
+      "ac_uncovered": 0
+    },
+    {
+      "status": "fully_covered",
+      "ac_total": 1,
+      "module_id": "dac9413b-a4e7-43cb-8d88-f6f91e15c479",
+      "ac_not_run": 0,
+      "ac_executed": 1,
+      "module_name": "Row 4 none passed",
+      "ac_uncovered": 0
+    },
+    {
+      "status": "fully_covered",
+      "ac_total": 1,
+      "module_id": "92b5cd41-a09d-411a-b619-a84e73a9644c",
+      "ac_not_run": 0,
+      "ac_executed": 1,
+      "module_name": "Row 5 none failed",
+      "ac_uncovered": 0
+    },
+    {
+      "status": "not_run",
+      "ac_total": 1,
+      "module_id": "a015a2bb-da39-4019-b44b-43ead703adfb",
+      "ac_not_run": 1,
+      "ac_executed": 0,
+      "module_name": "Row 6 passed skipped",
+      "ac_uncovered": 0
+    },
+    {
+      "status": "fully_covered",
+      "ac_total": 1,
+      "module_id": "c7bb6281-d61b-468f-923e-f5c09c57553d",
+      "ac_not_run": 0,
+      "ac_executed": 1,
+      "module_name": "Row 7 skipped passed",
+      "ac_uncovered": 0
+    }
+  ],
+  "no_coverage": []
+}

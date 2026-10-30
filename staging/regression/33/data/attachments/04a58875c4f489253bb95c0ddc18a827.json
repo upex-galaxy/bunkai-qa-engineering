@@ -1,0 +1,18 @@
+{
+  "title": "Regression update vf665i8f17",
+  "acceptance_criterion_ids": [
+    "80523dcb-2be2-42db-9a66-470928d1815c"
+  ],
+  "layer": "API",
+  "steps": [
+    {
+      "position": 1,
+      "content": "Ait demonstro amissio omnis ara valens vomica textor denuncio."
+    }
+  ],
+  "assertions": [
+    {
+      "content": "Perferendis deficio repellendus stabilis contra colligo."
+    }
+  ]
+}

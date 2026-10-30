@@ -1,0 +1,48 @@
+{
+  "run": {
+    "id": "41296192-eda6-4713-b317-41f8a728114c",
+    "atcs": [
+      {
+        "id": "1bba8faf-ff5f-4c8d-8aed-de214754b1d2",
+        "steps": [
+          {
+            "id": "95a391dd-4113-4639-bb36-fd63a5963489",
+            "note": null,
+            "status": "pending",
+            "content": "Exercise the bound acceptance criteria",
+            "expected": null,
+            "position": 1,
+            "input_data": null,
+            "atc_step_id": "baa7161a-45d2-4aca-97e4-8dbd0196849e",
+            "executed_at": null,
+            "evidence_url": null
+          }
+        ],
+        "atc_id": "9f862a0d-0c05-4f8a-9105-4200b0691d04",
+        "status": "pending",
+        "position": 1,
+        "atc_title": "ATC for row 2: none then blocked"
+      }
+    ],
+    "status": "running",
+    "test_id": "d89d8bbe-f512-4fd6-bb04-8fca237fb4d7",
+    "version": 1,
+    "replayed": false,
+    "atc_count": 1,
+    "module_id": "260547a4-d75b-4fce-9ed5-5d06ae358480",
+    "created_at": "2026-10-30T20:06:14.69646+00:00",
+    "project_id": "8332da82-81b0-4659-8e57-aa83ddef5693",
+    "started_at": "2026-10-30T20:06:14.69646+00:00",
+    "step_count": 1,
+    "test_title": "qa sandbox test 9f862a0d",
+    "updated_at": "2026-10-30T20:06:14.69646+00:00",
+    "finished_at": null,
+    "module_name": "Row 2 none blocked",
+    "abort_reason": null,
+    "workspace_id": "5f80b1b4-3c55-41c3-965f-c60d35503766",
+    "executor_mode": "human",
+    "environment_id": "1eaa4546-d3bb-49aa-96f9-186724937c6b",
+    "environment_name": "staging",
+    "executor_user_id": "a2fe4e10-aa95-422f-bb32-f1d813e3cdf4"
+  }
+}

@@ -1,0 +1,1 @@
+✅ [BK-793] openSettingsWithoutSession - PASS (989ms)

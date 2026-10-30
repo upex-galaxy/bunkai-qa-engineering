@@ -1,0 +1,40 @@
+{
+  "atc": {
+    "id": "074b8649-21c7-464c-814e-5b825241b54b",
+    "slug": "module-a/atc-60ab4a5e",
+    "tags": [],
+    "layer": "API",
+    "steps": [
+      {
+        "id": "40164c2e-855f-4e44-bb8c-53a24d1be359",
+        "content": "Ait demonstro amissio omnis ara valens vomica textor denuncio.",
+        "expected": null,
+        "position": 1,
+        "input_data": null
+      }
+    ],
+    "title": "Regression update vf665i8f17",
+    "status": "unrun",
+    "version": 2,
+    "priority": null,
+    "module_id": "d8a99118-d82d-4416-ac54-53b65953f75d",
+    "technique": null,
+    "assertions": [
+      {
+        "id": "ab935a18-0dcb-48f7-b05f-d64fb087bdc2",
+        "content": "Perferendis deficio repellendus stabilis contra colligo.",
+        "position": 1
+      }
+    ],
+    "created_at": "2026-10-30T20:00:20.844818+00:00",
+    "project_id": "7572e563-a6e8-436d-93d1-8a78ecc79aed",
+    "updated_at": "2026-10-30T20:00:21.237617+00:00",
+    "archived_at": null,
+    "user_story_id": "abede008-b9db-4f19-b328-90f7e23e20a2",
+    "acceptance_criterion_ids": [
+      "80523dcb-2be2-42db-9a66-470928d1815c"
+    ]
+  },
+  "version": 2,
+  "affected_test_count": 0
+}

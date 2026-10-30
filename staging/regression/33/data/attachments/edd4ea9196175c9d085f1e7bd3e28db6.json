@@ -1,0 +1,24 @@
+{
+  "title": "Regression create ml6y9v0ot2",
+  "module_id": "d8a99118-d82d-4416-ac54-53b65953f75d",
+  "user_story_id": "abede008-b9db-4f19-b328-90f7e23e20a2",
+  "acceptance_criterion_ids": [
+    "80523dcb-2be2-42db-9a66-470928d1815c"
+  ],
+  "layer": "API",
+  "steps": [
+    {
+      "position": 1,
+      "content": "Vix crur denego suffoco in repellendus texo animus."
+    },
+    {
+      "position": 2,
+      "content": "Minus vulnus blandior carcer cras spiculum pecus."
+    }
+  ],
+  "assertions": [
+    {
+      "content": "Quasi thesis comparo nisi adsuesco decretum ara."
+    }
+  ]
+}

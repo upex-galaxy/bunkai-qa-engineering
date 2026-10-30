@@ -1,0 +1,47 @@
+{
+  "run": {
+    "id": "356b7117-0165-47ea-a739-e900a047ffdb",
+    "atcs": [
+      {
+        "id": "e3e48605-4803-4edf-bb6a-25f39cca4a7a",
+        "steps": [
+          {
+            "id": "821bbdfe-3ae6-4b92-841f-ef5f415ebd4b",
+            "note": null,
+            "status": "passed",
+            "content": "Exercise the bound acceptance criteria",
+            "expected": null,
+            "position": 1,
+            "input_data": null,
+            "atc_step_id": "bd18fb31-0bc5-482a-85ea-22a3407e62f9",
+            "executed_at": "2026-10-30T20:05:09.617926+00:00",
+            "evidence_url": null
+          }
+        ],
+        "atc_id": "9bee78c5-ca1b-4bb7-8fda-a21ae2796db8",
+        "status": "passed",
+        "position": 1,
+        "atc_title": "ATC B (criterion 200)"
+      }
+    ],
+    "status": "running",
+    "test_id": "c1018807-da6f-4c0e-8395-81cdb823d881",
+    "version": 1,
+    "atc_count": 1,
+    "module_id": "644e8f15-e546-4cd5-84f6-01e5440be52d",
+    "created_at": "2026-10-30T20:05:09.395099+00:00",
+    "project_id": "e1439499-4fd5-402c-9e55-65ba4a0ad550",
+    "started_at": "2026-10-30T20:05:09.395099+00:00",
+    "step_count": 1,
+    "test_title": "qa sandbox test 9bee78c5",
+    "updated_at": "2026-10-30T20:05:09.395099+00:00",
+    "finished_at": null,
+    "module_name": "Coverage KPI rounding",
+    "abort_reason": null,
+    "workspace_id": "126c1598-03f9-4f95-808c-1c8cfd452d8f",
+    "executor_mode": "human",
+    "environment_id": "25182b27-8b93-47e2-aa60-79a84f2c1e2f",
+    "environment_name": "staging",
+    "executor_user_id": "a2fe4e10-aa95-422f-bb32-f1d813e3cdf4"
+  }
+}

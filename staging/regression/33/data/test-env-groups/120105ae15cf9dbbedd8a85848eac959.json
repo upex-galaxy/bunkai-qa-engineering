@@ -1,0 +1,1 @@
+{"id":"120105ae15cf9dbbedd8a85848eac959","fullName":"e2e/settings/redirectAnonymousToLogin.test.ts:16:3","name":"BK-793: should redirect an anonymous request to login preserving the return path","status":"passed","testResultsByEnv":{"default":"e2667391cc423e83631295a7df6c9c1c"}}

@@ -1,0 +1,1 @@
+{"id":"4c9c841ea6abccbbae89ff46ab80e793","fullName":"e2e/tokens/issueTokenWithoutScopes.test.ts:19:3","name":"BK-1042: should block submission, show the inline scope error and create no token when no scope is selected in the issue-token form","status":"passed","testResultsByEnv":{"default":"a6fff5f97d539087878808e3560f4fe8"}}

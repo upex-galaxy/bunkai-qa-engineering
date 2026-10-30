@@ -1,0 +1,20 @@
+{
+  "title": "ATC for row 7: skipped then passed",
+  "module_id": "c7bb6281-d61b-468f-923e-f5c09c57553d",
+  "user_story_id": "0024e821-38e3-4674-81e5-de0f63374c54",
+  "acceptance_criterion_ids": [
+    "3bef9707-855d-41ec-a766-4358bc29575e"
+  ],
+  "layer": "API",
+  "steps": [
+    {
+      "position": 1,
+      "content": "Exercise the bound acceptance criteria"
+    }
+  ],
+  "assertions": [
+    {
+      "content": "The bound acceptance criteria hold"
+    }
+  ]
+}
