@@ -1,0 +1,30 @@
+{
+  "kpis": {
+    "ac_bound": 200,
+    "ac_total": 201,
+    "ac_executed": 0,
+    "modules_total": 1,
+    "modules_fully_covered": 0
+  },
+  "modules": [
+    {
+      "status": "uncovered",
+      "ac_total": 201,
+      "module_id": "763ff52b-c6b5-4921-95c2-6a9ada4fff23",
+      "ac_not_run": 200,
+      "ac_executed": 0,
+      "module_name": "Coverage KPI rounding",
+      "ac_uncovered": 1
+    }
+  ],
+  "no_coverage": [
+    {
+      "ac_id": "96d1e50c-7195-40c6-8573-fde225c88be2",
+      "ac_title": "Acceptance criterion 1",
+      "module_id": "763ff52b-c6b5-4921-95c2-6a9ada4fff23",
+      "module_name": "Coverage KPI rounding",
+      "user_story_id": "1ecce98d-97da-4816-8992-d6f5e1ba5677",
+      "user_story_title": "Coverage KPI rounding story"
+    }
+  ]
+}

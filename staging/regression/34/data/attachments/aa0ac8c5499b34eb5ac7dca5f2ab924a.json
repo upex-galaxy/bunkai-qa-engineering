@@ -1,0 +1,20 @@
+{
+  "title": "ATC for row 3: none then pending",
+  "module_id": "398e7cd5-0ac8-41df-8c37-7f9a3a5305a3",
+  "user_story_id": "37a1d6ee-010e-4276-a0ee-cddde39df514",
+  "acceptance_criterion_ids": [
+    "4c7108fb-597e-4640-9351-30f27495a2a6"
+  ],
+  "layer": "API",
+  "steps": [
+    {
+      "position": 1,
+      "content": "Exercise the bound acceptance criteria"
+    }
+  ],
+  "assertions": [
+    {
+      "content": "The bound acceptance criteria hold"
+    }
+  ]
+}

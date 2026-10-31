@@ -1,0 +1,21 @@
+{
+  "kpis": {
+    "ac_bound": 201,
+    "ac_total": 201,
+    "ac_executed": 201,
+    "modules_total": 1,
+    "modules_fully_covered": 1
+  },
+  "modules": [
+    {
+      "status": "fully_covered",
+      "ac_total": 201,
+      "module_id": "763ff52b-c6b5-4921-95c2-6a9ada4fff23",
+      "ac_not_run": 0,
+      "ac_executed": 201,
+      "module_name": "Coverage KPI rounding",
+      "ac_uncovered": 0
+    }
+  ],
+  "no_coverage": []
+}

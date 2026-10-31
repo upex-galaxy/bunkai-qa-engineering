@@ -1,0 +1,1 @@
+{"id":"e54bc1adfd53ab9b684ed652abeef354","fullName":"integration/coverage/readExecutedCoverage.test.ts:46:3","name":"BK-1071: should count an ATC as executed coverage only when its most recent run passed or failed","status":"passed","testResultsByEnv":{"default":"b9e91a4a48b92bca5f8d0131a6dc8e2d"}}

@@ -1,0 +1,45 @@
+{
+  "atc": {
+    "id": "bd72310d-64b8-4d10-a321-3b1b99414191",
+    "slug": "module-a/atc-efb775a9",
+    "tags": [],
+    "layer": "API",
+    "steps": [
+      {
+        "id": "908a3a57-7e70-4839-9371-ea6799a6d1e8",
+        "content": "Verumtamen textilis ullus tero.",
+        "expected": null,
+        "position": 1,
+        "input_data": null
+      },
+      {
+        "id": "5af80e92-0934-4d40-9eec-2e0b81186e64",
+        "content": "Asporto decor aliqua depereo angustus.",
+        "expected": null,
+        "position": 2,
+        "input_data": null
+      }
+    ],
+    "title": "Regression create b8s8pbj62m",
+    "status": "unrun",
+    "version": 1,
+    "priority": null,
+    "module_id": "d8a99118-d82d-4416-ac54-53b65953f75d",
+    "technique": null,
+    "assertions": [
+      {
+        "id": "a6266fe1-1603-4931-a418-ec017e399ee7",
+        "content": "Ulciscor desidero illum vigilo ustilo derideo contigo temeritas.",
+        "position": 1
+      }
+    ],
+    "created_at": "2026-10-31T04:39:03.860636+00:00",
+    "project_id": "7572e563-a6e8-436d-93d1-8a78ecc79aed",
+    "updated_at": "2026-10-31T04:39:03.860636+00:00",
+    "archived_at": null,
+    "user_story_id": "abede008-b9db-4f19-b328-90f7e23e20a2",
+    "acceptance_criterion_ids": [
+      "80523dcb-2be2-42db-9a66-470928d1815c"
+    ]
+  }
+}

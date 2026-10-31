@@ -1,0 +1,11 @@
+{
+  "kpis": {
+    "ac_bound": 0,
+    "ac_total": 0,
+    "ac_executed": 0,
+    "modules_total": 0,
+    "modules_fully_covered": 0
+  },
+  "modules": [],
+  "no_coverage": []
+}

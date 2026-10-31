@@ -1,0 +1,20 @@
+{
+  "title": "ATC B (criterion 200)",
+  "module_id": "763ff52b-c6b5-4921-95c2-6a9ada4fff23",
+  "user_story_id": "1ecce98d-97da-4816-8992-d6f5e1ba5677",
+  "acceptance_criterion_ids": [
+    "c80ae77e-867e-40f3-9636-df8f8da25d64"
+  ],
+  "layer": "API",
+  "steps": [
+    {
+      "position": 1,
+      "content": "Exercise the bound acceptance criteria"
+    }
+  ],
+  "assertions": [
+    {
+      "content": "The bound acceptance criteria hold"
+    }
+  ]
+}
