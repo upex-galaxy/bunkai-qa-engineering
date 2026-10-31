@@ -1,0 +1,1 @@
+{"id":"1a10e3a349946b0025cc404591a91b19","fullName":"integration/tokens/issueTokenWithoutScopes.test.ts:19:3","name":"BK-1231: should reject POST /api/v1/tokens with 422 and create no token when the scopes array is empty","status":"passed","testResultsByEnv":{"default":"d1e845a9df3495489a7cc5fde04d684b"}}

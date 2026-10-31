@@ -1,0 +1,30 @@
+{
+  "kpis": {
+    "ac_bound": 2,
+    "ac_total": 2,
+    "ac_executed": 0,
+    "modules_total": 2,
+    "modules_fully_covered": 0
+  },
+  "modules": [
+    {
+      "status": "not_run",
+      "ac_total": 1,
+      "module_id": "25b249c7-ab7a-4665-b529-52c269baa22d",
+      "ac_not_run": 1,
+      "ac_executed": 0,
+      "module_name": "Row 1 none skipped",
+      "ac_uncovered": 0
+    },
+    {
+      "status": "not_run",
+      "ac_total": 1,
+      "module_id": "edd03067-57bf-4325-8d8b-7652cf07420a",
+      "ac_not_run": 1,
+      "ac_executed": 0,
+      "module_name": "Row 2 none blocked",
+      "ac_uncovered": 0
+    }
+  ],
+  "no_coverage": []
+}

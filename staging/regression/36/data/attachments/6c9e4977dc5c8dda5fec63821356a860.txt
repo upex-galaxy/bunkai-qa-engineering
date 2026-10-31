@@ -1,0 +1,1 @@
+✅ [BK-790] viewAccountIdentity - PASS (3263ms)

@@ -1,0 +1,39 @@
+{
+  "kpis": {
+    "ac_bound": 3,
+    "ac_total": 3,
+    "ac_executed": 0,
+    "modules_total": 3,
+    "modules_fully_covered": 0
+  },
+  "modules": [
+    {
+      "status": "not_run",
+      "ac_total": 1,
+      "module_id": "25b249c7-ab7a-4665-b529-52c269baa22d",
+      "ac_not_run": 1,
+      "ac_executed": 0,
+      "module_name": "Row 1 none skipped",
+      "ac_uncovered": 0
+    },
+    {
+      "status": "not_run",
+      "ac_total": 1,
+      "module_id": "edd03067-57bf-4325-8d8b-7652cf07420a",
+      "ac_not_run": 1,
+      "ac_executed": 0,
+      "module_name": "Row 2 none blocked",
+      "ac_uncovered": 0
+    },
+    {
+      "status": "not_run",
+      "ac_total": 1,
+      "module_id": "23213946-48d9-4eb0-ac17-a8ef2ab4f2f0",
+      "ac_not_run": 1,
+      "ac_executed": 0,
+      "module_name": "Row 3 none pending",
+      "ac_uncovered": 0
+    }
+  ],
+  "no_coverage": []
+}

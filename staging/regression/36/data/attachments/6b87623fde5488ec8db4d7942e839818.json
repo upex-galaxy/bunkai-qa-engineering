@@ -1,0 +1,24 @@
+{
+  "title": "Regression create d8hasp1ax5",
+  "module_id": "d8a99118-d82d-4416-ac54-53b65953f75d",
+  "user_story_id": "abede008-b9db-4f19-b328-90f7e23e20a2",
+  "acceptance_criterion_ids": [
+    "80523dcb-2be2-42db-9a66-470928d1815c"
+  ],
+  "layer": "API",
+  "steps": [
+    {
+      "position": 1,
+      "content": "Supplanto umbra ager."
+    },
+    {
+      "position": 2,
+      "content": "Sordeo colo volo supplanto."
+    }
+  ],
+  "assertions": [
+    {
+      "content": "Volaticus calco animadverto praesentium."
+    }
+  ]
+}

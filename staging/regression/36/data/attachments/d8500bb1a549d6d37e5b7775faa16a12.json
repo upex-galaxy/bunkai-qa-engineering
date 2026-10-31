@@ -1,0 +1,38 @@
+{
+  "atc": {
+    "id": "bfe5704a-1b35-4ac0-8799-3ede90c77ca5",
+    "slug": "row-1-none-skipped/atc-11686abf",
+    "tags": [],
+    "layer": "API",
+    "steps": [
+      {
+        "id": "f7c31ceb-9e84-4aa3-9f5f-a89ce5a9782f",
+        "content": "Exercise the bound acceptance criteria",
+        "expected": null,
+        "position": 1,
+        "input_data": null
+      }
+    ],
+    "title": "ATC for row 1: none then skipped",
+    "status": "unrun",
+    "version": 1,
+    "priority": null,
+    "module_id": "25b249c7-ab7a-4665-b529-52c269baa22d",
+    "technique": null,
+    "assertions": [
+      {
+        "id": "ff0fdf40-aae0-4581-b166-0df22241acd9",
+        "content": "The bound acceptance criteria hold",
+        "position": 1
+      }
+    ],
+    "created_at": "2026-10-31T05:25:08.633565+00:00",
+    "project_id": "98851870-606d-49a5-a826-4ffde246251d",
+    "updated_at": "2026-10-31T05:25:08.633565+00:00",
+    "archived_at": null,
+    "user_story_id": "531a3ab8-069e-4f16-ab36-6aff0cf7e187",
+    "acceptance_criterion_ids": [
+      "9742b1ee-db3a-4ac1-8fff-dda520215ef5"
+    ]
+  }
+}

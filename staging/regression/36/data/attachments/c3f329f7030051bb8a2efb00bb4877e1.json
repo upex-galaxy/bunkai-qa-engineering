@@ -1,0 +1,11 @@
+{
+  "acceptance_criterion": {
+    "id": "9f2aeec9-c8fc-4642-b9f7-721877ce570c",
+    "title": "Acceptance criterion 64",
+    "position": 66,
+    "created_at": "2026-10-31T05:20:06.925043+00:00",
+    "archived_at": null,
+    "description": null,
+    "user_story_id": "646ffda5-de84-4dbb-9d99-c0f3bdbd84ec"
+  }
+}

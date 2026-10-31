@@ -1,0 +1,15 @@
+{
+  "test": {
+    "id": "4b7a3853-8e5d-45d2-9c70-0b0b3c1bbeed",
+    "steps": [
+      {
+        "atc_id": "bfe5704a-1b35-4ac0-8799-3ede90c77ca5",
+        "position": 1
+      }
+    ],
+    "title": "qa sandbox test bfe5704a",
+    "created_at": "2026-10-31T05:25:08.92249+00:00",
+    "created_by": "a2fe4e10-aa95-422f-bb32-f1d813e3cdf4",
+    "workspace_id": "c0acc8f1-8957-4472-b6c4-cba72d4fd249"
+  }
+}
