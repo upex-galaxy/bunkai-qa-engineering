@@ -1,0 +1,48 @@
+{
+  "run": {
+    "id": "6f1ca413-6216-4cbf-8bb6-496225d6d4e3",
+    "atcs": [
+      {
+        "id": "7aef4f29-5811-4bd4-ac30-261f86d66dc4",
+        "steps": [
+          {
+            "id": "bee71c5a-0986-4717-9b0a-e51e3f3b2bdc",
+            "note": null,
+            "status": "pending",
+            "content": "Exercise the bound acceptance criteria",
+            "expected": null,
+            "position": 1,
+            "input_data": null,
+            "atc_step_id": "cbdad740-d02e-483f-8a0d-3114db24f6f9",
+            "executed_at": null,
+            "evidence_url": null
+          }
+        ],
+        "atc_id": "688fde64-3652-40a9-8d0d-00a31d54c055",
+        "status": "pending",
+        "position": 1,
+        "atc_title": "ATC for row 7: skipped then passed"
+      }
+    ],
+    "status": "running",
+    "test_id": "6b835b5d-5bc8-4d0b-9be7-dca5e29ee32f",
+    "version": 1,
+    "replayed": false,
+    "atc_count": 1,
+    "module_id": "79684ea0-922b-4532-8e29-0f59a6e4f1ca",
+    "created_at": "2026-10-31T04:57:10.713152+00:00",
+    "project_id": "f533115e-156b-46fe-9abe-3b51e9b40b52",
+    "started_at": "2026-10-31T04:57:10.713152+00:00",
+    "step_count": 1,
+    "test_title": "qa sandbox test 688fde64",
+    "updated_at": "2026-10-31T04:57:10.713152+00:00",
+    "finished_at": null,
+    "module_name": "Row 7 skipped passed",
+    "abort_reason": null,
+    "workspace_id": "ad51b134-cd68-481b-b6e6-9d2eb1a080c2",
+    "executor_mode": "human",
+    "environment_id": "9de49315-fdb0-411f-8426-d17799535ff5",
+    "environment_name": "staging",
+    "executor_user_id": "a2fe4e10-aa95-422f-bb32-f1d813e3cdf4"
+  }
+}

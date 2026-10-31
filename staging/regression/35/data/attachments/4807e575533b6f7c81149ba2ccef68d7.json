@@ -1,0 +1,38 @@
+{
+  "atc": {
+    "id": "cdd5d722-5f71-4ddd-902c-1fa8016c6ba9",
+    "slug": "coverage-kpi-rounding/atc-c817565a",
+    "tags": [],
+    "layer": "API",
+    "steps": [
+      {
+        "id": "4270236e-5b50-4d30-a349-41e21d7e0381",
+        "content": "Exercise the bound acceptance criteria",
+        "expected": null,
+        "position": 1,
+        "input_data": null
+      }
+    ],
+    "title": "ATC C (criterion 201)",
+    "status": "unrun",
+    "version": 1,
+    "priority": null,
+    "module_id": "4118afb1-7f86-4467-8b87-6eb4ca934173",
+    "technique": null,
+    "assertions": [
+      {
+        "id": "7ad30ac9-0937-465f-8246-4fa040d9ed1b",
+        "content": "The bound acceptance criteria hold",
+        "position": 1
+      }
+    ],
+    "created_at": "2026-10-31T04:53:56.7549+00:00",
+    "project_id": "7bc83c39-5595-4afa-903d-ae2459e7123b",
+    "updated_at": "2026-10-31T04:53:56.7549+00:00",
+    "archived_at": null,
+    "user_story_id": "c4ad4691-12d3-4b3c-8f7c-45a8f87f9952",
+    "acceptance_criterion_ids": [
+      "17ea7ff6-c3d8-4116-88f3-8e8122e36972"
+    ]
+  }
+}

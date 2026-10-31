@@ -1,0 +1,40 @@
+{
+  "atc": {
+    "id": "2940ccfc-ce78-41b1-94de-b3c4fce17aae",
+    "slug": "module-a/atc-8268aaca",
+    "tags": [],
+    "layer": "API",
+    "steps": [
+      {
+        "id": "95873e10-9bf1-4b6f-851e-c7a3a00e6e3b",
+        "content": "Creator undique teres veniam ait corrigo usus adhaero cernuus cunabula.",
+        "expected": null,
+        "position": 1,
+        "input_data": null
+      }
+    ],
+    "title": "Regression update bu0sblkruu",
+    "status": "unrun",
+    "version": 2,
+    "priority": null,
+    "module_id": "d8a99118-d82d-4416-ac54-53b65953f75d",
+    "technique": null,
+    "assertions": [
+      {
+        "id": "89d0a36e-53f0-4746-8b4f-103ad5c6d9d0",
+        "content": "Vitae convoco comburo paulatim contigo tempora audax canis trans sed.",
+        "position": 1
+      }
+    ],
+    "created_at": "2026-10-31T04:52:37.520414+00:00",
+    "project_id": "7572e563-a6e8-436d-93d1-8a78ecc79aed",
+    "updated_at": "2026-10-31T04:52:37.888064+00:00",
+    "archived_at": null,
+    "user_story_id": "abede008-b9db-4f19-b328-90f7e23e20a2",
+    "acceptance_criterion_ids": [
+      "80523dcb-2be2-42db-9a66-470928d1815c"
+    ]
+  },
+  "version": 2,
+  "affected_test_count": 0
+}

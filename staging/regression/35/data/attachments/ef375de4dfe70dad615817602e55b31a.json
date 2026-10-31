@@ -1,0 +1,20 @@
+{
+  "title": "ATC for row 5: none then failed",
+  "module_id": "54389180-a1d3-46c3-8829-7ed1e874ce4c",
+  "user_story_id": "b91cebdb-f287-42be-bb76-1e245a8e1059",
+  "acceptance_criterion_ids": [
+    "36cb6f48-d7c8-457c-bb44-bbfed9c5dc8e"
+  ],
+  "layer": "API",
+  "steps": [
+    {
+      "position": 1,
+      "content": "Exercise the bound acceptance criteria"
+    }
+  ],
+  "assertions": [
+    {
+      "content": "The bound acceptance criteria hold"
+    }
+  ]
+}

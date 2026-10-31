@@ -1,0 +1,1 @@
+{"id":"e78dfbc3bcabac73aacaeb3e782f4a67","fullName":"integration/auth/smoke.test.ts:29:3","name":"BK-311: should sign in and authenticate GET /me with the minted PAT","status":"passed","testResultsByEnv":{"default":"b2fd6b2a4d063b6237c15e5243e83e98"}}

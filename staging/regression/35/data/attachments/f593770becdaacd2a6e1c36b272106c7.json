@@ -1,0 +1,47 @@
+{
+  "run": {
+    "id": "bc38abaf-79f4-4464-9ce2-b1524517dd1d",
+    "atcs": [
+      {
+        "id": "1e4f7d64-a255-455c-8667-a52af0d33628",
+        "steps": [
+          {
+            "id": "dc54da2c-1c7e-40ff-b087-d70291ffeb2e",
+            "note": null,
+            "status": "skipped",
+            "content": "Exercise the bound acceptance criteria",
+            "expected": null,
+            "position": 1,
+            "input_data": null,
+            "atc_step_id": "e29066ea-f397-4ef0-8f1f-a957256d8f82",
+            "executed_at": null,
+            "evidence_url": null
+          }
+        ],
+        "atc_id": "c8eaca3e-06ae-43d8-bb10-d440d10e9a86",
+        "status": "skipped",
+        "position": 1,
+        "atc_title": "ATC for row 6: passed then skipped"
+      }
+    ],
+    "status": "aborted",
+    "test_id": "9c7b4eef-5f9c-4378-b16e-66b87a37ded7",
+    "version": 2,
+    "atc_count": 1,
+    "module_id": "eefd94fe-f604-497a-a712-7deb6de80f8d",
+    "created_at": "2026-10-31T04:57:08.210694+00:00",
+    "project_id": "f533115e-156b-46fe-9abe-3b51e9b40b52",
+    "started_at": "2026-10-31T04:57:08.210694+00:00",
+    "step_count": 1,
+    "test_title": "qa sandbox test c8eaca3e",
+    "updated_at": "2026-10-31T04:57:08.516983+00:00",
+    "finished_at": "2026-10-31T04:57:08.516983+00:00",
+    "module_name": "Row 6 passed skipped",
+    "abort_reason": "Seeded skipped outcome for a coverage regression",
+    "workspace_id": "ad51b134-cd68-481b-b6e6-9d2eb1a080c2",
+    "executor_mode": "human",
+    "environment_id": "9de49315-fdb0-411f-8426-d17799535ff5",
+    "environment_name": "staging",
+    "executor_user_id": "a2fe4e10-aa95-422f-bb32-f1d813e3cdf4"
+  }
+}

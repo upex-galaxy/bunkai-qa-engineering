@@ -1,0 +1,45 @@
+{
+  "atc": {
+    "id": "2940ccfc-ce78-41b1-94de-b3c4fce17aae",
+    "slug": "module-a/atc-8268aaca",
+    "tags": [],
+    "layer": "API",
+    "steps": [
+      {
+        "id": "6100ee86-a0f0-4123-a686-403146ccbcdf",
+        "content": "Color utilis agnosco aperte ab alienus deludo angustus.",
+        "expected": null,
+        "position": 1,
+        "input_data": null
+      },
+      {
+        "id": "7aea2313-1493-43a4-afef-1a4d51f8e377",
+        "content": "Creo dicta ubi.",
+        "expected": null,
+        "position": 2,
+        "input_data": null
+      }
+    ],
+    "title": "Regression create stkqufalrw",
+    "status": "unrun",
+    "version": 1,
+    "priority": null,
+    "module_id": "d8a99118-d82d-4416-ac54-53b65953f75d",
+    "technique": null,
+    "assertions": [
+      {
+        "id": "d9e9b558-faca-40eb-ab00-5831bb39a8e2",
+        "content": "Callide deleniti comedo tenetur.",
+        "position": 1
+      }
+    ],
+    "created_at": "2026-10-31T04:52:37.520414+00:00",
+    "project_id": "7572e563-a6e8-436d-93d1-8a78ecc79aed",
+    "updated_at": "2026-10-31T04:52:37.520414+00:00",
+    "archived_at": null,
+    "user_story_id": "abede008-b9db-4f19-b328-90f7e23e20a2",
+    "acceptance_criterion_ids": [
+      "80523dcb-2be2-42db-9a66-470928d1815c"
+    ]
+  }
+}

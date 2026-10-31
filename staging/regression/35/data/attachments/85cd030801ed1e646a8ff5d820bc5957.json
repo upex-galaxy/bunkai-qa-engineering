@@ -1,0 +1,40 @@
+{
+  "workspaces": [
+    {
+      "id": "d891c079-4d62-4409-b0c4-18929b17207e",
+      "slug": "bunkai-qa-auto-ec8c39",
+      "name": "Bunkai QA Automation",
+      "owner_user_id": "a2fe4e10-aa95-422f-bb32-f1d813e3cdf4",
+      "plan": "community",
+      "created_at": "2026-06-29T04:50:48.649754+00:00",
+      "role": "owner"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000041",
+      "slug": "bk337-admin-role-qa",
+      "name": "BK-337 Admin Role (QA fixture)",
+      "owner_user_id": "a2fe4e10-aa95-422f-bb32-f1d813e3cdf4",
+      "plan": "community",
+      "created_at": "2026-08-19T00:17:20.369673+00:00",
+      "role": "admin"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000051",
+      "slug": "bk337-viewer-role-qa",
+      "name": "BK-337 Viewer Role (QA fixture)",
+      "owner_user_id": "a2fe4e10-aa95-422f-bb32-f1d813e3cdf4",
+      "plan": "community",
+      "created_at": "2026-08-19T00:17:20.369673+00:00",
+      "role": "viewer"
+    },
+    {
+      "id": "e000b5bc-1d56-4caa-abbe-d176532261d3",
+      "slug": "qa-team-s5",
+      "name": "QA Team S5",
+      "owner_user_id": "a2fe4e10-aa95-422f-bb32-f1d813e3cdf4",
+      "plan": "community",
+      "created_at": "2026-10-25T20:06:36.567571+00:00",
+      "role": "owner"
+    }
+  ]
+}

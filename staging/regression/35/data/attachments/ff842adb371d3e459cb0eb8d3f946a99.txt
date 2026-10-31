@@ -1,0 +1,11 @@
+❌ [BK-791] viewWorkspaceList - FAIL: expect(locator).toBeVisible() failed
+
+Locator: getByTestId('workspaces-list').getByRole('heading', { name: 'My Workspaces' })
+Expected: visible
+Timeout: 10000ms
+Error: element(s) not found
+
+Call log:
+  - Expect "toBeVisible" with timeout 10000ms
+  - waiting for getByTestId('workspaces-list').getByRole('heading', { name: 'My Workspaces' })
+

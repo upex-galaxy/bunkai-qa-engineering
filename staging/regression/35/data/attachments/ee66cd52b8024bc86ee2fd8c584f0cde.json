@@ -1,0 +1,24 @@
+{
+  "user": {
+    "id": "a2fe4e10-aa95-422f-bb32-f1d813e3cdf4",
+    "email": "bunkai-auto-owner-ec8c39@delgri.resend.app"
+  },
+  "session": {
+    "access_token": "***",
+    "refresh_token": "***",
+    "expires_at": 1793425955,
+    "token_type": "***"
+  },
+  "pat": {
+    "token": "***",
+    "id": "4211a2c3-64c9-4b3b-8621-935be0180613",
+    "name": "cli-signin",
+    "scopes": [
+      "atc:read",
+      "atc:write",
+      "run:execute"
+    ],
+    "expires_at": null
+  },
+  "warning": "Store the PAT token now — it cannot be retrieved later."
+}

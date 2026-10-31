@@ -1,0 +1,19 @@
+
+============================================================
+KATA Architecture - Global Teardown
+============================================================
+
+ATC Coverage:
+   8 unique ATC tracked (21 total executions)
+   ✅ Passed: 8 | ❌ Failed: 0 | ⏭️ Skipped: 0
+
+[SYNC] Syncing results to TMS...
+
+[CLEANUP] Revoking 4 PAT(s) minted by this run...
+---- API OK: 200 - https://staging-upexbunkai.vercel.app/api/v1/auth/signin
+[CLEANUP] Revoked 5 of 5 (incl. the cleanup session's own)
+
+============================================================
+[OK] Global teardown complete
+============================================================
+

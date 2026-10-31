@@ -1,0 +1,20 @@
+{
+  "title": "ATC for row 2: none then blocked",
+  "module_id": "aec0d7a2-f0d3-4a93-8364-3bdca5375d52",
+  "user_story_id": "36532cfa-e61b-4367-b33a-68930b487faa",
+  "acceptance_criterion_ids": [
+    "f2f1773b-d98e-45b9-879e-6c0599eb98b2"
+  ],
+  "layer": "API",
+  "steps": [
+    {
+      "position": 1,
+      "content": "Exercise the bound acceptance criteria"
+    }
+  ],
+  "assertions": [
+    {
+      "content": "The bound acceptance criteria hold"
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+{"id":"cc0575a582bc137139b8c7b557a2b4b5","fullName":"integration/coverage/readCoverageKpis.test.ts:34:3","name":"BK-1070: should not round a coverage KPI to 100% or 0% while its numerator differs from the total or from zero","status":"passed","testResultsByEnv":{"default":"bf35d5300ca1ae0407da256cce6d2cad"}}
