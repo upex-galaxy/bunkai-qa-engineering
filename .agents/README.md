@@ -20,7 +20,7 @@ The directory has two roles:
 | `jira-workflows.json` | Auto-generated catalog of workflow statuses + transitions per `work_type`, keyed by canonical slug. Each `work_type` entry has `jira_issue_type`, `workflow_scheme`, `workflow`, `statuses`, `transitions`. | Generated only — **do not edit by hand** | `bun run jira:sync-workflows` |
 | `jira-link-types.json` | Auto-generated catalog of every issue link type in your Jira workspace (e.g. `blocks`, `relates`, `is caused by`), keyed by canonical slug. Each entry has `id`, `name`, `outward`, `inward`, `exists_in_workspace`. | Generated only — **do not edit by hand** | `bun run jira:sync-link-types` |
 | `jira-required.yaml` | Declarative manifest of the custom fields AND `work_types:` (issue types + canonical statuses + canonical transitions) the methodology requires. The contract between skills and the user's Jira. | Methodology maintainers | Updated when a skill adds or drops a `{{jira.<slug>}}` / `{{jira.work_type.*}}` / `{{jira.status.*}}` / `{{jira.transition.*}}` reference. |
-| `project.schema.yaml` | The TEMPLATE `project.yaml` is compared against: the same file with its placeholders blank, its methodology defaults kept, and every value or comment that is the BOILERPLATE's own identity replaced. Generated upstream, SYNCED here like any other upstream file. `bun sync` uses it to offer the keys this project lacks. | Generated only — **do not edit by hand**, and in a consumer project do not regenerate it either: it is upstream's, not yours | `bun run agents:schema` (boilerplate only). Here: `bun sync`. See what you are missing with `bun run agents:schema --project`. |
+| `project.schema.yaml` | The documented TEMPLATE `project.yaml` is compared against, and the one file that explains every key: `project.yaml` itself carries values only, because Claude Code loads it into every session (ADR-0025). Placeholders `null`, methodology defaults kept, and every value that is the BOILERPLATE's own identity replaced. Written and synced upstream, SYNCED here like any other upstream file. `bun sync` uses it to offer the keys this project lacks, inserted as values without comments. | Upstream maintainers (comments by hand, values synced by `bun run agents:schema`). In a consumer project, read it, do not edit or regenerate it: it is upstream's, not yours | `bun run agents:schema` (boilerplate only). Here: `bun sync`. See what you are missing with `bun run agents:schema --project`. |
 | `README.md` | This file. | Methodology maintainers | — |
 
 ## `git_strategy` (block inside `project.yaml`)
@@ -122,16 +122,16 @@ The `hooks` block grows on every `bun sync` too, before the compatibility check 
 
 ## `harnesses` (top-level list in `project.yaml`)
 
-Which host harnesses this project uses, any of `claude`, `opencode`, `codex` (ADR-0012).
+Which host harnesses this project uses, any of `claude`, `opencode`, `codex`, `pi` (ADR-0012).
 
 ```yaml
 harnesses: [claude] # e.g. a team on Claude Code only
 ```
 
 - **What it decides**: every compatibility gate (`agents:compat:check`, `setup:doctor`, the installer, `bun sync`) checks only the listed harnesses. A harness left out may delete its files (`HARNESS_FILES` in `cli/lib/harness-selection.ts`), and the updater stops delivering them.
-- **Absent or `null`**: detected from the files present. A harness is in use while ANY of its files exists, so deleting one file of a harness still fails its contract; nothing found at all checks all three.
+- **Absent or `null`**: detected from the files present. A harness is in use while ANY of its files exists, so deleting one file of a harness still fails its contract; nothing found at all checks every harness.
 - **Who writes it**: `bun setup` adds the agents you select (union only, it never removes one) and then offers to delete the files of each harness left out (default keep). Edit the list by hand to drop one.
-- **The boilerplate itself** checks all three, whatever its own yaml says.
+- **The boilerplate itself** checks every harness, whatever its own yaml says.
 - Read directly by `cli/lib/harness-selection.ts`, so `vars:check` skips it.
 
 ## `secrets` (block inside `project.yaml`)
@@ -183,7 +183,7 @@ Default settings for **supervised multi-session worker fleets** — one conducto
 ```yaml
 orchestration:
   max_workers: 4        # concurrent workers per round (example value)
-  default_agent: claude # claude | codex | opencode
+  default_agent: claude # claude | codex | opencode | pi
   default_model: claude-opus-5-5   # worker model: full provider model id, never an alias
   default_effort: high             # harness effort level when supported
   conductor_model: claude-opus-5-5 # conductor model: full provider model id
@@ -199,7 +199,7 @@ orchestration:
 | Field | `{{VAR}}` name | Description |
 |---|---|---|
 | `max_workers` | `{{MAX_WORKERS}}` | Ceiling on concurrent workers per round (a concurrency group inside a Jira-status wave — see `orca-orchestration/references/coordinator-playbook.md`). |
-| `default_agent` | `{{DEFAULT_AGENT}}` | Which harness launches a worker when the user doesn't say: `claude` \| `codex` \| `opencode`. |
+| `default_agent` | `{{DEFAULT_AGENT}}` | Which harness launches a worker when the user doesn't say: `claude` \| `codex` \| `opencode` \| `pi`. |
 | `default_model` | `{{DEFAULT_MODEL}}` | The WORKER model: full provider model id passed to the launch line, never an alias (an alias moves between rounds, gotcha G29 in `orca-orchestration/references/gotchas.md`). Empty `''` is allowed only when the conductor reads the model off the worker's screen at readiness and records it in the roster. |
 | `default_effort` | `{{DEFAULT_EFFORT}}` | Effort level passed to the worker launch line, when the harness supports one. |
 | `conductor_model` | `{{CONDUCTOR_MODEL}}` | The CONDUCTOR model, same rule as `default_model`: a full provider model id. |
@@ -309,7 +309,7 @@ You're now ready to invoke any skill (`/sprint-testing`, `/test-documentation`, 
 
 When you add or edit a skill that references project values or Jira fields:
 
-- **Project values** (paths, URLs, project keys, etc.) — use `{{VAR_NAME}}`. Add the variable to `.agents/project.yaml` with `null` plus a `# TODO:` comment so a new user knows what to fill in. The next `bun run agents:setup` (or a manual edit) will populate it.
+- **Project values** (paths, URLs, project keys, etc.) — use `{{VAR_NAME}}`. Document the variable in `.agents/project.schema.yaml` (`null` plus a `# TODO:` comment with an example, so a new user knows what to fill in), and add it to `.agents/project.yaml` as a value only, no comment (ADR-0025); `bun run agents:schema:check` fails while one side lacks it. The next `bun run agents:setup` (or a manual edit) will populate it.
 
 - **Session values** (computed at runtime) — use `<<VAR_NAME>>`. No declaration needed; it's a documentation marker for the skill consumer.
 

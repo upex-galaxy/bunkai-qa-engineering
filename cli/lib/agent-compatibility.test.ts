@@ -49,6 +49,7 @@ import {
   validateMcpParity,
   validateMcpParityFindings,
   validateOpenCodePluginEntrypoints,
+  validatePiAdapter,
 } from './agent-compatibility-contracts.ts';
 import {
   checkAgentCompatibility,
@@ -60,6 +61,7 @@ import {
   describeAliasStatus,
   groupCompatibilityErrors,
   isInside,
+  missingHarnessFiles,
   normalizeNewlines,
   POSIX_CLAUDE_SKILLS_TARGET,
   removeShadowingCommands,
@@ -80,6 +82,7 @@ const temporaryRoots: string[] = [];
  * there on every commit. The tests that read it skip without it.
  */
 const OPENCODE_PLUGIN = '.opencode/plugins/personality-reinject.js';
+const PI_ADAPTER = '.pi/extensions/agentic-qa.js';
 const HAS_OPENCODE = existsSync(join(REPO_ROOT, OPENCODE_PLUGIN));
 // eslint-disable-next-line ts/no-explicit-any -- a plain-JS adapter with no type declarations
 const opencodePlugin: any = HAS_OPENCODE ? (await import(join(REPO_ROOT, OPENCODE_PLUGIN))).default : null;
@@ -458,6 +461,8 @@ function contractFixture(prefix?: string, ids = BOILERPLATE_IDS): string {
   const root = temporaryRoot(prefix);
   copyFromRepo(root, '.agents/hooks/personality-reinject.mjs');
   if (HAS_OPENCODE) { copyFromRepo(root, OPENCODE_PLUGIN); }
+  copyFromRepo(root, PI_ADAPTER);
+  write(root, '.pi/mcp.json', mcpJson(ids));
   write(root, '.claude/settings.json', hookSettings(CLAUDE_HOOK_COMMAND));
   write(root, '.codex/hooks.json', hookSettings(CODEX_HOOK_COMMAND, CODEX_HOOK_COMMAND_WINDOWS));
   write(root, '.mcp.json', mcpJson(ids));
@@ -831,6 +836,39 @@ describe('ORCA line by role', () => {
     const notice = '<task-notification>\n<status>completed</status>\n<result>the brief says /sprint-testing TK-9 fleet worker</result>\n</task-notification>';
     expect(orcaLine(agentContextLines({ ...base, prompt: notice, routeState: state }))).toBe(ORCA_CONTEXT_LINE);
     expect(state.read()).toEqual({});
+  });
+
+  test('a prompt that quotes the token mid-sentence is not a launch, and nothing is recorded', () => {
+    const state = memoryState();
+    const quoted = 'hola, qué hace /orca-orchestration x fleet worker en el brief? the report says /sprint-testing TK-9 fleet worker';
+    expect(orcaLine(agentContextLines({ ...base, prompt: quoted, routeState: state }))).toBe(ORCA_CONTEXT_LINE);
+    expect(state.read().launched).not.toBe(true);
+  });
+
+  test('the measured supervised launch prompt is a launch: preamble, task marker, then the token', () => {
+    const prompt = [
+      'Please carry out this task from my Orca coordinator by following the brief I pasted below.',
+      '<pasted_content id="d545">',
+      'You are working inside Orca, a multi-agent IDE. You are a dispatched worker.',
+      '  orca orchestration send --type worker_done --body "<3-sentence summary>"',
+      '=== TASK ===',
+      '/framework-development hook-notification-fix fleet worker. Read the brief and execute it. ROUTE-SCOPE: harnesses',
+      '</pasted_content id="d545">',
+    ].join('\n');
+    const state = memoryState();
+    expect(orcaLine(agentContextLines({ ...base, prompt, routeState: state }))).toBe(ORCA_LAUNCHED_LINE);
+    expect(state.read().launched).toBe(true);
+    expect(proposeSessionTitle({ prompt, identity: { nameSource: 'derived' }, handle: 'term_1' })).toBe('hook-notification-fix--term_1');
+  });
+
+  test('a token inside a system reminder never launches, even with human text after it', () => {
+    const reminder = '<system-reminder id="r-9">\n/sprint-testing TK-9 fleet worker. Read the brief.\n=== TASK ===\n/sprint-testing TK-9 fleet worker.\n</system-reminder id="r-9">\n';
+    for (const prompt of [reminder, `${reminder}how is the fleet doing?`]) {
+      const state = memoryState();
+      expect(orcaLine(agentContextLines({ ...base, prompt, routeState: state }))).toBe(ORCA_CONTEXT_LINE);
+      expect(state.read().launched).not.toBe(true);
+      expect(proposeSessionTitle({ prompt, identity: { nameSource: 'derived' }, handle: 'term_1' })).toBe('');
+    }
   });
 
   test('without a session id only the current prompt decides', () => {
@@ -1800,16 +1838,16 @@ describe.skipIf(!HAS_OPENCODE)('checkAgentCompatibility', () => {
 });
 
 describe('one-harness projects (ADR-0012)', () => {
-  const OPENCODE_AND_CODEX = ['opencode.jsonc', OPENCODE_PLUGIN, '.codex/config.toml', '.codex/hooks.json'];
+  const OTHER_HARNESS_FILES = ['opencode.jsonc', OPENCODE_PLUGIN, '.codex/config.toml', '.codex/hooks.json', '.pi/mcp.json', PI_ADAPTER];
 
   test('a Claude-only project passes with one note per harness it dropped', () => {
     const root = repositoryFixture();
     repairClaudeSkillsAlias(root, 'linux');
-    for (const file of OPENCODE_AND_CODEX) { rmSync(join(root, file), { force: true }); }
+    for (const file of OTHER_HARNESS_FILES) { rmSync(join(root, file), { force: true }); }
 
     const result = checkAgentCompatibility(root, 'linux');
     expect(result).toMatchObject({ ok: true, errors: [], harnesses: ['claude'], alias: { status: 'valid' } });
-    expect(result.notes).toEqual(['opencode: none of its files present, skipped', 'codex: none of its files present, skipped']);
+    expect(result.notes).toEqual(['opencode: none of its files present, skipped', 'codex: none of its files present, skipped', 'pi: none of its files present, skipped']);
   });
 
   test('one file of a harness still in use is drift, not a choice', () => {
@@ -1829,17 +1867,84 @@ describe('one-harness projects (ADR-0012)', () => {
     expect(declaredMcpIds(root)).toEqual([...BOILERPLATE_IDS].sort());
   });
 
+  test('a Pi-only project needs only its own two files', () => {
+    const root = repositoryFixture();
+    for (const file of ['CLAUDE.md', '.mcp.json', '.claude/settings.json', '.codex/config.toml', '.codex/hooks.json', 'opencode.jsonc', OPENCODE_PLUGIN]) { rmSync(join(root, file), { force: true }); }
+    write(root, '.agents/project.yaml', 'harnesses: [pi]\n');
+
+    expect(checkAgentCompatibility(root, 'linux')).toMatchObject({ ok: true, errors: [], harnesses: ['pi'], alias: { status: 'not-used' } });
+    expect(declaredMcpIds(root)).toEqual([...BOILERPLATE_IDS].sort());
+  });
+
+  test('a Pi project is held to the same MCP set and refuses a host-side reference', () => {
+    const root = contractFixture();
+    write(root, '.pi/mcp.json', mcpJson(BOILERPLATE_IDS.filter(id => id !== 'dbhub')));
+    expect(validateMcpParity(root)).toContain('MCP dbhub missing from pi: declared in .mcp.json, absent from .pi/mcp.json');
+
+    const refs = JSON.parse(mcpJson(BOILERPLATE_IDS)) as { mcpServers: Record<string, Record<string, unknown>> };
+    refs.mcpServers.context7.env = { TOKEN: '${SOME_TOKEN}' };
+    write(root, '.pi/mcp.json', `${JSON.stringify(refs)}\n`);
+    expect(validateMcpParity(root).some(error => error.includes('.pi/mcp.json') || error.includes('between claude and pi'))).toBe(true);
+  });
+
+  test('Pi own keys do not count as drift, and the real registry defers every server', () => {
+    const root = contractFixture();
+    copyFromRepo(root, '.pi/mcp.json');
+    expect(validateMcpParity(root)).toEqual([]);
+    const real = JSON.parse(readFileSync(join(REPO_ROOT, '.pi/mcp.json'), 'utf8')) as { mcpServers: Record<string, { exposure?: string, description?: string }> };
+    for (const server of Object.values(real.mcpServers)) {
+      expect(server.exposure).toBe('deferred');
+      expect(server.description?.length).toBeGreaterThan(0);
+    }
+  });
+
+  test('a !command value in the Pi registry is refused, in env and in headers', () => {
+    const withValue = (mutate: (servers: Record<string, Record<string, unknown>>) => void): string => {
+      const parsed = JSON.parse(mcpJson(BOILERPLATE_IDS)) as { mcpServers: Record<string, Record<string, unknown>> };
+      mutate(parsed.mcpServers);
+      return `${JSON.stringify(parsed)}\n`;
+    };
+    const root = contractFixture();
+    write(root, '.agents/project.yaml', 'harnesses: [pi]\n');
+    rmSync(join(root, '.mcp.json'));
+
+    write(root, '.pi/mcp.json', withValue((servers) => { servers.context7.env = { T: '!cat .env' }; }));
+    let findings = validateMcpParityFindings(root, { schemaOwner: false, harnesses: ['pi'] });
+    expect(findings.warnings.some(warning => warning.includes('pi MCP context7 runs a shell command'))).toBe(true);
+
+    write(root, '.pi/mcp.json', withValue((servers) => { servers.remote = { url: 'https://x.dev/mcp', headers: { A: '!op read x' } }; }));
+    findings = validateMcpParityFindings(root, { schemaOwner: true, harnesses: ['pi'] });
+    expect(findings.errors.some(error => error.includes('pi MCP remote runs a shell command'))).toBe(true);
+
+    write(root, '.pi/mcp.json', withValue((servers) => { servers.context7.env = { T: 'wow!' }; }));
+    findings = validateMcpParityFindings(root, { schemaOwner: false, harnesses: ['pi'] });
+    expect([...findings.errors, ...findings.warnings].some(line => line.includes('runs a shell command'))).toBe(false);
+  });
+
+  test('missingHarnessFiles names only what a sync can bring', () => {
+    expect(missingHarnessFiles([
+      'Hook compatibility file missing: .pi/extensions/agentic-qa.js',
+      'MCP config missing for pi: .pi/mcp.json (a harness in use; declare `harnesses:` in .agents/project.yaml to drop it)',
+      'MCP dbhub missing from codex: declared in .mcp.json, absent from .codex/config.toml',
+    ])).toEqual(['.pi/extensions/agentic-qa.js', '.pi/mcp.json']);
+  });
+
+  test('the Pi adapter contract names what it depends on', () => {
+    expect(validatePiAdapter(readFileSync(join(REPO_ROOT, PI_ADAPTER), 'utf8'))).toEqual([]);
+    expect(validatePiAdapter('export default () => {};\n')).toHaveLength(6);
+  });
+
   test('the boilerplate keeps failing on a deleted adapter', () => {
     const root = repositoryFixture();
     repairClaudeSkillsAlias(root, 'linux');
     write(root, 'package.json', JSON.stringify({ name: 'agentic-qa-boilerplate' }));
-    for (const file of OPENCODE_AND_CODEX) { rmSync(join(root, file), { force: true }); }
+    for (const file of OTHER_HARNESS_FILES) { rmSync(join(root, file), { force: true }); }
 
     const result = checkAgentCompatibility(root, 'linux');
     expect(result.ok).toBe(false);
-    expect(result.harnesses).toEqual(['claude', 'opencode', 'codex']);
+    expect(result.harnesses).toEqual(['claude', 'opencode', 'codex', 'pi']);
     expect(result.errors).toContain('Hook compatibility file missing: .codex/hooks.json');
-    expect(result.errors).toContain('MCP config missing for codex: .codex/config.toml (the boilerplate checks all three harnesses)');
+    expect(result.errors).toContain('MCP config missing for codex: .codex/config.toml (the boilerplate checks every harness)');
   });
 
   test('a two-harness project without Claude compares against the first declared harness', () => {

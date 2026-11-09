@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, test } from 'bun:test';
 
 import { parse as parseYaml } from 'yaml';
-import { isMaintainerCopy, isSchemaOwner } from './lib/agents-schema.ts';
+import { isMaintainerCopy, isSchemaOwner, stripYamlComments } from './lib/agents-schema.ts';
 import { unusedHarnessPaths } from './lib/harness-selection.ts';
 import { loadBoardConfig } from './lib/sprint-source/index.ts';
 import { cleanupDeprecated, componentOwnedPaths, isRepoOnlyPath, validateComponentRegistry } from './lib/updater-core.ts';
@@ -241,7 +241,7 @@ describe('one-harness projects (ADR-0012)', () => {
       writeFileSync(join(root, file), '{}\n');
     }
     const unused = unusedHarnessPaths(root);
-    expect(unused).toEqual(['opencode.jsonc', '.opencode/plugins', '.codex']);
+    expect(unused).toEqual(['opencode.jsonc', '.opencode/plugins', '.codex', '.pi/mcp.json', '.pi/extensions/agentic-qa.js']);
 
     const watched = resolveProtectedWatchlist(root).map(e => e.path);
     expect(watched).toContain('.mcp.json');
@@ -254,6 +254,25 @@ describe('one-harness projects (ADR-0012)', () => {
     for (const file of shipped) { expect(isRepoOnlyPath(file, unused)).toBe(true); }
     expect(isRepoOnlyPath('.agents/hooks/personality-reinject.mjs', unused)).toBe(false);
     expect(isRepoOnlyPath('.opencode/commands/mine.md', unused)).toBe(false);
+    expect(isRepoOnlyPath('.pi/mcp.json', unused)).toBe(true);
+    expect(isRepoOnlyPath('.pi/extensions/mine.js', unused)).toBe(false);
+    expect(isRepoOnlyPath('.pi/extensions/agentic-qa.js', unused)).toBe(true);
+  });
+
+  test('a project that declares Pi later receives the adapter and, once, its registry', () => {
+    const root = temporaryRoot();
+    mkdirSync(join(root, '.agents'), { recursive: true });
+    writeFileSync(join(root, '.agents', 'project.yaml'), 'harnesses: [claude, pi]\n');
+    const unused = unusedHarnessPaths(root);
+    expect(isRepoOnlyPath('.pi/mcp.json', unused)).toBe(false);
+    expect(isRepoOnlyPath('.pi/extensions/agentic-qa.js', unused)).toBe(false);
+
+    const adapter = COMPONENTS.find(c => c.name === 'pi-adapter');
+    const registry = COMPONENTS.find(c => c.name === 'pi-config');
+    expect(adapter).toMatchObject({ paths: ['.pi/extensions'], files: ['agentic-qa.js'] });
+    expect(adapter?.bootstrapOnly).toBeUndefined();
+    expect(registry).toMatchObject({ paths: ['.pi'], files: ['mcp.json'], bootstrapOnly: true });
+    expect(resolveProtectedWatchlist(root).map(e => e.path)).toContain('.pi/mcp.json');
   });
 
   test('a project with all three (or none detected) keeps the full delivery', () => {
@@ -407,12 +426,15 @@ describe('project.yaml back-fill under --auto', () => {
     return { root, upstream };
   }
 
-  test('a whole missing block is inserted from the schema with blank values; a block the project has is never edited', async () => {
-    const boardBlock = extractIndentedYamlBlock(SCHEMA, 'board', '');
+  test('a whole missing block is inserted from the schema with blank values and no comments; a block the project has is never edited', async () => {
+    // A project's yaml is values only (ADR-0025): the schema with its comments stripped.
+    const lean = stripYamlComments(SCHEMA);
+    const boardBlock = extractIndentedYamlBlock(lean, 'board', '');
     expect(boardBlock).not.toBeNull();
     // The project lacks the whole `board:` block AND one leaf of `testing:`.
-    const projectYaml = SCHEMA.replace(`${boardBlock}\n`, '').replace(/^ {2}default_env:.*\n/m, '');
+    const projectYaml = lean.replace(`${boardBlock}\n`, '').replace(/^ {2}default_env:.*\n/m, '');
     expect(projectYaml).not.toContain('\nboard:');
+    expect(projectYaml).not.toContain('default_env:');
     const { root, upstream } = fixture(projectYaml);
     const lines: string[] = [];
     await backfillProjectYamlFromSchema(upstream, autoSink(lines), true, root);
@@ -420,19 +442,33 @@ describe('project.yaml back-fill under --auto', () => {
     const after = readFileSync(join(root, '.agents/project.yaml'), 'utf8');
     const parsed = parseYaml(after) as { board?: { source?: string }, testing?: Record<string, unknown> };
     expect(parsed.board?.source).toBe('auto');
-    expect(after).toContain('# NEW in 9.9.9');
+    // The schema documents the block; not one of its comments reaches the project.
+    expect(after.split('\n').filter(l => l.includes('#'))).toEqual([]);
     // The existing block keeps its shape: the missing leaf is only reported.
     expect(parsed.testing).not.toHaveProperty('default_env');
     expect(lines.join('\n')).toContain('testing.default_env');
     // Insert-only: every line the project had is still there, in order, and the
-    // only new lines are the block and its markers.
+    // only new lines are the block's own.
     const nonBlank = (text: string): string[] => text.split('\n').filter(l => l.trim() !== '');
-    const kept = nonBlank(after).filter(l => !l.includes('NEW in 9.9.9'));
+    const kept = nonBlank(after);
     const blockLines = new Set(nonBlank(boardBlock!));
     expect(kept.filter(l => !blockLines.has(l))).toEqual(nonBlank(projectYaml).filter(l => !blockLines.has(l)));
     expect(kept.length).toBe(nonBlank(projectYaml).length + nonBlank(boardBlock!).length);
     // The inserted template block is how the board ships unconfigured: one INFO line, exit 0.
     expect(loadBoardConfig(root).state).toBe('unconfigured');
+  });
+
+  // Owner decision (2026-11-02): a changed methodology default is listed, never written.
+  test('a methodology value the project changed is warned about and left as it is', async () => {
+    const lean = stripYamlComments(SCHEMA);
+    const upstreamMax = (parseYaml(lean) as { orchestration: { max_workers: number } }).orchestration.max_workers;
+    const projectYaml = lean.replace(/^ {2}max_workers: .*$/m, `  max_workers: ${upstreamMax + 2}`);
+    expect(projectYaml).not.toBe(lean);
+    const { root, upstream } = fixture(projectYaml);
+    const lines: string[] = [];
+    await backfillProjectYamlFromSchema(upstream, autoSink(lines), true, root);
+    expect(readFileSync(join(root, '.agents/project.yaml'), 'utf8')).toBe(projectYaml);
+    expect(lines.join('\n')).toContain(`orchestration.max_workers: yours ${upstreamMax + 2}, upstream default ${upstreamMax}`);
   });
 
   test('a block silenced through updater.schema_exempt is not inserted, and nothing missing means nothing written', async () => {

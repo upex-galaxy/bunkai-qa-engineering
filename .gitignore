@@ -201,3 +201,14 @@ storage-state-*.json
 
 # ----- 2026-10-25 (sync) -----
 !.context/sprint/
+
+# ----- 2026-11-09 (sync) -----
+.pi/*
+!.pi/mcp.json
+!.pi/settings.json
+!.pi/SYSTEM.md
+!.pi/APPEND_SYSTEM.md
+!.pi/extensions/
+!.pi/skills/
+!.pi/prompts/
+!.pi/themes/

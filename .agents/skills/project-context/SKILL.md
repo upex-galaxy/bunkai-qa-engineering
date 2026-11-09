@@ -2,7 +2,7 @@
 name: project-context
 description: "Generate or refresh the business context maps (the HTML maps inside business-data-context, business-api-context and business-e2e-context) and the master test plan. Use for business-data-map, business-api-map, business-e2e-map, business-feature-map, user journeys map, master-test-plan, refresh project context, refresh all context, entity map, feature inventory, API business map, or risk-ranked test roadmap. Also scaffolds a project-owned <aspect>-context skill for any other aspect (context-skill mode), and builds the coverage inventory (coverage mode: coverage gaps, gap list, weak tests, what is not tested, behaviours vs tests). Routes exactly one mode at a time unless refresh-all is explicit. UPDATE regenerates only stale sections and always shows a diff and waits for approval before writing."
 license: MIT
-compatibility: [claude-code, copilot, cursor, codex, opencode]
+compatibility: [claude-code, copilot, cursor, codex, opencode, pi]
 complementary_categories: [testing-e2e, testing-api, meta-skill]
 metadata:
   kind: workflow
@@ -25,7 +25,7 @@ Own the regenerative project-context artifacts without duplicating their workflo
 - Stop the run on a hard dependency failure or a rejected overwrite. A missing SOFT dependency is not a stop: record it as a Discovery Gap and continue, exactly as the selected reference defines.
 - NEVER invent business facts. Read every source the selected reference requires; anything unverified belongs under the output's mandatory discovery-gaps section, not asserted in the body.
 - After a successful artifact write, add the pointer to `.agents/instructions/agent-project.md` ONLY when that pointer is missing. NEVER write it into `AGENTS.md` (boilerplate-owned, size-budgeted) or add operational prose to `CLAUDE.md`. Placement per `framework-development/references/instructions-doctrine.md` §4, then `bun run instructions:check`; any other instruction change is `/framework-development` mode `instructions`.
-- Mode from `$ARGUMENTS`: when its first token matches a mode in the Mode routing table, that token IS the mode and the rest is forwarded to it unchanged (`/project-context data` on Claude Code, "project-context mode data" in prose on OpenCode and Codex). No matching first token → ASK which mode.
+- Mode from `$ARGUMENTS`: when its first token matches a mode in the Mode routing table, that token IS the mode and the rest is forwarded to it unchanged (`/project-context data` on Claude Code, "project-context mode data" in prose on OpenCode and Codex, `/skill:project-context data` on Pi). No matching first token → ASK which mode.
 - Before any step that uses a declared capability (`metadata.requires_capabilities`: `db`, `api-schema`, `diagrams` for the maps' figures), run the point-of-use check in `agentic-qa-core/references/preflight-gate.md` §8: resolve by tool-name suffix, and when no available tool provides it STOP and name the capability + how to enable it, never a silent fallback.
 
 **Read full SKILL.md when**: the requested mode is ambiguous, a `refresh-all` chain fails mid-sequence, or you need the selected reference's own analysis steps and validation gate.

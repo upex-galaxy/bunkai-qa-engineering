@@ -2,7 +2,7 @@
 name: iql-context
 description: "The methodology index of this repo: how the IQL (Integrated Quality Lifecycle) is structured, why the QA process runs as eight named stages, what the artifact ladder (MTP / FTP / STP / ATP / ATS / ATR / STR / RTP / RTR) means, where each invariant is enforced, and how THIS project adapts it. Load it whenever someone asks why the process is shaped this way, what a stage / step / phase / cycle / altitude is, what IQL, TMLC, TALC, Early-Game / Mid-Game / Late-Game, Trifuerza, light mode, autonomy level or execution profile mean, which skill owns a stage, or how the website's methodology maps onto the skills here, even when they do not say 'IQL'. Pure knowledge: it changes what the agent knows, never what it does next. NOT for running a stage (the workflow skills), NOT for SUT knowledge (the project's own <aspect>-context skills)."
 license: MIT
-compatibility: [claude-code, codex, opencode]
+compatibility: [claude-code, codex, opencode, pi]
 metadata:
   kind: context
 ---
@@ -52,7 +52,7 @@ Each row states ONE invariant and cites where it comes from. "web" = the anchor 
 |---|---|---|---|
 | Three phases | Early-Game (prevention, QA Analyst) · Mid-Game (detection, QA Automation Engineer) · Late-Game (observation, QA + DevOps). Phases group steps, not stages | `#fases`, `/early-game` | none: `references/phases-steps-cycles.md` |
 | Eight stages, named never numbered | Shift-Left · Planning · Execution · Reporting · Documentation · Automation · Regression · Observation. A stage has a name, a DoD and a contract; steps are its breakdown | `#stages`, `/diagramas/iql-completo` | `agentic-qa-core/references/stage-gates.md` §"The stages, by name" |
-| Shift-Left → `shift-left-testing` | pre-sprint, in batch, zero TMS entities; the ATP goes into the Story field; the Story stops at Estimation; the `[QA] Shift-Left Review` subtask tracks the pass | `#stages`, `/early-game` | `agentic-qa-core/references/stage-gates.md` §"Shift-Left"; `.agents/skills/shift-left-testing/SKILL.md` |
+| Shift-Left → `shift-left-testing` | pre-sprint, in batch, zero TMS entities; the ATP goes into the Story field; the Story stops at Ready For Dev with `AI Effort` set; the `[QA] Shift-Left Review` subtask tracks the pass | `#stages`, `/early-game` | `agentic-qa-core/references/stage-gates.md` §"Shift-Left"; `.agents/skills/shift-left-testing/SKILL.md` |
 | Planning → `sprint-testing` | in-sprint; Set-first (ATS, then ATP, then ATR); the ATP item is born FROM the field; an ATR without Test Environment fails the DoD; STP / FTP find-or-create | `#stages`, `/diagramas/sprint-testing` | `agentic-qa-core/references/stage-gates.md` §"Planning" |
 | Execution → `sprint-testing` | smoke as Go / No-Go first, then the Trifuerza beyond the plan; every finding classified before filing; a human agrees to every filing | `#stages`, `#trifuerza` | `agentic-qa-core/references/stage-gates.md` §"Execution"; `agentic-qa-core/references/defect-management-doctrine.md` Part 1 |
 | Execution without a ticket → `exploratory-testing` | the same stage entered by scope (flow, module, sweep): a charter, parallel recon, refutation, a main-thread tie-break; every candidate executed live, marked NEW / WEAK / COVERED and `oracle: observed` until a person confirms it; a repo addition the web does not draw | none: repo addition | `agentic-qa-core/references/stage-gates.md` §"Execution (exploration without a ticket)"; `agentic-qa-core/references/discovery-driven-doctrine.md` §1, §4 |

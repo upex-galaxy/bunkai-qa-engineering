@@ -14,7 +14,7 @@ Source: `https://www.upexgalaxy.com/metodologia#fases` ("Navegar el IQL completo
 
 | Phase | Posture (web) | Steps | Protagonist role | Guiding question (translated) | Approaches the phase page lists | Tools the phase page lists |
 |---|---|---|---|---|---|---|
-| Early-Game | Prevention (Prevención) | 1-4 | QA Analyst | "Let's build it right from the start" | Shift-Left, BDD, Risk-Based | Jira (or equivalent tracker), Confluence (or team wiki), API client (Postman, Bruno, curl), agentic harness (Claude Code, OpenCode, Codex) |
+| Early-Game | Prevention (Prevención) | 1-4 | QA Analyst | "Let's build it right from the start" | Shift-Left, BDD, Risk-Based | Jira (or equivalent tracker), Confluence (or team wiki), API client (Postman, Bruno, curl), agentic harness (Claude Code, OpenCode, Codex, Pi) |
 | Mid-Game | Detection (Detección) | 5-9 | QA Automation Engineer | "Does the software meet the requirements?" | Continuous Testing, Agile Testing, AI-Driven | Playwright, GitHub Actions (or equivalent CI), Docker, Xray |
 | Late-Game | Observation (Observación) | 10-15 | QA + DevOps | "How does it behave in the real world?" | Shift-Right, Chaos Engineering, Production Monitoring, AI Ops | Sentry / Grafana / Datadog, progressive delivery / feature flags, k6, UptimeRobot (or availability monitor) |
 
@@ -143,7 +143,7 @@ The web names Documentation's sub-phases Prioritize and Document only; the repo 
 
 | Cycle | Full name (web) | Applies to | What the web says (translated) | Where the names live |
 |---|---|---|---|---|
-| SDC | Story Development Cycle, "UPEX Feature (US) Workflow" | `story` | The story's end-to-end path. The IQL does not invent it, it accompanies it: Shift-Left lives between Backlog and Estimation, Execution and Reporting between In Test and QA Approved, and the BLOCKED branch is the return a linear model cannot express | `.agents/jira-workflows.json` (`story`); status and transition names come from there, never from prose |
+| SDC | Story Development Cycle, "UPEX Feature (US) Workflow" | `story` | The story's end-to-end path. The IQL does not invent it, it accompanies it: Shift-Left lives between Backlog and Ready For Dev, Execution and Reporting between In Test and QA Approved, and the BLOCKED branch is the return a linear model cannot express | `.agents/jira-workflows.json` (`story`); status and transition names come from there, never from prose |
 | BLC | Bug Life Cycle, "UPEX BUG/DEFECT LIFE CYCLE" | `bug`, `defect`, `improvement` | The finding's path, shared by the three work types: Bug if the feature is already live above Staging, Defect if still pre-release, Improvement if no acceptance criterion is violated. Classifying before filing is mandatory | `.agents/jira-workflows.json` (`bug`); classification rule in `agentic-qa-core/references/defect-management-doctrine.md` |
 | PLC | Production Lifecycle | (none yet) | What happens after release: signal, item, decision, return to analysis. Declared so the model does not pretend it does not exist, and declared empty so nobody sells it before the skill that runs it exists. Its stage is Observation | nowhere: declared empty on the web; the repo's Observation stage has no skill and no DoD (repo: see `agentic-qa-core/references/stage-gates.md` §"Observation") |
 

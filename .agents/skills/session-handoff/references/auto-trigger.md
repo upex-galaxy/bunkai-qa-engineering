@@ -21,6 +21,7 @@ The owner's position, recorded: manual is preferred (*"prefiero que el humano lo
 | OpenCode | `event` plugin hook on `message.part.updated` | **yes, indirectly**: a `step-finish` part carries `tokens.input` / `tokens.output`, accumulable for free | no |
 | Codex CLI | `UserPromptSubmit` hook input | no | n/a |
 | Codex CLI | `PreCompact` / `PostCompact` hook events | no, and the hook output wire carries only universal fields | **yes** |
+| Pi | extension `ctx.getContextUsage()`, read from any event | **yes** | `session_before_compact`, `session_compact` events |
 
 Sources: `https://code.claude.com/docs/en/hooks`, `https://code.claude.com/docs/en/statusline`, the OpenCode plugin and session schema packages, and the Codex `hooks` and `protocol` crates.
 
@@ -34,7 +35,7 @@ Sources: `https://code.claude.com/docs/en/hooks`, `https://code.claude.com/docs/
 
 ## Why the compaction hooks are the weaker answer
 
-All three harnesses expose a compaction-imminent event, and it is tempting to treat that as the trigger. It is the wrong moment. Compaction fires when the window is already exhausted, so a handoff written from there is written by a session about to be truncated, using the degraded judgement the handoff exists to escape. The threshold that matters is the one the owner named (~500k), and it arrives long before compaction does.
+Every harness exposes a compaction-imminent event, and it is tempting to treat that as the trigger. It is the wrong moment. Compaction fires when the window is already exhausted, so a handoff written from there is written by a session about to be truncated, using the degraded judgement the handoff exists to escape. The threshold that matters is the one the owner named (~500k), and it arrives long before compaction does.
 
 ## If an automatic mode is ever enabled
 

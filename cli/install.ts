@@ -46,7 +46,7 @@
  *   bun setup --variables [--variables-mode local|remote|both] [--dry-run] [--yes]
  *
  * Non-interactive env vars:
- *   INSTALL_AGENTS=claude-code,opencode,codex   Comma-list of agents to configure
+ *   INSTALL_AGENTS=claude-code,opencode,codex,pi   Comma-list of agents to configure
  *   INSTALL_SKIP_ENGRAM=1                 Treat Engram as skipped (legacy alias: INSTALL_SKIP_GENTLE_AI=1)
  *   INSTALL_SKIP_DEPS=1                   Skip the dependency check
  *   INSTALL_SKIP_PLAYWRIGHT=1             Skip the Chromium download
@@ -75,6 +75,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import {
   checkAgentCompatibility,
+  missingHarnessFiles,
   removeShadowingCommands,
   repairClaudeSkillsAlias,
   SHADOWING_COMMANDS_BACKUP_DIR,
@@ -118,7 +119,7 @@ import { runSetupPreflight } from './preflight.ts';
 // Types
 // ============================================================================
 
-export type AgentId = 'claude-code' | 'opencode' | 'codex';
+export type AgentId = 'claude-code' | 'opencode' | 'codex' | 'pi';
 
 type InstallStatus = 'installed' | 'skipped' | 'failed' | 'declined';
 
@@ -138,6 +139,7 @@ export interface AgentDetection {
   opencode: boolean
   codexCli: boolean
   codexConfigured: boolean
+  pi: boolean
 }
 
 interface OptionalBootstrapStatus {
@@ -234,6 +236,7 @@ const REPO_ROOT = resolve(import.meta.dir, '..');
 const STATE_PATH = join(REPO_ROOT, '.template', 'installer.state.json');
 const CLAUDE_MCP_PATH = join(REPO_ROOT, '.mcp.json');
 const OPENCODE_CONFIG_PATH = join(REPO_ROOT, 'opencode.jsonc');
+const PI_MCP_PATH = join(REPO_ROOT, '.pi', 'mcp.json');
 const CODEX_CONFIG_PATH = join(REPO_ROOT, '.codex', 'config.toml');
 const ENV_PATH = join(REPO_ROOT, '.env');
 const ENV_EXAMPLE_PATH = join(REPO_ROOT, '.env.example');
@@ -262,7 +265,7 @@ const ENGRAM_COMPONENT = 'engram';
  * layer is needed.
  */
 
-// The servers the three project MCP files declare. Remote servers whose only
+// The servers the project MCP files declare. Remote servers whose only
 // project-side content was an API key (web search, Postman) are not here any
 // more: they run at harness level, connected once per machine, and the skills
 // resolve them by capability (ADR-0005, D3; the list of moved servers lives in
@@ -294,7 +297,7 @@ const EXTERNAL_CLIS: ReadonlyArray<{ name: string, install?: string, docs: strin
     // constantly. Claude Code ships its own copy, so this never surfaced there — but
     // OpenCode and Codex fall through to the system binary, and a downstream user hit
     // exactly that while running /git-flow-master. Declaring it is the point of
-    // supporting three harnesses.
+    // supporting several harnesses.
     name: 'rg',
     install: 'brew install ripgrep   # or: apt install ripgrep · winget install BurntSushi.ripgrep.MSVC',
     docs: 'https://github.com/BurntSushi/ripgrep#installation',
@@ -483,7 +486,7 @@ export const MCP_VAR_PATTERN = /\$\{([A-Z][A-Z0-9_]*)(?::-[^}]*)?\}/g;
 // Matches OpenCode {env:VAR} placeholders in opencode.jsonc.
 export const OPENCODE_VAR_PATTERN = /\{env:([A-Z][A-Z0-9_]*)\}/g;
 // Matches the `.env` loader's `"--filter", "A,B"` pair, spelled the same in the
-// three MCP configs (JSON, JSONC and TOML arrays). The names it lists are what
+// MCP configs (JSON, JSONC and TOML arrays). The names it lists are what
 // the server reads from `.env` (MCP_ENV_LOADER_* in
 // cli/lib/agent-compatibility-contracts.ts).
 export const MCP_FILTER_PATTERN = /"--filter"\s*,\s*"([A-Z][A-Z0-9_,]*)"/g;
@@ -873,9 +876,12 @@ export async function detectAgents(options: {
   const claudePath = join(home, '.claude');
   const opencodePath = join(home, '.config', 'opencode');
 
-  const [claudeDirectory, opencodeDirectory] = await Promise.all([
+  const piPath = join(home, '.pi', 'agent');
+
+  const [claudeDirectory, opencodeDirectory, piDirectory] = await Promise.all([
     stat(claudePath).then(s => s.isDirectory(), () => false),
     stat(opencodePath).then(s => s.isDirectory(), () => false),
+    stat(piPath).then(s => s.isDirectory(), () => false),
   ]);
 
   return {
@@ -883,6 +889,7 @@ export async function detectAgents(options: {
     opencode: opencodeDirectory || binaryExists('opencode'),
     codexCli: binaryExists('codex'),
     codexConfigured: existsSync(join(root, '.codex', 'config.toml')),
+    pi: piDirectory || binaryExists('pi'),
   };
 }
 
@@ -891,7 +898,7 @@ export function parseAgentsEnv(raw = process.env.INSTALL_AGENTS): AgentId[] | nu
   const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
   const valid = new Set<AgentId>();
   for (const p of parts) {
-    if (p === 'claude-code' || p === 'opencode' || p === 'codex') { valid.add(p); }
+    if (p === 'claude-code' || p === 'opencode' || p === 'codex' || p === 'pi') { valid.add(p); }
   }
   return [...valid];
 }
@@ -902,18 +909,33 @@ function detectedAgentIds(detected: AgentDetection): AgentId[] {
   if (detected.claudeCode) { out.push('claude-code'); }
   if (detected.opencode) { out.push('opencode'); }
   if (detected.codexCli || detected.codexConfigured) { out.push('codex'); }
+  if (detected.pi) { out.push('pi'); }
   return out;
 }
 
 /**
- * Which agents this repository supports. All three are offered: a teammate may
+ * What a run with nobody to ask may declare on its own: the detected agents whose
+ * harness has a file in this repo. A binary on the machine says nothing about the
+ * project, and an existing project gets no harness it never had (ADR-0026). A repo
+ * with no harness file at all keeps what was detected, so there is still someone
+ * to configure.
+ */
+export function agentsWithFilesHere(found: readonly AgentId[], root = REPO_ROOT): AgentId[] {
+  const here = found.filter(agent => HARNESS_FILES[harnessOfAgent(agent)].some(file => existsSync(join(root, file))));
+  return here.length > 0 ? here : [...found];
+}
+
+/**
+ * Which agents this repository supports. All of them are offered: a teammate may
  * use one this machine does not have. Non-interactive: `INSTALL_AGENTS`, else
- * whatever is detected.
+ * the earlier run's choice, else `agentsWithFilesHere`.
  */
 async function askAgents(detected: AgentDetection, prior: AgentId[]): Promise<AgentId[]> {
   const found = detectedAgentIds(detected);
   const fromEnv = parseAgentsEnv();
-  const preset = fromEnv && fromEnv.length > 0 ? fromEnv : prior.length > 0 ? prior : found;
+  const preset = fromEnv && fromEnv.length > 0
+    ? fromEnv
+    : prior.length > 0 ? prior : NON_INTERACTIVE ? agentsWithFilesHere(found) : found;
   const codexDesc = detected.codexCli
     ? tr('Instalado · CLI; la app de escritorio usa la misma configuración', 'Installed · CLI; the desktop app uses the same repository config')
     : detected.codexConfigured
@@ -935,6 +957,7 @@ async function askAgents(detected: AgentDetection, prior: AgentId[]): Promise<Ag
         { value: 'claude-code', label: 'Claude Code', desc: desc(detected.claudeCode), checked: preset.includes('claude-code') },
         { value: 'codex', label: 'Codex', desc: codexDesc, checked: preset.includes('codex') },
         { value: 'opencode', label: 'OpenCode', desc: desc(detected.opencode), checked: preset.includes('opencode') },
+        { value: 'pi', label: 'Pi', desc: desc(detected.pi), checked: preset.includes('pi') },
       ],
       min: 1,
       minMsg: tr('Elige al menos uno: sin agente no hay a quién configurar.', 'Pick at least one: without an agent there is nothing to configure.'),
@@ -1006,13 +1029,17 @@ async function runPlaywrightStep(state: InstallState, forceKeys: Set<string>, la
 /**
  * `engram setup` argument list per agent. The agent slugs this installer
  * uses (claude-code / opencode / codex) are the slugs `engram setup` accepts.
- * Passing the agent explicitly skips its interactive menu.
+ * Passing the agent explicitly skips its interactive menu. `engram setup` does
+ * not name Pi, so a Pi agent gets `ENGRAM_PI_MANUAL` printed instead.
  */
-export function engramSetupArgs(agent: AgentId): string[] {
+export function engramSetupArgs(agent: Exclude<AgentId, 'pi'>): string[] {
   return agent === 'claude-code'
     ? ['setup', agent, '--protocol=slim']
     : ['setup', agent];
 }
+
+/** Registers Engram at Pi's user level; the human runs it, because it writes user config. */
+export const ENGRAM_PI_MANUAL = 'pi mcp add engram --exposure deferred -- engram mcp --tools=agent';
 
 /** The Engram Claude Code plugin ships the session hooks `engram setup` does not write. */
 export const ENGRAM_PLUGIN_COMMANDS: string[][] = [
@@ -1091,6 +1118,10 @@ async function runEngramStep(agents: AgentId[], state: InstallState, forceKeys: 
   const out = stepOut(step);
   let failed = 0;
   for (const agent of agents) {
+    if (agent === 'pi') {
+      out.info(tr(`Pi: conecta Engram a mano, una vez por máquina: ${ENGRAM_PI_MANUAL}`, `Pi: connect Engram by hand, once per machine: ${ENGRAM_PI_MANUAL}`));
+      continue;
+    }
     out.dim(`engram ${engramSetupArgs(agent).join(' ')}`);
     const r = await runStreamed('engram', engramSetupArgs(agent), { step, timeoutMs: 60_000 });
     const ok = r.code === 0;
@@ -1317,6 +1348,7 @@ export async function discoverRequiredEnvVars(
   const claudeMcpPath = root === REPO_ROOT ? CLAUDE_MCP_PATH : join(root, '.mcp.json');
   const openCodeConfigPath = root === REPO_ROOT ? OPENCODE_CONFIG_PATH : join(root, 'opencode.jsonc');
   const codexConfigPath = root === REPO_ROOT ? CODEX_CONFIG_PATH : join(root, '.codex', 'config.toml');
+  const piMcpPath = root === REPO_ROOT ? PI_MCP_PATH : join(root, '.pi', 'mcp.json');
   if (agents.includes('claude-code') && existsSync(claudeMcpPath)) {
     const content = await readFile(claudeMcpPath, 'utf8');
     for (const m of content.matchAll(MCP_VAR_PATTERN)) { seen.add(m[1]); }
@@ -1332,6 +1364,11 @@ export async function discoverRequiredEnvVars(
     const raw = await readFile(codexConfigPath, 'utf8');
     collectCodexMcpEnvVars(Bun.TOML.parse(raw), seen);
     collectFilterNames(raw.replace(/^\s*#.*$/gm, ''), seen);
+  }
+  if (agents.includes('pi') && existsSync(piMcpPath)) {
+    const content = await readFile(piMcpPath, 'utf8');
+    for (const m of content.matchAll(MCP_VAR_PATTERN)) { seen.add(m[1]); }
+    collectFilterNames(content, seen);
   }
   return [...seen].sort();
 }
@@ -2115,7 +2152,7 @@ function verifyExternalClis(state: InstallState): CliResult[] {
 export function migrateAgentIds(value: unknown): AgentId[] {
   if (!Array.isArray(value)) { return []; }
   return [...new Set(value.filter((agent): agent is AgentId =>
-    agent === 'claude-code' || agent === 'opencode' || agent === 'codex'))];
+    agent === 'claude-code' || agent === 'opencode' || agent === 'codex' || agent === 'pi'))];
 }
 
 async function loadPriorState(): Promise<InstallState | null> {
@@ -2266,7 +2303,7 @@ export function mergedHarnesses(existing: readonly Harness[], agents: readonly A
 /**
  * Write the agent selection to `harnesses:` in `.agents/project.yaml`, then
  * OFFER to delete the files of every harness left out (default keep). The
- * boilerplate itself checks all three and is left alone.
+ * boilerplate itself checks every harness and is left alone.
  */
 export async function recordHarnessSelection(agents: readonly AgentId[], root = REPO_ROOT, out: Out = consoleOut): Promise<void> {
   const selection = declaredHarnesses(root);
@@ -2322,6 +2359,19 @@ function removeEmptyParents(root: string, file: string): void {
   }
 }
 
+/** `agents:compat` regenerates; only `bun sync` brings the files of a harness the project declared without them. */
+function agentContractFix(errors: readonly string[]): { es: string, en: string } {
+  const files = declaredHarnesses(REPO_ROOT).source === 'boilerplate' ? [] : missingHarnessFiles(errors);
+  if (files.length === 0) {
+    return { es: 'corre <code>bun run agents:compat</code>.', en: 'run <code>bun run agents:compat</code>.' };
+  }
+  const list = files.map(file => `<code>${file}</code>`).join(', ');
+  return {
+    es: `corre <code>bun sync</code>, que trae ${list}, o quita ese agente de <code>harnesses:</code> en <code>.agents/project.yaml</code>.`,
+    en: `run <code>bun sync</code>, which brings ${list}, or drop that agent from <code>harnesses:</code> in <code>.agents/project.yaml</code>.`,
+  };
+}
+
 function compatibilityStep(lane: string): void {
   const step = UI!.step({ id: 'compat', phase: 'install', lane, title: tr('Enlazar las skills a tus agentes', 'Link the skills to your agents') });
   try {
@@ -2330,8 +2380,10 @@ function compatibilityStep(lane: string): void {
     step.end('ok', `${compatibility.alias ? '<code>.claude/skills</code> → <code>.agents/skills/</code>' : tr('sin alias de Claude', 'no Claude alias')}${moved.length > 0 ? tr(` · movidos a ${SHADOWING_COMMANDS_BACKUP_DIR}/: ${moved.join(', ')}`, ` · moved to ${SHADOWING_COMMANDS_BACKUP_DIR}/: ${moved.join(', ')}`) : ''}`);
   }
   catch (err) {
-    for (const line of (err as Error).message.split('\n').slice(1, 8)) { step.log(line, 'err'); }
-    step.end('failed', tr('El contrato de los agentes quedó incompleto: corre <code>bun run agents:compat</code>.', 'The agent contract is incomplete: run <code>bun run agents:compat</code>.'));
+    const lines = (err as Error).message.split('\n').slice(1);
+    for (const line of lines.slice(0, 8)) { step.log(line, 'err'); }
+    const fix = agentContractFix(lines);
+    step.end('failed', tr(`El contrato de los agentes quedó incompleto: ${fix.es}`, `The agent contract is incomplete: ${fix.en}`));
   }
 }
 
@@ -3087,8 +3139,11 @@ function buildReport(state: InstallState, ui: InstallerUi): { title: string, ton
   else if (!SKIP_JIRA && state.postInstall.jiraCheck !== 'completed') {
     next.push({ title: tr('Valida el manifiesto de Jira', 'Validate the Jira manifest'), cmd: 'bun run jira:check' });
   }
-  const opener = state.agents.includes('claude-code') ? 'claude' : state.agents.includes('codex') ? 'codex' : 'opencode';
+  const opener = state.agents.includes('claude-code') ? 'claude' : state.agents.includes('codex') ? 'codex' : state.agents.includes('opencode') ? 'opencode' : 'pi';
   next.push({ title: tr('Abre tu agente en esta carpeta', 'Open your agent in this folder'), text: tr('Ábrelo directo, sin envolverlo en otro comando: cada servidor MCP lee <code>.env</code> por su cuenta, así ningún valor llega al shell del agente.', 'Open it directly, without wrapping it in another command: every MCP server reads <code>.env</code> itself, so no value reaches the agent\'s shell.'), cmd: opener });
+  if (state.agents.includes('pi')) {
+    next.push({ title: tr('Confía esta carpeta en Pi', 'Trust this folder in Pi'), text: tr('Sin esa confianza, Pi carga <code>AGENTS.md</code> y nada más: ni skills, ni MCP, ni el adaptador. Dentro de Pi: <code>/trust</code>.', 'Without it, Pi loads <code>AGENTS.md</code> and nothing else: no skills, no MCP, no adapter. Inside Pi: <code>/trust</code>.') });
+  }
   next.push({ title: tr('Recorre el stack', 'Tour the stack'), text: tr('Explica el flujo de QA: sprint testing, documentación, automatización, regresión.', 'Explains the QA flow: sprint testing, documentation, automation, regression.'), cmd: '/agentic-qa-onboard' });
   next.push({ title: tr('Mapea tu proyecto', 'Map your project'), text: tr('Lee la app bajo prueba y genera el PRD, el SRS y el glosario.', 'Reads the app under test and generates the PRD, the SRS and the glossary.'), cmd: '/project-discovery' });
   if (state.engram.status !== 'installed' && !SKIP_ENGRAM) {
@@ -3366,7 +3421,7 @@ async function main(): Promise<void> {
   ui.phaseEnd('pre', pre.verdict === 'warn' ? 'warn' : 'done', pre.verdict === 'warn' ? tr(`${pre.checks.filter(c => c.state === 'warn').length} aviso(s)`, `${pre.checks.filter(c => c.state === 'warn').length} warning(s)`) : undefined);
 
   // ── team ───────────────────────────────────────────────────────────────
-  ui.phase('team', tr('El boilerplate trae instrucciones y skills para tres agentes de IA. Configuramos solo los que uses.', 'The boilerplate ships instructions and skills for three AI agents. We configure only the ones you use.'));
+  ui.phase('team', tr('El boilerplate trae instrucciones y skills para varios agentes de IA. Configuramos solo los que uses.', 'The boilerplate ships instructions and skills for several AI agents. We configure only the ones you use.'));
   const engram = detectEngram();
   state.engram = { status: engram.status, version: engram.version, checkedAt: new Date().toISOString() };
   const detected = await detectAgents();
@@ -3479,7 +3534,8 @@ async function main(): Promise<void> {
     if (check.ok) { step.end('ok'); }
     else {
       for (const e of check.errors.slice(0, 8)) { step.log(e, 'err'); }
-      step.end('warn', tr('Corre <code>bun run agents:compat</code>.', 'Run <code>bun run agents:compat</code>.'));
+      const fix = agentContractFix(check.errors);
+      step.end('warn', tr(fix.es, fix.en));
     }
   }
   await retireHarnessCopies();

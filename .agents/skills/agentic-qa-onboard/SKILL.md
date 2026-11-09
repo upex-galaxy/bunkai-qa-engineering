@@ -2,7 +2,7 @@
 name: agentic-qa-onboard
 description: "Walks new users through this repo's QA flow — Playwright + KATA + Allure + Xray stack, Jira QA state machine (statuses read from `.agents/jira-workflows.json`, never from memory), the IQL stages by name, /shift-left-testing for pre-sprint AC refinement on backlog Stories, /sprint-testing for in-sprint manual QA, /test-documentation for TMS test cases, /test-automation for KATA-compliant E2E/API tests, /regression-testing for CI suite execution, /framework-development for boilerplate evolution, MCPs available (the servers `.mcp.json` declares; web search and Postman connect at harness level and resolve by capability; Atlassian is opt-in via agentic-qa-core/references/mcp-atlassian-optin.md), env vars by scope (framework / tooling / project-under-test, never a blocker), and the ordered 4-phase NEW-PROJECT setup path (foundation → Jira catalogs → /project-discovery + /test-framework-adaptation → git Strategy Setup). ALSO the front desk for anyone who is lost or wants to understand how the repo or any workflow skill works — conceptually AND visually: it explains in plain human language (suspending the terse working register) and can open per-skill how-it-works presentations (Spanish, technical terms in English) in the user's default browser after asking. Triggers on: `onboard me to QA`, `explain this QA repo`, `first time using this`, `primer vez en QA`, `/agentic-qa-onboard`, `I don't know how to use this`, `how does sprint-testing / test-automation work`, `how does this skill work`, `show me how it works`, `teach me how QA works here`, `walk me through this skill`, `no sé cómo usar esto`, `no entiendo cómo funciona el repo`, `cómo funciona este skill`, `explícame cómo funciona`, `enséñame cómo se hace`, `how do I set this repo up for my app`, `full setup for a new project`, `cómo configuro el repo para mi proyecto`, `setup completo del repo`. Do NOT use for: pre-sprint refinement (use /shift-left-testing), feature QA on a ticket (use /sprint-testing), authoring test cases in TMS (use /test-documentation), writing automated tests (use /test-automation), running regression suites (use /regression-testing), launching or supervising a fleet of parallel worker sessions (use /orca-orchestration — this skill only explains that the option exists)."
 license: MIT
-compatibility: [claude-code, opencode, codex]
+compatibility: [claude-code, opencode, codex, pi]
 phase: bootstrap
 complementary_categories: [meta-skill]
 metadata:
@@ -228,7 +228,7 @@ The QA work in this boilerplate runs as named stages: Shift-Left before the spri
 
 | Stage | Skill | When | What happens |
 | ----- | ----- | ---- | ------------ |
-| Shift-Left | `/shift-left-testing` | PRE-SPRINT (batch) | AC refinement on a batch of backlog Stories, gap-spotting, early authoring of the Story's single ATP into the `{{jira.acceptance_test_plan}}` field (outline maturity, no Test Plan item yet: `/sprint-testing` Planning creates the item FROM that field and refines the same ATP), tracked by a `[QA] Shift-Left Review` subtask, transition `backlog → shift_left_qa → estimation`. Adds labels `shift-left-reviewed` + `shift-left-{YYYY-MM-DD}` (the dated one dates the pass for the freshness window `/sprint-testing` declares; the Stage 1 short-circuit opens only on the published ATP body, never on the labels alone). |
+| Shift-Left | `/shift-left-testing` | PRE-SPRINT (batch) | AC refinement on a batch of backlog Stories, gap-spotting, early authoring of the Story's single ATP into the `{{jira.acceptance_test_plan}}` field (outline maturity, no Test Plan item yet: `/sprint-testing` Planning creates the item FROM that field and refines the same ATP), tracked by a `[QA] Shift-Left Review` subtask, sets `{{jira.ai_effort}}`, transition `backlog → shift_left_qa → ready_for_dev`. Adds labels `shift-left-reviewed` + `shift-left-{YYYY-MM-DD}` (the dated one dates the pass for the freshness window `/sprint-testing` declares; the Stage 1 short-circuit opens only on the published ATP body, never on the labels alone). |
 | Planning → Execution → Reporting | `/sprint-testing` | IN-SPRINT (ticket) | Per-ticket: ATS, ATP, then ATR. Smoke + trifuerza (UI/API/DB) exploration. Planning short-circuits its first phases only when the Story's published ATP body backs a Shift-Left pass within the window `/sprint-testing` declares (the labels alone open nothing). |
 | Planning → Execution → Reporting, as a fleet | `/sprint-conductor` | IN-SPRINT (whole sprint, on Orca) | One `/sprint-testing` worker per ticket, launched when the ticket really reaches the test environment, watched from the Sprint Board; the conductor never tests, it boots, watches, closes each worker with its own read-back and resumes the fleet after a reboot. |
 | Execution without a ticket | `/exploratory-testing` | ON DEMAND (in-sprint or post-sprint) | Ticket-free exploration of a flow, a module or the whole app: charter, parallel recon, refutation, tie-break. Every candidate executed live, marked NEW / WEAK / COVERED against existing coverage and `oracle: observed` until a person confirms it; feeds Documentation. |
@@ -242,10 +242,10 @@ The QA work in this boilerplate runs as named stages: Shift-Left before the spri
 > **Authoritative source: `.agents/jira-workflows.json`.** Status and transition names below are copied from that file (regenerate with `bun run jira:sync-workflows`). Never write a Jira status from memory — if it is not in `.agents/jira-workflows.json`, it does not exist in the instance.
 
 ```
-Backlog → Shift-Left QA → Estimation → Ready For Dev → In Progress → In Review → Ready For QA → In Test → QA Approved → Ready For Release → Deployed to Production
+Backlog → Shift-Left QA → Ready For Dev → In Progress → In Review → Ready For QA → In Test → QA Approved → Ready For Release → Deployed to Production
 ```
 
-`/shift-left-testing` drives the upstream transitions (Backlog → Shift-Left QA → Estimation). `/sprint-testing` drives the downstream ones (Ready For QA → In Test → QA Approved). PO/Dev lead drive the middle leg (Estimation → Ready For Dev → In Progress → In Review). A defect found in test sends the story `In Test → BLOCKED` (transition `defect reported`); `ABORTED` is the other terminal.
+`/shift-left-testing` drives the upstream transitions (Backlog → Shift-Left QA → Ready For Dev). `/sprint-testing` drives the downstream ones (Ready For QA → In Test → QA Approved). PO/Dev lead drive the middle leg (Ready For Dev → In Progress → In Review). A defect found in test sends the story `In Test → BLOCKED` (transition `defect reported`); `ABORTED` is the other terminal.
 
 (For bugs found during QA: `Open → In Progress → In Review → Ready For QA → Closed` — the `ReTest Passed` transition closes it after fix verification. Non-fix terminals: `Deferred`, `Duplicated`, `Enhancement`, `Cannot Reproduce`, `REJECTED`, `ABORTED`.)
 
@@ -306,7 +306,7 @@ Visual deck: `packages/decks/orca-orchestration/how-it-works.es.html` (same open
 
 ## MCPs available
 
-The project MCP files (`.mcp.json` and its OpenCode / Codex twins) commit only LOCAL (stdio) servers: the ones that read `.env` values (the app's database and API, the Slack bot) and the docs server, which needs no key. The set is whatever `.mcp.json` declares (`KNOWN_MCP_IDS` in `cli/lib/agent-compatibility-contracts.ts` pins the shipped ones), and the capability each server provides is in `agentic-qa-core/references/mcp-capabilities.md` §2.
+The project MCP files (`.mcp.json` and its OpenCode / Codex / Pi twins) commit only LOCAL (stdio) servers: the ones that read `.env` values (the app's database and API, the Slack bot) and the docs server, which needs no key. The set is whatever `.mcp.json` declares (`KNOWN_MCP_IDS` in `cli/lib/agent-compatibility-contracts.ts` pins the shipped ones), and the capability each server provides is in `agentic-qa-core/references/mcp-capabilities.md` §2.
 
 A remote server whose only project-side content was an API key is the harness's business (ADR-0005; the list of moved servers and how to connect each one per host: `cli/lib/harness-level-mcps.ts`, human guide `docs/core/variables-de-entorno.html`). The **Atlassian MCP is opt-in** (setup in `agentic-qa-core/references/mcp-atlassian-optin.md`) — the primary Jira tools are `/acli` and `bun run jira:sync-issues`.
 
@@ -317,7 +317,7 @@ A remote server whose only project-side content was an API key is the harness's 
 - Use `/acli` for ticket WRITES (create, transition, comment, link); for detailed READS (custom fields, ACs, ATP/ATR, comments) use `bun run jira:sync-issues get`/`jql`
 - Use `/playwright-cli` for every browser interaction, ad-hoc or scripted: there is no browser MCP
 
-`.mcp.json` lives at the repo root and is **committed**: it is secret-free, naming secrets only in each server's `.env` loader `--filter`. Every MCP server that needs `.env` values starts through that loader on all three hosts (`.mcp.json`, `opencode.jsonc`, `.codex/config.toml`; `MCP_ENV_LOADER_*` in `cli/lib/agent-compatibility-contracts.ts`), which reads `.env` from the project root itself, so even a desktop or Dock launch sees the values and no plaintext copy is written anywhere. Only `.mcp.local.json` (personal overrides) is gitignored.
+`.mcp.json` lives at the repo root and is **committed**: it is secret-free, naming secrets only in each server's `.env` loader `--filter`. Every MCP server that needs `.env` values starts through that loader on every host (`.mcp.json`, `opencode.jsonc`, `.codex/config.toml`, `.pi/mcp.json`; `MCP_ENV_LOADER_*` in `cli/lib/agent-compatibility-contracts.ts`), which reads `.env` from the project root itself, so even a desktop or Dock launch sees the values and no plaintext copy is written anywhere. Only `.mcp.local.json` (personal overrides) is gitignored.
 
 ---
 
@@ -325,7 +325,7 @@ A remote server whose only project-side content was an API key is the harness's 
 
 Every variable carries a scope in `cli/lib/variables-manifest.ts` (human guide: `docs/core/variables-de-entorno.html`). Nothing blocks install or the doctor: a value is validated by the code that reads it, with a named error. Fill what your work needs: the list is `.env.example` (each variable documented in place, its scope in the manifest), `bun run vars:env:check` verifies them, and `bun run setup:doctor` shows every variable with its scope. The Jira site HOST is NOT in `.env` — it lives in `.agents/project.yaml` -> `issue_tracker.atlassian_url`; read it with `bun run --silent jira:url`.
 
-Not in `.env`: web search and Postman are MCP servers connected at harness level (a claude.ai connector, a user-scope server, the OpenCode / Codex user config), and `acli` / `resend` keep their own login. `bun run setup:doctor` shows every variable with its scope and which harness-level servers your user config declares.
+Not in `.env`: web search and Postman are MCP servers connected at harness level (a claude.ai connector, a user-scope server, the OpenCode / Codex user config, `~/.pi/agent/mcp.json` on Pi; claude.ai connectors do not exist there), and `acli` / `resend` keep their own login. `bun run setup:doctor` shows every variable with its scope and which harness-level servers your user config declares.
 
 `.env` is **gitignored**. Never commit it. `.agents/project.yaml` (committed) holds non-secret context (URLs, project key, environment names); `.env` holds the matching secrets.
 
