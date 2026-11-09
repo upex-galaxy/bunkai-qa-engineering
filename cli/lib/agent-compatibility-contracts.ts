@@ -1266,8 +1266,8 @@ export function validateInstructionRouterHooks(root = process.cwd(), harnesses: 
     }
   }
 
-  // Codex reads AGENTS.md natively and cuts it at the byte; the other two
-  // harnesses carry no such budget.
+  // Codex reads AGENTS.md natively and cuts it at the byte; no other
+  // harness carries such a budget.
   const bytes = Buffer.byteLength(l0);
   if (harnesses.includes('codex') && bytes > CODEX_PROJECT_DOC_MAX_BYTES) {
     errors.push(`AGENTS.md is ${bytes} bytes: Codex cuts the always-on file at ${CODEX_PROJECT_DOC_MAX_BYTES} bytes, router included.`);
