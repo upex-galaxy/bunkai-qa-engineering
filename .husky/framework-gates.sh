@@ -58,8 +58,9 @@ framework_gates_pre_commit() {
     && grep -q '"agents:schema:check"' package.json 2>/dev/null; then
     bun run agents:schema:check || {
       echo ""
-      echo "❌ .agents/project.schema.yaml is stale. Fix:"
-      echo "   bun run agents:schema && git add .agents/project.schema.yaml"
+      echo "❌ .agents/project.schema.yaml and .agents/project.yaml disagree (the check above names each path). Fix:"
+      echo "   a value out of sync:   bun run agents:schema && git add .agents/project.schema.yaml"
+      echo "   a key on one side only: add it to the other file by hand (schema: with its comment; yaml: value only)"
       exit 1
     }
   fi
@@ -94,10 +95,10 @@ framework_gates_pre_commit() {
 
   # cross-harness compatibility gate — only runs when staged files affect it.
   # Covers the generated Claude skills alias, a harness command that shadows a
-  # skill, the three hook adapters and MCP parity across the three host configs.
+  # skill, the hook adapters and MCP parity across the host configs.
   # Everything it guards is generated or mirrored, so a hand-edit is invisible to
   # every other check.
-  if echo "$_fg_staged" | grep -qE '^(\.agents/hooks/|\.claude/commands/|\.opencode/commands/|\.opencode/plugins/|\.codex/|\.claude/settings\.json$|\.mcp\.json$|opencode\.jsonc$|cli/lib/agent-compatibility.*\.ts$|scripts/agent-compatibility.*\.ts$)'; then
+  if echo "$_fg_staged" | grep -qE '^(\.agents/hooks/|\.claude/commands/|\.opencode/commands/|\.opencode/plugins/|\.codex/|\.claude/settings\.json$|\.mcp\.json$|opencode\.jsonc$|\.pi/mcp\.json$|\.pi/extensions/agentic-qa\.js$|cli/lib/agent-compatibility.*\.ts$|scripts/agent-compatibility.*\.ts$)'; then
     bun run agents:compat:check || {
       echo ""
       echo "❌ Cross-harness compatibility is out of contract. Fix:"

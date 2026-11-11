@@ -101,3 +101,12 @@ scripts/contribution-audit/report_template.html
 .backups*/
 .scratch/
 .session/
+
+# ----- 2026-11-09 (sync) -----
+.pi/*
+!.pi/mcp.json
+!.pi/settings.json
+!.pi/extensions/
+!.pi/skills/
+!.pi/prompts/
+!.pi/themes/

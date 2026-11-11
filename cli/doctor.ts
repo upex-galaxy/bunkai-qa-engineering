@@ -28,10 +28,11 @@ import type { HarnessLevelVerdict } from './lib/harness-level-mcps.ts';
 import type { Harness } from './lib/harness-selection.ts';
 import type { GateContext, VarSpec } from './lib/variables-manifest.ts';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import {
   declaredMcpIds,
   validateHookCompatibility,
@@ -41,9 +42,10 @@ import {
   checkAgentCompatibility,
   describeAliasStatus,
   groupCompatibilityErrors,
+  missingHarnessFiles,
   validateCanonicalSources,
 } from './lib/agent-compatibility.ts';
-import { classifyProjectYaml, projectDelta, SCHEMA_FILE, SCHEMA_SOURCE } from './lib/agents-schema.ts';
+import { changedDefaults, classifyProjectYaml, describeChangedDefault, projectDelta, SCHEMA_FILE, SCHEMA_SOURCE } from './lib/agents-schema.ts';
 import {
   formatInstanceMismatchWarning,
   resolveAtlassianInstance,
@@ -60,7 +62,7 @@ import {
   OPENCODE_SECRET_DIR,
 } from './lib/harness-env.ts';
 import { harnessLevelMcpReport } from './lib/harness-level-mcps.ts';
-import { HARNESS_LABEL } from './lib/harness-selection.ts';
+import { declaredHarnesses, HARNESS_LABEL } from './lib/harness-selection.ts';
 import { playwrightBrowsersInstalled } from './lib/playwright-cache.ts';
 import { gateIsOn, varsFor } from './lib/variables-manifest.ts';
 import { checkoutRoots } from './lib/worktree.ts';
@@ -256,9 +258,20 @@ export interface AgentCompatibilityDiagnostic {
     canonical_skills: boolean
     claude_alias: boolean
   }
-  hooks: { claude: boolean, opencode: boolean, codex: boolean, ok: boolean }
+  hooks: { claude: boolean, opencode: boolean, codex: boolean, pi: boolean, ok: boolean }
   /** `expected_servers` is whatever the canonical MCP config declares, never a literal count. */
-  mcp: { expected_servers: number, claude: boolean, opencode: boolean, codex: boolean, parity: boolean }
+  mcp: { expected_servers: number, claude: boolean, opencode: boolean, codex: boolean, pi: boolean, parity: boolean }
+  /**
+   * Pi's project trust gates `.agents/skills`, `.pi/mcp.json` and
+   * `.pi/extensions`: without it a session gets `AGENTS.md` and nothing else.
+   * Runtime state, read from Pi's own files and reported apart from file
+   * correctness.
+   */
+  pi: {
+    mcp_config_exists: boolean
+    adapter_exists: boolean
+    trust_status: PiTrustStatus
+  }
   codex: {
     config_exists: boolean
     cli_detected: boolean
@@ -538,6 +551,7 @@ export function diagnoseAgentCompatibility(
       claude: !uses('claude') || !hasHookError('.claude/settings.json'),
       opencode: !uses('opencode') || (!hasHookError('opencode.jsonc') && !hasHookError('.opencode/plugins')),
       codex: !uses('codex') || (codexHooksExist && !hasHookError('.codex/hooks.json') && !hasHookError('.codex/config.toml')),
+      pi: !uses('pi') || (!hasHookError('.pi/extensions') && !hasHookError('Pi adapter')),
       ok: hookErrors.length === 0,
     },
     mcp: {
@@ -545,7 +559,13 @@ export function diagnoseAgentCompatibility(
       claude: !uses('claude') || !hasMcpError('.mcp.json'),
       opencode: !uses('opencode') || !hasMcpError('opencode.jsonc'),
       codex: !uses('codex') || (codexConfigExists && !hasMcpError('.codex/config.toml')),
+      pi: !uses('pi') || !hasMcpError('.pi/mcp.json'),
       parity: mcpErrors.length === 0,
+    },
+    pi: {
+      mcp_config_exists: existsSync(join(root, '.pi', 'mcp.json')),
+      adapter_exists: existsSync(join(root, '.pi', 'extensions', 'agentic-qa.js')),
+      trust_status: uses('pi') ? piTrustStatus(root) : 'unknown',
     },
     codex: {
       config_exists: codexConfigExists,
@@ -557,6 +577,47 @@ export function diagnoseAgentCompatibility(
       trust_status: 'required-not-verifiable',
     },
   };
+}
+
+export type PiTrustStatus = 'trusted' | 'declined' | 'ask' | 'unknown';
+
+/**
+ * What Pi would decide for this folder when a session opens: the closest saved
+ * decision in `trust.json` for the folder or a parent, else `defaultProjectTrust`
+ * in `settings.json`, whose default is to ask. Pi's own order; an extension or
+ * `--approve` can still override it at launch. Reads those two files and starts nothing.
+ */
+export function piTrustStatus(root: string, env: Record<string, string | undefined> = process.env, home: string = homedir()): PiTrustStatus {
+  const agentDir = env.PI_CODING_AGENT_DIR && env.PI_CODING_AGENT_DIR.trim() !== '' ? env.PI_CODING_AGENT_DIR : join(home, '.pi', 'agent');
+  const readJson = (file: string): Record<string, unknown> | null => {
+    try { return JSON.parse(readFileSync(join(agentDir, file), 'utf8')) as Record<string, unknown>; }
+    catch { return null; }
+  };
+  const decisions = readJson('trust.json') ?? {};
+  let canonical = resolve(root);
+  try { canonical = realpathSync(canonical); }
+  catch { /* keep the resolved path */ }
+  for (let directory = canonical; ; directory = dirname(directory)) {
+    const decision = decisions[directory];
+    if (decision === true) { return 'trusted'; }
+    if (decision === false) { return 'declined'; }
+    if (dirname(directory) === directory) { break; }
+  }
+  const settings = readJson('settings.json');
+  if (settings === null) { return existsSync(agentDir) ? 'ask' : 'unknown'; }
+  if (settings.defaultProjectTrust === 'always') { return 'trusted'; }
+  if (settings.defaultProjectTrust === 'never') { return 'declined'; }
+  return 'ask';
+}
+
+function piTrustRow(status: PiTrustStatus): string {
+  if (status === 'trusted') { return tui.statusIcon('ok'); }
+  const why = {
+    declined: 'declined: Pi loads AGENTS.md here and nothing else',
+    ask: 'not decided: print and RPC modes skip the project\'s resources; run /trust inside Pi',
+    unknown: 'Pi has no config on this machine yet',
+  }[status];
+  return `${tui.statusIcon('warn')} ${why}`;
 }
 
 // ----------------------------------------------------------------------------
@@ -576,6 +637,11 @@ export interface ProjectSchemaDiagnostic {
   gaps: Array<{ block: string, paths: string[], wholeBlock: boolean }>
   /** Blocks silenced through `updater.schema_exempt`. */
   exempt: string[]
+  /**
+   * Methodology values this project changed from upstream's default, one
+   * `<path>: yours <x>, upstream default <y>` line each. Listed, never a failure.
+   */
+  changed_defaults: string[]
   /** Set when nothing could be compared: a parse failure, or no schema on disk. */
   note: string | null
   /**
@@ -600,16 +666,18 @@ function gitOrigin(): string | null {
 function projectSchemaDiagnostic(): ProjectSchemaDiagnostic {
   const sourcePath = join(REPO_ROOT, SCHEMA_SOURCE);
   const schemaPath = join(REPO_ROOT, SCHEMA_FILE);
-  if (!existsSync(sourcePath)) { return { gaps: [], exempt: [], note: `${SCHEMA_SOURCE} not found`, copied_template: false }; }
+  if (!existsSync(sourcePath)) { return { gaps: [], exempt: [], changed_defaults: [], note: `${SCHEMA_SOURCE} not found`, copied_template: false }; }
   const sourceText = readFileSync(sourcePath, 'utf8');
   const copied_template = classifyProjectYaml(sourceText, gitOrigin()) === 'copied-template';
-  if (!existsSync(schemaPath)) { return { gaps: [], exempt: [], note: `${SCHEMA_FILE} not found — run \`bun sync\` to receive it`, copied_template }; }
+  if (!existsSync(schemaPath)) { return { gaps: [], exempt: [], changed_defaults: [], note: `${SCHEMA_FILE} not found — run \`bun sync\` to receive it`, copied_template }; }
   try {
-    const delta = projectDelta(sourceText, readFileSync(schemaPath, 'utf8'));
-    return { gaps: delta.gaps, exempt: delta.exempt, note: delta.error, copied_template };
+    const schemaText = readFileSync(schemaPath, 'utf8');
+    const delta = projectDelta(sourceText, schemaText);
+    const changed_defaults = changedDefaults(sourceText, schemaText).changed.map(describeChangedDefault);
+    return { gaps: delta.gaps, exempt: delta.exempt, changed_defaults, note: delta.error, copied_template };
   }
   catch (err) {
-    return { gaps: [], exempt: [], note: `the schema comparison threw: ${(err as Error).message}`, copied_template };
+    return { gaps: [], exempt: [], changed_defaults: [], note: `the schema comparison threw: ${(err as Error).message}`, copied_template };
   }
 }
 
@@ -1133,7 +1201,7 @@ export async function runDoctor(): Promise<DoctorReport> {
   if (!agentCompatibility.file_correct) {
     report.pending_actions.push({
       type: 'shell_command',
-      target: 'bun run agents:compat',
+      target: missingHarnessFiles(agentCompatibility.errors).length > 0 && declaredHarnesses(REPO_ROOT).source !== 'boilerplate' ? 'bun sync' : 'bun run agents:compat',
       hint: `Repair generated compatibility artifacts, then restore any canonical/config files still reported by doctor: ${agentCompatibility.errors.join('; ')}`,
     });
   }
@@ -1165,7 +1233,7 @@ function printHuman(report: DoctorReport): void {
   const compat = report.agent_compatibility;
   const inUse = (harness: Harness): boolean => compat.harnesses.includes(harness);
   const notUsed = `${tui.statusIcon('ok')} not used`;
-  const hostList = (hosts: { claude: boolean, opencode: boolean, codex: boolean }): string =>
+  const hostList = (hosts: { claude: boolean, opencode: boolean, codex: boolean, pi: boolean }): string =>
     compat.harnesses.map(host => `${host}:${hosts[host] ? 'ok' : 'FAIL'}`).join(' ');
   const fileRow = (exists: boolean, harness: Harness): string =>
     !inUse(harness) ? notUsed : exists ? tui.statusIcon('ok') : tui.statusIcon('fail');
@@ -1189,6 +1257,15 @@ function printHuman(report: DoctorReport): void {
   }
   else {
     checks.push(['Codex', notUsed]);
+  }
+  if (inUse('pi')) {
+    checks.push(
+      ['Pi MCP registry and adapter', compat.pi.mcp_config_exists && compat.pi.adapter_exists ? tui.statusIcon('ok') : tui.statusIcon('fail')],
+      ['Pi project trust', piTrustRow(compat.pi.trust_status)],
+    );
+  }
+  else {
+    checks.push(['Pi', notUsed]);
   }
   checks.push(
     ['node_modules', report.deps_installed ? tui.statusIcon('ok') : tui.statusIcon('fail')],
@@ -1306,7 +1383,7 @@ function printHuman(report: DoctorReport): void {
   // and it must never push the report to `needs action`. It answers a
   // different question from the checks above — not "is something broken" but
   // "has upstream moved and am I still on the old shape".
-  if (report.project_schema.note !== null || report.project_schema.gaps.length > 0 || report.project_schema.copied_template) {
+  if (report.project_schema.note !== null || report.project_schema.gaps.length > 0 || report.project_schema.changed_defaults.length > 0 || report.project_schema.copied_template) {
     tui.section('Project config vs upstream schema (.agents/project.yaml)');
     if (report.project_schema.copied_template) {
       process.stdout.write(`  ${tui.statusIcon('warn')} .agents/project.yaml is the boilerplate maintainers' own copy (GitHub "Use this template"): their project, Jira and push authorization\n`);
@@ -1315,13 +1392,18 @@ function printHuman(report: DoctorReport): void {
     if (report.project_schema.note !== null) {
       process.stdout.write(`  ${tui.statusIcon('warn')} ${report.project_schema.note}\n`);
     }
-    else {
+    else if (report.project_schema.gaps.length > 0) {
       const total = report.project_schema.gaps.reduce((n, g) => n + g.paths.length, 0);
       process.stdout.write(`  ${tui.statusIcon('warn')} upstream declares ${total} key path(s) this project does not have\n`);
       for (const gap of report.project_schema.gaps) {
         process.stdout.write(`  ${gap.block}${gap.wholeBlock ? ' (whole block)' : ''}: ${gap.paths.join(', ')}\n`);
       }
       process.stdout.write('  Fix: bun sync  (offers to insert them, one prompt per block, insert-only)\n');
+    }
+    if (report.project_schema.changed_defaults.length > 0) {
+      process.stdout.write(`  ${tui.statusIcon('warn')} ${report.project_schema.changed_defaults.length} methodology value(s) differ from upstream's default (yours is kept; listed so each change is deliberate)\n`);
+      for (const line of report.project_schema.changed_defaults) { process.stdout.write(`  ${line}\n`); }
+      process.stdout.write(`  Each key is documented in ${SCHEMA_FILE}.\n`);
     }
     if (report.project_schema.exempt.length > 0) {
       process.stdout.write(`  silenced via updater.schema_exempt: ${report.project_schema.exempt.join(', ')}\n`);
@@ -1397,7 +1479,7 @@ function printHuman(report: DoctorReport): void {
 
   if (report.pending_actions.length === 0) {
     process.stdout.write('\n');
-    process.stdout.write(`${tui.successBox(['All file checks green. Open the agent: claude  /  opencode  /  codex (or its desktop app)', 'Codex Desktop uses the same repository configuration; approve repository trust before hooks run.'])}\n`);
+    process.stdout.write(`${tui.successBox(['All file checks green. Open the agent: claude  /  opencode  /  codex (or its desktop app)  /  pi', 'Codex Desktop uses the same repository configuration; approve repository trust before hooks run.'])}\n`);
   }
 }
 

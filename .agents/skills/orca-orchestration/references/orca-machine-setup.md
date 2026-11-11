@@ -71,12 +71,14 @@ tier should run in (`orchestration.permission_modes` in `.agents/project.yaml`, 
 harness, and the conductor VERIFIES the result on each worker at readiness
 (`references/coordinator-playbook.md` §1 step 5).
 
-| Mode | Claude Code | Codex CLI (rust-v0.165.0) | OpenCode (v1.19.5 / v2.2.0) | Pi (v1.4.0; not a supported harness of this repo) |
+| Mode | Claude Code | Codex CLI (rust-v0.165.0) | OpenCode (v1.19.5 / v2.2.0) | Pi (v1.4.0) |
 |---|---|---|---|---|
 | bypass | `--dangerously-skip-permissions` (= `--permission-mode bypassPermissions`); the first run needs `skipDangerousModePermissionPrompt: true` in the user settings | `--dangerously-bypass-approvals-and-sandbox` (`-a never -s workspace-write` keeps `.git` read-only and the network off: a worker cannot commit) | `--auto` (hidden aliases `--yolo`, `--dangerously-skip-permissions`) or `"permission": {"*": "allow"}` | nothing to set (no approval system); pass `--approve` to skip the project-trust prompt |
 | auto | `--permission-mode auto` (a classifier; it pauses and PROMPTS after 3 consecutive or 20 total blocks, and falls back to manual when it is unavailable) | `--approve-for-me` (a reviewer model answers approvals) | no equivalent (closest: per-tool `ask` / `allow` / `deny`) | no equivalent |
 | ask | the default mode | `-a on-request` | the default | n/a |
 | inherit | a subagent inherits the parent session's mode | same | same | same |
+
+A Pi conductor cannot honour `permission_modes.conductor: auto`: bypass is the only state Pi has, and ADR-0024's stated exposure applies. `worker-start --agent pi` launches it with no flag and on the model in its own config (ADR-0026).
 
 Sources, read 2026-10-28 (versions as named; harness flags move, so confirm with `<harness> --help`
 on the machine): code.claude.com/docs/en/permission-modes and /cli-reference; learn.chatgpt.com
@@ -127,7 +129,7 @@ the mode off each worker instead of trusting this checklist.
 
 A launch line can export variables; the native launch cannot, because it has no argv. So no MCP
 server depends on the launch: every one that needs `.env` values starts through the `.env` loader
-declared in `.mcp.json`, `opencode.jsonc` and `.codex/config.toml` (`varlock run ... --filter <its
+declared in `.mcp.json`, `opencode.jsonc`, `.codex/config.toml` and `.pi/mcp.json` (`varlock run ... --filter <its
 vars> -- <server>`, ADR-0011), which reads the varlock schema plus `.env` / `.env.local` from the
 worktree root when the harness spawns the server. NO shell is involved, for Claude Code, OpenCode
 and Codex workers alike. Nothing here is set per machine: what this item needs is the worktree's own
@@ -211,6 +213,9 @@ find out during a real fleet, and record it in `references/gotchas.md`.
     custom-argv line carries its own flag)
 [ ] Claude Code with bypass: `skipDangerousModePermissionPrompt: true` in the user settings
 [ ] other agents: the §3.1 flag, confirmed with `<harness> --help` on this machine, not guessed
+[ ] Pi workers: trust the parent folder of the worktrees (`/trust` in a session there, or
+    `defaultProjectTrust`), because a launch passes no flags and an untrusted Pi session gets
+    AGENTS.md and nothing else; `bun run setup:doctor` reports it
 [ ] the worktree has its own `.env` and the session restarted after the last `.env` change (every
     MCP server reads it through the `.env` loader; verify its servers connected on the worker's
     screen at launch)

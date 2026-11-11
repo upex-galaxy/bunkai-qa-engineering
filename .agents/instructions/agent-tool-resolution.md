@@ -2,7 +2,7 @@
 id: tool-resolution
 title: 'Tool resolution and CLI to skill mapping'
 load_when: 'a [TAG_TOOL] in a skill, an MCP call, a TMS modality, or a mapped CLI (gh, acli, playwright-cli, bunx allure, resend, jq, bun xray, supabase, wrangler, vercel, orca)'
-triggers: ['\[[A-Z_]+_TOOL\]', '\bacli\b', '\bxray\b', '\bplaywright-cli\b', '\ballure\b', '\bresend\b', '\bjq\b', '\bgh\b', '\borca\b', '\bsupabase\b', '\bwrangler\b', '\bvercel\b', '(?<![.\w])MCP\b', '\bmodality\b', '\bcontext7\b', '\bweb ?search\b']
+triggers: ['\[[A-Z_]+_TOOL\]', '\bacli\b', '\bxray\b', '\bplaywright-cli\b', '\ballure\b', '\bresend\b', '\bjq\b', '\bgh\b', '\borca\b', '\bsupabase\b', '\bwrangler\b', '\bvercel\b', '(?<![./\w])MCP\b', '\bmodality\b', '\bcontext7\b', '\bweb ?search\b']
 paths: []
 ---
 
@@ -25,7 +25,7 @@ paths: []
 
 > **Reads-vs-writes carve-out**: the `[ISSUE_TRACKER_TOOL]` / `[TMS_TOOL]` rows resolve to the WRITE / transition / link / trivial-lookup tool. DETAILED CONTENT reads (custom fields, ACs, ATP/ATR, comments) instead route through `bun run jira:sync-issues get <KEY> --include-comments` / `jql "<query>"`: read the synced `.md` (`acli view` returns null for `customfield_*`). Traceability link-graph + Xray run status stay on `/acli` / `/xray-cli`. See §9 and `agentic-qa-core/references/acli-integration.md`.
 
-**MANDATORY**: LOAD owning skill BEFORE invoking its tool. Skills = WHEN/WHAT. HOW (syntax, flags, auth, errors) lives in skill's `references/`. A tool-name PREFIX is a server name, the SUFFIX is the capability: resolve every MCP capability by suffix, never by prefix (`mcp__tavily__tavily_search`, `mcp__claude_ai_<name>__tavily_search` and a user-level server's `…__tavily_search` all provide `web-search`); no available tool provides it → STOP at the point of use per `agentic-qa-core/references/preflight-gate.md` §8, canon `agentic-qa-core/references/mcp-capabilities.md`.
+**MANDATORY**: LOAD owning skill BEFORE invoking its tool. Skills = WHEN/WHAT. HOW (syntax, flags, auth, errors) lives in skill's `references/`. A tool-name PREFIX is a server name, the SUFFIX is the capability: resolve every MCP capability by suffix, never by prefix (`mcp__tavily__tavily_search`, `mcp__claude_ai_<name>__tavily_search` and a user-level server's `…__tavily_search` all provide `web-search`; Pi writes every non-alphanumeric character as `_`, so `resolve-library-id` arrives as `…__resolve_library_id`, found through its `tool_search`); no available tool provides it → STOP at the point of use per `agentic-qa-core/references/preflight-gate.md` §8, canon `agentic-qa-core/references/mcp-capabilities.md`.
 
 - Before any `[ISSUE_TRACKER_TOOL] ...` → load `/acli`
 - Before any `[TMS_TOOL] ...` Modality jira-xray → load `/xray-cli`
