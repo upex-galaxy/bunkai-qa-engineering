@@ -1,19 +1,3 @@
-/**
- * KATA Architecture - Layer 4: API Fixture
- *
- * Dependency Injection container for all API components.
- * Provides unified access to API testing capabilities.
- *
- * All API components share the same request context from TestContext,
- * ensuring consistent authentication and request configuration.
- *
- * HOW TO ADD NEW API COMPONENTS:
- * 1. Create your component in tests/components/api/YourApi.ts
- * 2. Import it here
- * 3. Add as readonly property
- * 4. Initialize in constructor passing the options
- */
-
 import type { TestContextOptions } from '@TestContext';
 
 import { ApiBase } from '@api/ApiBase';
@@ -25,36 +9,24 @@ import { RunApi } from '@api/RunApi';
 import { TokenApi } from '@api/TokenApi';
 import { WorkspaceApi } from '@api/WorkspaceApi';
 
-// ============================================
-// API Fixture Class
-// ============================================
-
 export class ApiFixture extends ApiBase {
-  /** Auth component - handles sign-in and token management */
   readonly auth: AuthApi;
 
-  /** ATC component - Atomic Test Component CRUD + search */
   readonly atc: AtcApi;
 
-  /** Token component - personal access token issuing and listing */
   readonly token: TokenApi;
 
-  /** Workspace component - sandbox workspaces and their projects */
   readonly workspace: WorkspaceApi;
 
-  /** Project component - modules, user stories, acceptance criteria, environments */
   readonly project: ProjectApi;
 
-  /** Run component - Tests and manual Runs driven to a chosen outcome */
   readonly run: RunApi;
 
-  /** Coverage component - project and workspace coverage rollups */
   readonly coverage: CoverageApi;
 
   constructor(options: TestContextOptions) {
     super(options);
 
-    // All components receive the same options (same request context)
     this.auth = new AuthApi(options);
     this.atc = new AtcApi(options);
     this.token = new TokenApi(options);
@@ -64,14 +36,6 @@ export class ApiFixture extends ApiBase {
     this.coverage = new CoverageApi(options);
   }
 
-  // ============================================
-  // Token Propagation to Child Components
-  // ============================================
-
-  /**
-   * Set authentication token for all API components.
-   * This ensures all components use the same token for authenticated requests.
-   */
   override setAuthToken(token: string) {
     super.setAuthToken(token);
     this.auth.setAuthToken(token);
@@ -83,9 +47,6 @@ export class ApiFixture extends ApiBase {
     this.coverage.setAuthToken(token);
   }
 
-  /**
-   * Clear authentication token from all API components.
-   */
   override clearAuthToken() {
     super.clearAuthToken();
     this.auth.clearAuthToken();

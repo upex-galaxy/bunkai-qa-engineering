@@ -521,7 +521,7 @@ function parseNestedList(metadataBlock: string, key: string): string[] | undefin
     }
     return values;
   }
-  return metadataBlock.match(new RegExp(`^[ \\t]+${key}:`, 'm')) ? [] : undefined;
+  return new RegExp(`^[ \\t]+${key}:`, 'm').test(metadataBlock) ? [] : undefined;
 }
 
 // -----------------------------------------------------------------------------
@@ -869,6 +869,7 @@ const STALE_PATH_ALLOWED = new Set<string>([
   // after every `bun run up` until upstream adds them to its own allowlist.
   'tests/e2e/dashboard/dashboard.test.ts',
   'tests/integration/auth/user-session.test.ts',
+  'scripts/oxlint-config.test.ts',
   // Boilerplate-maintainer records the synced skill bodies cite but that are
   // never shipped downstream: `.context/` is not a synced component, and the
   // scaffold prunes the maintainer's ADRs. This repo has no `.context/ADR/`,

@@ -224,6 +224,12 @@ export interface PackageJsonKeptKey {
   resolution: 'skip' | 'mine'
 }
 
+/** A boilerplate-only path the cleanup kept: the project edited its copy, protects it, or upstream's copy could not be read. */
+export interface BoilerplateCopyKept {
+  path: string
+  reason: 'edited' | 'protected' | 'unverified'
+}
+
 export interface RunSummary {
   applied: AppliedFile[]
   skipped: DeltaEntry[]
@@ -248,6 +254,16 @@ export interface RunSummary {
   packageJsonAppended?: { file: string, section: string, key: string, value: string }[]
   /** Test siblings of protected files the run did not deliver or overwrite. */
   testSiblingsHeldBack?: { path: string, protectedPath: string }[]
+  /** Upstream's unedited copies of boilerplate-only files this run removed (`cleanupBoilerplateCopies`). */
+  boilerplateCopiesRemoved?: string[]
+  /** Boilerplate-only paths the project holds that the cleanup kept, with why. */
+  boilerplateCopiesKept?: BoilerplateCopyKept[]
+  /** Where the removed copies were saved (`.backups/update-<ts>/`), when any were removed. */
+  boilerplateCleanupBackup?: string | null
+  /** Protected updater files a parent older than this updater overwrote, and what the re-exec child did about them (`repairParentOverwrites`). */
+  selfUpdateRepair?: { restored: string[], unloadable: string[], backupDir: string | null }
+  /** The self-update was undone and the run aborted: the new updater does not load (`selfUpdateImportError`), with the protected files it kept. */
+  selfUpdateBlocked?: { protectedPaths: string[], error: string }
   /** Paths recorded in `.template/last-apply.json`: the updater's own uncommitted output, exempt from the next dirty-tree guard. */
   lastApplyPaths?: number
   /** Set by the wrapper's parity hook when it saved the prompt file (`UpdaterConfig.promptFile`). */
@@ -348,6 +364,8 @@ export interface PackageJsonSpec {
 export interface PackageJsonKeyDrift {
   localValue: string
   upstreamValue: string
+  /** Upstream's value at the last sync (the lock's `lastSyncedSha`), when the clone holds it. */
+  cursorValue?: string
 }
 
 export interface PackageJsonSectionDelta {
@@ -512,6 +530,13 @@ export interface UpdaterConfig {
    */
   holdTestSiblingsOf?: string[]
   /**
+   * Boilerplate-only files (the boilerplate's own tests, snapshots, fixtures,
+   * maintainer scripts) to REMOVE from a project that already holds upstream's
+   * unedited copy (`cleanupBoilerplateCopies`). Unset in the boilerplate's own
+   * checkout, where the cleanup is inert.
+   */
+  cleanupRepoOnly?: { paths: string[], patterns: RegExp[] }
+  /**
    * Generated, per-repo files that live INSIDE a synced component but must NEVER
    * be synced (each repo regenerates its own). Matched by exact repo-relative
    * path. Excluded from every detection path — bootstrap, content reconcile, and
@@ -539,6 +564,14 @@ export interface UpdaterConfig {
    * pruned.
    */
   repoOnlyPaths?: string[]
+  /**
+   * On top of `repoOnlyPaths`, matched against the repo-relative path: upstream
+   * paths no consumer receives that a prefix cannot name (a file NAME shape
+   * spread across folders, such as the boilerplate's own unit tests). Applies
+   * to every delivery route, the self-update of the updater included
+   * (`isRepoOnlyForRun`).
+   */
+  repoOnlyPatterns?: RegExp[]
   /**
    * Extra repo-relative paths added to the sparse-checkout of the template
    * clone. Not synced — they exist so afterApply hooks can READ the upstream

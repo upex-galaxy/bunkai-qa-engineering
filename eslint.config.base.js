@@ -15,6 +15,9 @@
  * guarding the import closure its self-update depends on.
  */
 
+import playwright from 'eslint-plugin-playwright';
+import kataPlugin from './kata-eslint-plugin.js';
+
 /**
  * Options handed to `antfu()`. Spread it, then override: the project's config
  * owns the final shape, and `ignores` / `rules` are the two a project realistically
@@ -162,12 +165,17 @@ export const KATA_IMPORT_ALIASES = {
  * re-exec'd mid-run). Path aliases are listed too: they resolve into
  * `tests/`, `config/` and `api/`, which are equally absent at re-exec time.
  *
+ * `ts/no-unnecessary-type-assertion` is off here: the casts in `cli/` (`NodeJS.ProcessEnv`, `ErrnoException`) are
+ * needed or redundant depending on the host's type packages, so a disable directive would warn as unused in the hosts
+ * where the cast is needed and error in the others.
+ *
  * This block travels with the base config on purpose: it guards the updater,
  * so a project that never received it runs `bun sync` unprotected.
  */
 export const CLI_IMPORT_CLOSURE = {
   files: ['cli/**/*.ts'],
   rules: {
+    'ts/no-unnecessary-type-assertion': 'off',
     'no-restricted-imports': ['error', {
       patterns: [{
         group: [
@@ -210,5 +218,77 @@ export const CLI_IMPORT_CLOSURE = {
         message: 'cli/ must be import-closed: the updater re-execs the new cli/ before other components are synced, so an import that escapes cli/ breaks `bun sync` for repos more than one release behind. Move the shared module into cli/lib/ instead.',
       }],
     }],
+  },
+};
+
+export { kataPlugin };
+
+/**
+ * Severity of every KATA enforcement rule below. One line flips the whole set
+ * from `warn` to `error`: this release reports, the next one blocks.
+ */
+export const KATA_ENFORCEMENT_LEVEL = 'error';
+
+/**
+ * The four `kata/*` rules on the whole test tree. They are path-aware inside, so
+ * one block is enough; `no-restricted-imports` is deliberately NOT used here:
+ * `KATA_IMPORT_ALIASES` owns it on `tests/**` and a second block would replace it.
+ */
+export const KATA_RULES = {
+  files: ['tests/**/*.ts'],
+  plugins: { kata: kataPlugin },
+  rules: {
+    'kata/layer-imports': KATA_ENFORCEMENT_LEVEL,
+    'kata/atc-no-atc-call': KATA_ENFORCEMENT_LEVEL,
+    'kata/no-decorator-in-base': KATA_ENFORCEMENT_LEVEL,
+    'kata/no-raw-page-in-spec': KATA_ENFORCEMENT_LEVEL,
+  },
+};
+
+/**
+ * Size limits for the component layers (kata-invariants.md §3: at most 2
+ * positional params, domain components stay small enough to review). Each entry
+ * is its own block so the later `ApiBase.ts` override wins over the first.
+ */
+export const KATA_SHAPE = [
+  {
+    // Layers 2, 3 and 3.5 only: fixtures keep Playwright's ({}, use, testInfo) shape.
+    files: ['tests/components/api/**/*.ts', 'tests/components/ui/**/*.ts', 'tests/components/steps/**/*.ts'],
+    rules: { 'max-params': [KATA_ENFORCEMENT_LEVEL, 2] },
+  },
+  {
+    // Owner-documented exemption: the protected HTTP primitives of ApiBase take
+    // path, payload and options, the tuple contract every ATC already calls.
+    files: ['tests/components/api/ApiBase.ts'],
+    rules: { 'max-params': 'off' },
+  },
+  {
+    files: ['tests/components/api/*.ts', 'tests/components/ui/*.ts'],
+    rules: { 'max-lines': [KATA_ENFORCEMENT_LEVEL, { max: 500, skipBlankLines: true, skipComments: true }] },
+  },
+];
+
+/**
+ * `eslint-plugin-playwright` rules that agree with KATA. `expect-expect`,
+ * `prefer-ending-with-an-expect`, `no-standalone-expect` and `no-raw-locators`
+ * are left off on purpose: they contradict KATA Rules 4 and 6 (assertions live
+ * inside ATCs, locators live in components).
+ */
+export const KATA_PLAYWRIGHT = {
+  files: ['tests/**/*.ts'],
+  plugins: { playwright },
+  rules: {
+    'playwright/no-wait-for-timeout': KATA_ENFORCEMENT_LEVEL,
+    'playwright/no-wait-for-selector': KATA_ENFORCEMENT_LEVEL,
+    'playwright/no-networkidle': KATA_ENFORCEMENT_LEVEL,
+    'playwright/missing-playwright-await': KATA_ENFORCEMENT_LEVEL,
+    'playwright/no-conditional-expect': KATA_ENFORCEMENT_LEVEL,
+    'playwright/no-useless-not': KATA_ENFORCEMENT_LEVEL,
+    'playwright/no-nth-methods': KATA_ENFORCEMENT_LEVEL,
+    'playwright/no-force-option': KATA_ENFORCEMENT_LEVEL,
+    'playwright/no-focused-test': KATA_ENFORCEMENT_LEVEL,
+    'playwright/no-page-pause': KATA_ENFORCEMENT_LEVEL,
+    'playwright/no-element-handle': KATA_ENFORCEMENT_LEVEL,
+    'playwright/no-skipped-test': KATA_ENFORCEMENT_LEVEL,
   },
 };

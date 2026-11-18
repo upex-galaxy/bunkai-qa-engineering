@@ -95,7 +95,8 @@ export class TokensPage extends UiBase {
       await expect(dialog).toBeVisible();
 
       const scopes = dialog.getByRole('checkbox');
-      await expect(scopes.first()).toBeVisible();
+      const atcReadScope = dialog.getByTestId('issue-token-scope-atc:read');
+      await expect(atcReadScope).toBeVisible();
       for (const scope of await scopes.all()) {
         await expect(scope).not.toBeChecked();
       }
@@ -104,6 +105,7 @@ export class TokensPage extends UiBase {
       const create = dialog.getByTestId('issue-token-create');
       await nameInput.fill(name);
       await nameInput.press('Enter');
+      // eslint-disable-next-line playwright/no-force-option -- the TC's second submit attempt is a click on the disabled Create button
       await create.click({ force: true });
 
       // Fixed assertions - the form is blocked and says why
@@ -117,7 +119,7 @@ export class TokensPage extends UiBase {
       await expect(dialog).toBeVisible();
 
       // Checking a scope clears the error and enables Create
-      await scopes.first().check();
+      await atcReadScope.check();
       await expect(error).toBeHidden();
       await expect(fieldset).not.toHaveAttribute('aria-invalid', 'true');
       await expect(create).toBeEnabled();

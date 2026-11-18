@@ -21,7 +21,6 @@
 
 import type { ApiFixture } from '@ApiFixture';
 
-import { faker } from '@faker-js/faker';
 import { expect } from '@playwright/test';
 import { TestContext } from '@TestContext';
 import { recordMintedPat } from '@utils/mintedPats';
@@ -51,7 +50,7 @@ export class SandboxSteps extends TestContext {
    * @param label - short kebab label naming the suite (at most 20 chars, e.g. `cov-kpi`)
    */
   async open(label: string): Promise<Sandbox> {
-    const suffix = faker.string.alphanumeric({ length: 8, casing: 'lower' });
+    const suffix = this.data.createSlug(8);
     const workspace = await this.api.workspace.createWorkspace({
       name: `qa sandbox ${label} ${suffix}`,
       slug: `${SANDBOX_SLUG_PREFIX}${label.slice(0, 20)}-${suffix}`,

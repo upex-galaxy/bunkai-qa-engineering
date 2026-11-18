@@ -22,7 +22,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import pc from 'picocolors';
 import { checkAgentCompatibility, repairAgentSurfaces, SHADOWING_COMMANDS_BACKUP_DIR, SKILLS_ALIAS_DEFERRED_MARKER } from './lib/agent-compatibility.ts';
-import { applyInsertions, changedDefaults, describeChangedDefault, planInsertions, projectDelta, SCHEMA_FILE, SCHEMA_SOURCE } from './lib/agents-schema.ts';
+import { applyInsertions, changedDefaults, describeChangedDefault, isMaintainerCopy, isSchemaOwner, planInsertions, projectDelta, SCHEMA_FILE, SCHEMA_SOURCE } from './lib/agents-schema.ts';
+import { BOILERPLATE_TEST_PATHS, BOILERPLATE_TEST_PATTERNS } from './lib/boilerplate-only.ts';
 import { declaredHarnesses, isUnderAny, unusedHarnessPaths } from './lib/harness-selection.ts';
 import * as tui from './lib/tui';
 import { startUpdaterUi } from './lib/ui/updater-run.ts';
@@ -73,9 +74,11 @@ import {
   RESOLVED_BY_APPLY_MARK,
   resolvedByApply,
   runVerdict,
+  selfUpdateBlockedFindings,
 } from './lib/updater-parity';
 import { makePbiCacheMigrationHook } from './lib/updater-pbi';
 import { CLAUDE_SETTINGS_FILE, formatHookCommand, mergeHookGroups, mergePermissionLists, readDeclinedDenies, readDeclinedHooks } from './lib/updater-settings';
+import { runSkillsUpdate, SKILLS_UPDATE_OPT_OUT_ENV, SKILLS_UPDATE_OPT_OUT_FLAG } from './lib/user-skills-update.ts';
 import { parseDotEnvExampleKeys, requiredNow, VAR_MANIFEST } from './lib/variables-manifest.ts';
 import { checkoutRoots } from './lib/worktree.ts';
 import { plainMsg, runUpPreflight } from './preflight.ts';
@@ -148,7 +151,7 @@ const GATE_TIMEOUT_MS = 120_000;
  */
 export const GATE_SCRIPTS = ['types:check', 'lint:check', 'kata:manifest:check', 'skills:check'] as const;
 
-const TOOLING_FILES = ['.editorconfig', '.prettierrc', '.gitattributes', 'tsconfig.base.json', 'eslint.config.base.js', 'bunfig.toml'];
+const TOOLING_FILES = ['.editorconfig', '.prettierrc', '.gitattributes', 'tsconfig.base.json', 'eslint.config.base.js', 'kata-eslint-plugin.js', '.oxlintrc.base.json', 'bunfig.toml'];
 // The SYNCED half of the variables module. A file-list, not a directory:
 // `config/variables.ts` (watchlisted) and `config/validateTestEnv.ts` are
 // project-owned - the whole point of the split is that they are NOT synced.
@@ -163,6 +166,9 @@ const ENV_TEMPLATE_FILES = ['.env.example'];
 const WORKTREE_INCLUDE_FILES = ['.worktreeinclude'];
 // Orca's committed repo hooks: provision a new worktree, audit it before removal.
 const ORCA_CONFIG_FILES = ['orca.yaml'];
+// Project-owned Oxlint overrides (`extends` the synced `.oxlintrc.base.json`): delivered once when
+// missing, so a project that syncs into Oxlint receives a config that `agents:compat:check` accepts.
+const OXLINT_CONFIG_FILES = ['.oxlintrc.json'];
 // The playwright-cli launch defaults (in memory, headless; ADR-0008). Delivered
 // ONCE when missing, then project-owned: a project may tune the viewport,
 // timeouts or test-id attribute. A copy that still carries the old shared
@@ -343,8 +349,25 @@ export const COMPONENTS: Component[] = [
   // `.codex/config.toml` with it.
   { name: 'worktree-include', type: 'file-list', paths: ['.'], files: WORKTREE_INCLUDE_FILES, bootstrapOnly: true },
   { name: 'orca-config', type: 'file-list', paths: ['.'], files: ORCA_CONFIG_FILES, bootstrapOnly: true },
+  { name: 'oxlint-config', type: 'file-list', paths: ['.'], files: OXLINT_CONFIG_FILES, bootstrapOnly: true },
   { name: 'playwright-cli-config', type: 'file-list', paths: ['.playwright'], files: PLAYWRIGHT_CLI_CONFIG_FILES, bootstrapOnly: true },
 ];
+
+// --- BOILERPLATE-ONLY FILES (cli/lib/boilerplate-only.ts) ---
+
+export { BOILERPLATE_TEST_PATHS, BOILERPLATE_TEST_PATTERNS };
+
+/**
+ * The boilerplate's own checkout: the package name AND the maintainer sentinel
+ * (the test `contractsEnforced` makes in scripts/lib/doc-contracts.ts; cli/ may
+ * not import from scripts/).
+ */
+export function isBoilerplateCheckout(root: string): boolean {
+  const pkg = path.join(root, 'package.json');
+  const yaml = path.join(root, '.agents', 'project.yaml');
+  return fs.existsSync(pkg) && isSchemaOwner(fs.readFileSync(pkg, 'utf8'))
+    && fs.existsSync(yaml) && isMaintainerCopy(fs.readFileSync(yaml, 'utf8'));
+}
 
 // --- ARG PARSE ---
 interface ParsedArgs {
@@ -360,6 +383,8 @@ interface ParsedArgs {
   strict: boolean
   /** Skip the post-apply quality gates (`types:check`, `lint:check`, `kata:manifest:check`). */
   noGates: boolean
+  /** Skip the closing `bunx skills update` of the installer's community skills. */
+  noSkillsUpdate: boolean
   /** Keep the prompts even when stdin is not a TTY (the default there is `--auto`). */
   interactive: boolean
 }
@@ -376,6 +401,7 @@ export function parseArgs(args: string[]): ParsedArgs {
     force: false,
     strict: false,
     noGates: false,
+    noSkillsUpdate: false,
     interactive: false,
   };
   const valid = new Set(COMPONENTS.map(c => c.name).concat(['all', 'help', 'rollback']));
@@ -393,6 +419,7 @@ export function parseArgs(args: string[]): ParsedArgs {
     else if (a === '--force') { out.force = true; }
     else if (a === '--strict') { out.strict = true; }
     else if (a === '--no-gates') { out.noGates = true; }
+    else if (a === SKILLS_UPDATE_OPT_OUT_FLAG) { out.noSkillsUpdate = true; }
     else if (a === '--list') { out.listSkills = true; }
     else if (a === '--skill' || a === '--skills') {
       const next = args[i + 1];
@@ -491,6 +518,15 @@ VERIFICACION POST-SYNC (gates):
   que archivos aplicados esta corrida nombra) y como linea "Gates:" en el
   resumen. --no-gates lo desactiva.
 
+SKILLS DE LA COMUNIDAD (al final):
+  Corre \`bunx skills update <nombres> -g -y\` para las skills de usuario que
+  instala \`bun setup\` (USER_LEVEL_SKILLS) y \`-p\` para las de proyecto
+  (PROJECT_LEVEL_SKILLS), solo las que el CLI de skills tiene instaladas desde
+  esa misma fuente. Omite una skill instalada como symlink fuera del store del
+  CLI (un link de desarrollo) y copia antes cada skill de proyecto a
+  .backups/. Nunca bloquea: un fallo es un aviso. --no-skills-update o
+  ${SKILLS_UPDATE_OPT_OUT_ENV}=1 lo desactivan.
+
 RE-EJECUCION SEGURA:
   El sync deja sus archivos sin commitear a proposito (primero se revisa el
   prompt). La corrida registra lo que escribio en ${LAST_APPLY_FILE}
@@ -545,6 +581,10 @@ FLAGS:
                          nombra el gate que lo prueba).
   --no-gates             No corre types:check / lint:check / kata:manifest:check /
                          skills:check tras aplicar
+  --no-skills-update     No corre \`bunx skills update\` al final (las skills de la
+                         comunidad quedan como estan). La primera corrida con un
+                         updater viejo no conoce el flag: usa la variable de
+                         entorno de abajo
   --rollback             Restaura backup mas reciente
   --skill a,b,c          Sincroniza solo los skills indicados (subcomando skills)
   --list                 Lista los skills disponibles en el template
@@ -555,6 +595,9 @@ ENV:
                          o un clon LOCAL (ruta absoluta o file://, via git, sin
                          sesion gh). Para probar una rama no publicada contra
                          un consumidor.
+  ${SKILLS_UPDATE_OPT_OUT_ENV}=1
+                         Igual que --no-skills-update, y sirve tambien cuando
+                         el updater instalado todavia no conoce el flag.
 
 EJEMPLOS:
   bun sync                               # Flujo interactivo (5 fases)
@@ -1377,6 +1420,7 @@ const PROTECTED_WATCHLIST: ProtectedWatchEntry[] = [
   { path: '.agents/project.yaml', reason: 'per-project identity + env map, but upstream keeps ADDING structural blocks (e.g. git_strategy). A project scaffolded before a block existed never learns it should have one.', structural: true },
   { path: 'tsconfig.json', reason: 'project-owned `include` / `exclude`: which directories this repo type-checks. The path aliases every synced file imports through moved to the synced `tsconfig.base.json` this file extends, so a new upstream alias now arrives on its own.' },
   { path: 'eslint.config.js', reason: 'project-owned overrides; .husky/pre-commit runs eslint against this local config. The shared rules and the cli/ import-closure block that guards the updater live in the synced `eslint.config.base.js` this file spreads.' },
+  { path: '.oxlintrc.json', reason: 'project-owned Oxlint overrides; lint-staged runs oxlint against this local config. The shared rules (KATA plugin, import blocks, Playwright rules) live in the synced `.oxlintrc.base.json` it extends.' },
   // The MCP registries are project-owned since 8.2 (they used to sync
   // through `agent-root-config`): a consumer adds its own servers there.
   { path: '.mcp.json', reason: 'MCP registry with project-specific servers/vars' },
@@ -1723,6 +1767,10 @@ function makeParityHook(sink: ReportSink, priorLockSha: string, dryRun: boolean,
       packageJsonKept: summary.packageJsonKept ?? [],
       packageJsonAppended: summary.packageJsonAppended ?? [],
       testSiblingsHeldBack: summary.testSiblingsHeldBack ?? [],
+      boilerplateCopiesRemoved: summary.boilerplateCopiesRemoved ?? [],
+      boilerplateCopiesKept: summary.boilerplateCopiesKept ?? [],
+      boilerplateCleanupBackup: summary.boilerplateCleanupBackup ?? null,
+      selfUpdateRepair: summary.selfUpdateRepair ?? null,
       gates: runFacts.gates,
       pbiCache: runFacts.pbiCache,
       shadowingCommandsMoved: runFacts.shadowingCommandsMoved,
@@ -1757,6 +1805,28 @@ function makeParityHook(sink: ReportSink, priorLockSha: string, dryRun: boolean,
       sink.warn(`No se pudo guardar ${PARITY_PROMPT_PATH}: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
+}
+
+/**
+ * A run the self-update aborted (the new updater does not load): no apply ran,
+ * so no parity hook either. Its blocking rows still get the table, the saved
+ * prompt and the copy block, naming the protected file to merge.
+ */
+function reportSelfUpdateBlocked(blocked: NonNullable<RunSummary['selfUpdateBlocked']>, upstreamSha: string, lockSha: string): void {
+  const findings = selfUpdateBlockedFindings(blocked);
+  const report = renderParityReport(findings, { templateRepo: TEMPLATE_REPO, upstreamSha, lockSha, promptFile: PARITY_PROMPT_PATH, dryRun: false });
+  runFacts.parity = { findings, report };
+  const glyph = (state: 'ok' | 'warn' | 'blocked'): string => tui.statusIcon(state === 'blocked' ? 'fail' : state);
+  tui.section('Estado por superficie');
+  process.stdout.write(`${tui.table(['', 'Superficie', 'Detalle'], report.surfaces.map(r => [glyph(r.state), r.label, r.cell]))}\n`);
+  try {
+    const out = path.join(process.cwd(), PARITY_PROMPT_PATH);
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, report.fileBody);
+    tui.log.info(`Prompt guardado en ${pc.cyan(PARITY_PROMPT_PATH)}.`);
+  }
+  catch (err) { tui.log.warn(`No se pudo guardar ${PARITY_PROMPT_PATH}: ${err instanceof Error ? err.message : String(err)}`); }
+  process.stdout.write(`\n${pc.dim('────────  COPY PROMPT BELOW  ────────')}\n${report.prompt}\n${pc.dim('────────  COPY PROMPT ABOVE  ────────')}\n\n`);
 }
 
 /** End-of-run visual: per-surface table, the parity prompt, the summary box. */
@@ -1903,7 +1973,9 @@ async function closeUi(status: 'done' | 'done-with-pending' | 'failed' | 'aborte
 
 // --- SINK ---
 function abortOnCancel<T>(v: T | symbol): T {
-  if (tui.isCancel(v)) {
+  // A plain `typeof` narrowing: an adopted app resolves `@clack/prompts` to a
+  // newer minor whose `isCancel` guard no longer narrows `T | symbol` to `T`.
+  if (typeof v === 'symbol' || tui.isCancel(v)) {
     throw Object.assign(new Error('Aborted by user.'), { name: 'ExitPromptError' });
   }
   return v;
@@ -2320,15 +2392,24 @@ async function main(): Promise<void> {
     // `.context/ADR/` needs no entry here: `.context` is not a synced component,
     // so ADRs only ever travel through the scaffold tarball, which prunes the
     // recorded ones (`ADR-<digits>-*`) and keeps the template and the README. A
-    // prefix entry would drop those two as well, and this list has no pattern
-    // form; the component-registry test holds the invariant instead. The synced
+    // prefix entry would drop those two as well, and with `.context` unsynced no
+    // pattern is needed either; the component-registry test holds the invariant. The synced
     // linters skip a cite of a pruned ADR outside the boilerplate.
     repoOnlyPaths: [
       'docs/reports',
+      // The boilerplate's own tests, fixtures and maintainer-only scripts.
+      ...BOILERPLATE_TEST_PATHS,
       // The files of a harness this project does not use (ADR-0012): it
       // deleted them on purpose, so no detection path re-delivers them.
       ...unusedHarnessPaths(process.cwd()),
     ],
+    // The boilerplate's own unit tests and snapshots, wherever they sit under
+    // cli/, scripts/ and the skills (BOILERPLATE_TEST_PATTERNS).
+    repoOnlyPatterns: BOILERPLATE_TEST_PATTERNS,
+    // A project that still holds upstream's unedited copies of them (they
+    // travelled before) loses those copies, with a backup and a row; inert in
+    // the boilerplate's own checkout, where they are the source.
+    ...(isBoilerplateCheckout(process.cwd()) ? {} : { cleanupRepoOnly: { paths: BOILERPLATE_TEST_PATHS, patterns: BOILERPLATE_TEST_PATTERNS } }),
     // Watchlist files are NOT synced — included in the sparse clone only so
     // the protected-drift detection can read their upstream copies.
     sparseExtraPaths: watchlist.map(e => e.path),
@@ -2422,6 +2503,8 @@ async function main(): Promise<void> {
   // An aborted run has nothing to report: no table, no box, no success line.
   const aborted = summary.aborted === true;
   if (!aborted) { printEndOfRun(summary, parsed.dryRun); }
+  else if (summary.selfUpdateBlocked) { reportSelfUpdateBlocked(summary.selfUpdateBlocked, summary.newHeadSha, priorLockSha); }
+  if (!aborted) { await updateCommunitySkills(sink, parsed, ui?.lang ?? 'es'); }
 
   const verdict = runVerdict({ aborted, dryRun: parsed.dryRun, strict: parsed.strict }, runFacts.parity?.findings ?? []);
   if (verdict.reason) { tui.log.error(verdict.reason); }
@@ -2449,6 +2532,36 @@ async function main(): Promise<void> {
     await closeUi(aborted ? 'aborted' : verdict.exitCode !== 0 ? 'failed' : pending ? 'done-with-pending' : 'done', verdict.exitCode);
   }
   if (verdict.exitCode !== 0) { process.exit(verdict.exitCode); }
+}
+
+/**
+ * The closing step: `bunx skills update` for the community skills
+ * `cli/install.ts` declares (logic and measured CLI behaviour in
+ * ./lib/user-skills-update.ts). Runs once, after the sync: in a self-update
+ * the parent exits with the re-exec child's code, so only the child gets here.
+ * Warnings only, so neither the exit code nor `--strict` ever depends on it.
+ * The lists load lazily, the way `doctor.ts` loads them: `cli/install.ts`
+ * pulls the installer's prompt dependencies, which a sync must not need
+ * before this point.
+ */
+async function updateCommunitySkills(sink: ReportSink, parsed: ParsedArgs, lang: 'es' | 'en'): Promise<void> {
+  if (parsed.noSkillsUpdate || process.env[SKILLS_UPDATE_OPT_OUT_ENV] === '1') { return; }
+  try {
+    const { PROJECT_LEVEL_SKILLS, USER_LEVEL_SKILLS } = await import('./install.ts');
+    sink.step(lang === 'en' ? 'Community skills: checking for updates' : 'Skills de la comunidad: buscando actualizaciones');
+    await runSkillsUpdate({
+      cwd: process.cwd(),
+      global: USER_LEVEL_SKILLS,
+      project: PROJECT_LEVEL_SKILLS,
+      dryRun: parsed.dryRun,
+      info: msg => sink.step(msg),
+      warn: msg => sink.warn(msg),
+      lang,
+    });
+  }
+  catch (err) {
+    sink.warn(`skills update: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 /** Terminal rows of the preflight: nothing when all is clear (today's output), every warn and block otherwise. */
