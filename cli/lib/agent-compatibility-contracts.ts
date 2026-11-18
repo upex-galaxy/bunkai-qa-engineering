@@ -1309,11 +1309,13 @@ export function validateEslintBlockWiring(root = process.cwd()): string[] {
   catch { return []; }
 
   // Scoped blocks are SCREAMING_SNAKE exports; `BASE_ESLINT_OPTIONS` is the
-  // options object spread into the first argument, not a block, so it is
-  // excluded by name.
+  // options object spread into the first argument, and `KATA_ENFORCEMENT_LEVEL`
+  // is the severity string the KATA blocks read, so neither is a block and
+  // both are excluded by name.
+  const notBlocks = new Set(['BASE_ESLINT_OPTIONS', 'KATA_ENFORCEMENT_LEVEL']);
   const blocks = [...base.matchAll(/^export const ([A-Z][A-Z0-9_]*)\s*=/gm)]
     .map(m => m[1])
-    .filter(name => name !== 'BASE_ESLINT_OPTIONS');
+    .filter(name => !notBlocks.has(name));
 
   // Comments are stripped before the search, and the search is word-bounded.
   // Both matter, and the first one was a live hole the moment this check was
@@ -1330,6 +1332,43 @@ export function validateEslintBlockWiring(root = process.cwd()): string[] {
   for (const name of blocks) {
     if (!new RegExp(`\\b${name}\\b`).test(code)) {
       errors.push(`eslint.config.js does not wire ${name} from eslint.config.base.js: the rule ships but enforces nothing. Add it to the import and to the antfu(...) call.`);
+    }
+  }
+  return errors;
+}
+
+/**
+ * `.oxlintrc.json` is project-owned and must extend the synced
+ * `.oxlintrc.base.json`, the same split as `eslint.config.js` over
+ * `eslint.config.base.js`. A project config that drops the `extends` keeps
+ * pre-commit green while the KATA rules, the import blocks and the Playwright
+ * rules stop running. Every `jsPlugins` path the base lists must exist, because
+ * Oxlint fails the whole run on a plugin it cannot load.
+ */
+export function validateOxlintWiring(root = process.cwd()): string[] {
+  const basePath = join(root, '.oxlintrc.base.json');
+  const consumerPath = join(root, '.oxlintrc.json');
+  if (!existsSync(basePath)) { return []; }
+  if (!existsSync(consumerPath)) {
+    return ['.oxlintrc.json is missing: .oxlintrc.base.json ships but nothing runs it. Create it with {"extends": ["./.oxlintrc.base.json"]}.'];
+  }
+
+  let base: { jsPlugins?: unknown };
+  let consumer: { extends?: unknown };
+  try {
+    base = JSON.parse(readFileSync(basePath, 'utf8'));
+    consumer = JSON.parse(readFileSync(consumerPath, 'utf8'));
+  }
+  catch { return ['.oxlintrc.json or .oxlintrc.base.json is not valid JSON.']; }
+
+  const errors: string[] = [];
+  const extended = Array.isArray(consumer.extends) ? consumer.extends : [];
+  if (!extended.some(entry => typeof entry === 'string' && /(?:^|\/)\.oxlintrc\.base\.json$/.test(entry))) {
+    errors.push('.oxlintrc.json does not extend ./.oxlintrc.base.json: the shared Oxlint rules ship but enforce nothing. Add "extends": ["./.oxlintrc.base.json"].');
+  }
+  for (const plugin of Array.isArray(base.jsPlugins) ? base.jsPlugins : []) {
+    if (typeof plugin === 'string' && plugin.startsWith('./') && !existsSync(join(root, plugin))) {
+      errors.push(`.oxlintrc.base.json loads the JS plugin ${plugin} and it is not on disk: Oxlint fails every run. Restore it with bun sync.`);
     }
   }
   return errors;

@@ -198,6 +198,14 @@ export interface ParityInput {
   packageJsonAppended?: { file: string, section: string, key: string, value: string }[]
   /** Test siblings of kept protected files the run held back (`testSiblingsToHoldBack`). */
   testSiblingsHeldBack?: { path: string, protectedPath: string }[]
+  /** Upstream's unedited copies of boilerplate-only files the run removed (`cleanupBoilerplateCopies`). */
+  boilerplateCopiesRemoved?: string[]
+  /** Boilerplate-only paths the project holds that the cleanup kept, with why. */
+  boilerplateCopiesKept?: { path: string, reason: 'edited' | 'protected' | 'unverified' }[]
+  /** Absolute backup directory of the removed copies. */
+  boilerplateCleanupBackup?: string | null
+  /** Protected updater files an older parent overwrote during the self-update (`repairParentOverwrites`). */
+  selfUpdateRepair?: { restored: string[], unloadable: string[], backupDir: string | null } | null
   /** The run applied nothing: a target the upstream clone holds is one the real run delivers. */
   dryRun?: boolean
   /** Quality gates run after the apply; only failed / timed-out ones become rows. */
@@ -269,6 +277,15 @@ const MCP_HOST_FILE: Record<string, string> = {
 };
 
 /** Order of the surfaces in every table. */
+/** Every task command under the project's `lint-staged` key, or none when absent or unreadable. */
+function readLintStagedCommands(root: string): string[] {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')) as { 'lint-staged'?: Record<string, unknown> };
+    return Object.values(pkg['lint-staged'] ?? {}).flatMap(v => (Array.isArray(v) ? v : [v])).filter((c): c is string => typeof c === 'string');
+  }
+  catch { return []; }
+}
+
 export const SURFACE_ORDER: ParitySurface[] = ['instructions', 'skills', 'hooks', 'mcp', 'env', 'components', 'package', 'git', 'gates'];
 
 /** English labels for the prompt (the AI reads it). */
@@ -1265,7 +1282,7 @@ export function legacyPlaywrightProfileKeys(root: string): string[] {
   const block = browser as Record<string, unknown>;
   const keys: string[] = [];
   if (block.isolated === false) { keys.push('browser.isolated: false'); }
-  if (Object.prototype.hasOwnProperty.call(block, 'userDataDir')) { keys.push('browser.userDataDir'); }
+  if (Object.hasOwn(block, 'userDataDir')) { keys.push('browser.userDataDir'); }
   return keys;
 }
 
@@ -1443,6 +1460,41 @@ export function readGitStrategyStamp(projectYaml: string | null): GitStrategySta
   const strategy = /^ {2}strategy:\s*([\w-]+)/m.exec(projectYaml)?.[1] ?? null;
   const source = /^\s+strategy_source:\s*([\w-]+)/m.exec(projectYaml)?.[1] ?? null;
   return { present: true, strategy, source };
+}
+
+/** A test file name `bun test` collects. */
+const BUN_TEST_FILE = /(?:\.test|_test_|\.spec|_spec_)\.[cm]?[jt]sx?$/;
+
+function hasTestFile(dir: string): boolean {
+  let entries: fs.Dirent[];
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+  catch { return false; }
+  return entries.some(e => e.name !== 'node_modules' && e.name !== '.git' && (e.isDirectory() ? hasTestFile(path.join(dir, e.name)) : BUN_TEST_FILE.test(e.name)));
+}
+
+/**
+ * The paths a `bun test` in a package.json script searches, when that run
+ * finds no test file and so exits 1 ("no tests found"); null when every
+ * `bun test` in the command finds one, or passes `--pass-with-no-tests`.
+ */
+export function bunTestFindsNothing(root: string, command: string): string[] | null {
+  for (const segment of command.split(/&&|\|\||;/)) {
+    const tokens = segment.trim().split(/\s+/);
+    const at = tokens.findIndex((t, i) => t === 'bun' && tokens[i + 1] === 'test');
+    if (at < 0 || tokens.includes('--pass-with-no-tests')) { continue; }
+    let base = root;
+    const targets: string[] = [];
+    for (let i = at + 2; i < tokens.length; i++) {
+      if (tokens[i] === '--cwd') { base = path.resolve(root, tokens[++i] ?? '.'); continue; }
+      if (tokens[i].startsWith('-')) { continue; }
+      targets.push(tokens[i]);
+    }
+    const searched = targets.length > 0 ? targets : ['.'];
+    if (!searched.some(t => hasTestFile(path.resolve(base, t)))) {
+      return searched.map(t => path.relative(root, path.resolve(base, t)).replace(/\\/g, '/') || '.');
+    }
+  }
+  return null;
 }
 
 /**
@@ -1900,12 +1952,17 @@ export function collectParityFindings(input: ParityInput): ParityFinding[] {
   // 8. package.json keys kept at the project's value: the terminal FYI is
   //    lost on a non-interactive run; the row survives, the values go to the file.
   for (const kept of input.packageJsonKept ?? []) {
+    // A kept test script over tests that are gone (the boilerplate's own no
+    // longer travel) fails every run: that is not a preference, it blocks.
+    const empty = kept.section === 'scripts' ? bunTestFindsNothing(input.root, kept.localValue) : null;
     findings.push({
       surface: 'package',
       path: kept.file,
-      evidence: `${kept.section}.${kept.key}: project value kept; upstream differs`,
-      suggested: 'decide',
-      blocking: false,
+      evidence: empty
+        ? `${kept.section}.${kept.key}: project value kept, and it will exit 1: \`bun test\` finds no test file under ${empty.map(p => `\`${p}\``).join(', ')} (the boilerplate's own tests no longer travel). Take upstream's value, or add --pass-with-no-tests`
+        : `${kept.section}.${kept.key}: project value kept; upstream differs`,
+      suggested: empty ? 'take upstream' : 'decide',
+      blocking: empty !== null,
       side: 'kept',
       detail: `project (kept):\n  ${kept.localValue}\nupstream:\n  ${kept.upstreamValue}`,
     });
@@ -1934,6 +1991,37 @@ export function collectParityFindings(input: ParityInput): ParityFinding[] {
     });
   }
 
+  // 8b2. Dependencies appended this run exist only in package.json: the sync
+  //      never installs. Until `bun install` runs, the binary a new script or
+  //      hook calls (oxlint, say) is not on disk.
+  const addedDeps = (input.packageJsonAppended ?? []).filter(a => a.section === 'dependencies' || a.section === 'devDependencies');
+  if (addedDeps.length > 0) {
+    findings.push({
+      surface: 'package',
+      path: addedDeps[0].file,
+      evidence: `informational: this run added ${addedDeps.length} package(s) to package.json (${addedDeps.map(a => `\`${a.key}\``).join(', ')}) and installed none. Run \`bun install\` before the next commit or gate: until then a script or hook that calls them fails with "command not found".`,
+      suggested: 'decide',
+      blocking: false,
+    });
+  }
+
+  // 8b3. Oxlint ships (`.oxlintrc.base.json` is on disk) but the project's
+  //      pre-commit still runs ESLint on staged code: its `lint-staged` task is
+  //      a kept project value, so the sync cannot switch it. One row names the
+  //      exact change; nothing breaks if the project keeps ESLint there.
+  if (fs.existsSync(path.join(input.root, '.oxlintrc.base.json'))) {
+    const lintStaged = readLintStagedCommands(input.root);
+    if (lintStaged.some(c => c.includes('eslint')) && !lintStaged.some(c => c.includes('oxlint'))) {
+      findings.push({
+        surface: 'package',
+        path: 'package.json',
+        evidence: 'informational: upstream now runs Oxlint (well under a second) in pre-commit and keeps ESLint as the gate in `lint:check`, `repo:check`, `pre-push` and CI. Your `lint-staged` still runs ESLint on staged code, so commits stay correct but slow. To switch, set the `*.{ts,tsx,js,jsx}` task to `["oxlint -c .oxlintrc.json"]` (needs `bun install` first and a `.oxlintrc.json` that extends `./.oxlintrc.base.json`); `bun run lint:fix` still autofixes style.',
+        suggested: 'decide',
+        blocking: false,
+      });
+    }
+  }
+
   // 8c. A protected file's test held back with it: delivering upstream's test
   //     next to a kept copy that differs fails `bun test` on code nobody changed.
   for (const held of input.testSiblingsHeldBack ?? []) {
@@ -1944,6 +2032,62 @@ export function collectParityFindings(input: ParityInput): ParityFinding[] {
       suggested: 'keep project',
       blocking: false,
       side: 'kept',
+    });
+  }
+
+  // 8d. The boilerplate's own tests, fixtures and maintainer scripts no longer
+  //     travel: upstream's unedited copies left this run (one row, with the
+  //     backup), and every copy the project edited or protects stays, one row each.
+  const removedCopies = input.boilerplateCopiesRemoved ?? [];
+  if (removedCopies.length > 0) {
+    const shown = removedCopies.slice(0, 5).map(p => `\`${p}\``).join(', ');
+    const where = input.boilerplateCleanupBackup ? `; copies in \`${path.relative(input.root, input.boilerplateCleanupBackup)}\`` : '';
+    findings.push({
+      surface: 'components',
+      path: removedCopies.length === 1 ? removedCopies[0] : `${removedCopies.length} boilerplate-only files`,
+      evidence: `informational: ${input.boilerplateCleanupBackup ? 'removed' : 'the real run removes'} upstream's unedited copies of the boilerplate's own tests, fixtures and maintainer scripts, which no longer travel (${shown}${removedCopies.length > 5 ? `, and ${removedCopies.length - 5} more` : ''})${where}. Commit the deletions with the sync`,
+      suggested: 'keep project',
+      blocking: false,
+      side: 'kept',
+    });
+  }
+  for (const kept of input.boilerplateCopiesKept ?? []) {
+    const why = kept.reason === 'edited'
+      ? `your copy differs from upstream's, so it is yours now; it may fail against newer cli code (\`bun test ${kept.path}\` is the check), delete it if you do not need it`
+      : kept.reason === 'protected'
+        ? 'it is protected (or the test of a protected file), so the cleanup never touches it'
+        : 'upstream\'s copy could not be read to prove it unedited, so it stays; delete it by hand if it is upstream\'s';
+    findings.push({
+      surface: 'components',
+      path: kept.path,
+      evidence: `informational: project-owned file under a boilerplate-only path, kept: ${why}`,
+      suggested: 'keep project',
+      blocking: false,
+      side: 'kept',
+    });
+  }
+
+  // 8e. A self-update parent older than this updater overwrote protected
+  //     updater files: restored (informational), or the project's copy no longer
+  //     loads with the new updater and upstream's stays in place (blocking).
+  const repair = input.selfUpdateRepair;
+  const repairBackup = repair?.backupDir ? `\`${path.relative(input.root, repair.backupDir)}\`` : 'the run\'s backup';
+  for (const p of repair?.restored ?? []) {
+    findings.push({
+      surface: 'components',
+      path: p,
+      evidence: `informational: protected, and the previous updater overwrote it during the self-update; your copy was restored from ${repairBackup}. Later syncs keep it`,
+      suggested: 'keep project',
+      blocking: false,
+    });
+  }
+  for (const p of repair?.unloadable ?? []) {
+    findings.push({
+      surface: 'components',
+      path: p,
+      evidence: `protected, but your copy no longer loads with the new updater, so upstream's copy is in place and yours is in ${repairBackup}. Merge your change into upstream's copy, keep the path in updater.protected_paths, and run \`bun sync\` again`,
+      suggested: 'merge',
+      blocking: true,
     });
   }
 
@@ -2085,6 +2229,26 @@ export function renderParityReport(findings: ParityFinding[], meta: ParityMeta):
     prompt: buildParityPrompt(findings, meta),
     fileBody: buildParityFileBody(findings, meta),
   };
+}
+
+/**
+ * The rows of a run the self-update aborted (`RunSummary.selfUpdateBlocked`):
+ * the new updater does not load, the old one is back. One blocking row per
+ * protected file it kept, the likely cause; one for `cli/` when none was kept.
+ */
+export function selfUpdateBlockedFindings(blocked: { protectedPaths: string[], error: string }): ParityFinding[] {
+  const loader = blocked.error.split('\n').find(line => line.trim() !== '') ?? 'the entry did not load';
+  const paths = blocked.protectedPaths.length > 0 ? blocked.protectedPaths : ['cli/'];
+  return paths.map((p, i) => ({
+    id: i + 1,
+    surface: 'components' as const,
+    path: p,
+    evidence: blocked.protectedPaths.length > 0
+      ? `protected, and the new updater does not load with your copy, so the self-update was undone and the run stopped (loader: ${loader}). Merge upstream's changes into it, or drop it from updater.protected_paths, then run \`bun sync\` again`
+      : `the new updater does not load, so the self-update was undone and the run stopped (loader: ${loader})`,
+    suggested: 'merge' as const,
+    blocking: true,
+  }));
 }
 
 // ============================================================================
