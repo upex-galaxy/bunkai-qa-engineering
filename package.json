@@ -142,18 +142,18 @@
     "allure-playwright": "^3.10.2",
     "dotenv-cli": "^8.0.0",
     "eslint": "^9.28.0",
+    "eslint-plugin-playwright": "^2.12.2",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "openapi-typescript": "^7.10.1",
+    "oxlint": "1.94.0",
     "prettier": "^3.7.4",
     "typescript": "^5.8.3",
-    "varlock": "1.20.0",
-    "eslint-plugin-playwright": "^2.12.2",
-    "oxlint": "1.94.0"
+    "varlock": "1.20.0"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [
-      "eslint --fix"
+      "oxlint -c .oxlintrc.json"
     ],
     "*.{json,yml,yaml,css,scss,html}": [
       "prettier --write --ignore-path .prettierignore"
