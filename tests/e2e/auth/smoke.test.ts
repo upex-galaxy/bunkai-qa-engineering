@@ -23,17 +23,17 @@ import { trackSigninPats } from '@utils/mintedPats';
 test.use({ storageState: { cookies: [], origins: [] }, trace: 'off' });
 
 test.describe('BK auth gateway', { tag: ['@critical'] }, () => {
-  test('owner logs in and lands on /projects', async ({ ui, page }) => {
+  test('owner logs in and lands on /projects', async ({ test: kata }) => {
     // The real login mints a PAT: record it so the global teardown revokes it.
-    trackSigninPats(page);
+    trackSigninPats(kata.page);
 
-    await ui.login.goto();
+    await kata.ui.login.goto();
 
-    await ui.login.loginAs(config.testUser.email, config.testUser.password);
+    await kata.ui.login.loginAs(config.testUser.email, config.testUser.password);
 
     // The authenticated app shell is /projects; never /login
-    await expect(page).toHaveURL(/\/projects/);
-    await expect(page).not.toHaveURL(/\/login/);
+    await expect(kata.page).toHaveURL(/\/projects/);
+    await expect(kata.page).not.toHaveURL(/\/login/);
   });
 });
 

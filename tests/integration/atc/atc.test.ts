@@ -15,13 +15,13 @@
 
 import type { AtcCreateRequest, AtcUpdateRequest } from '@api/AtcApi';
 
-import { faker } from '@faker-js/faker';
+import { DataFactory } from '@DataFactory';
 import { config, expect, test } from '@TestFixture';
 
 test.describe('BK ATC API lifecycle', { tag: ['@regression'] }, () => {
   test('BK-149 / BK-156 / BK-1090: should create, update and find an ATC', async ({ api }) => {
     const target = config.atcTarget;
-    const unique = faker.string.alphanumeric({ length: 10, casing: 'lower' });
+    const unique = DataFactory.createSlug();
 
     const createBody: AtcCreateRequest = {
       title: `Regression create ${unique}`,
@@ -30,20 +30,20 @@ test.describe('BK ATC API lifecycle', { tag: ['@regression'] }, () => {
       acceptance_criterion_ids: [target.acceptanceCriterionId],
       layer: 'API',
       steps: [
-        { position: 1, content: faker.lorem.sentence() },
-        { position: 2, content: faker.lorem.sentence() },
+        { position: 1, content: DataFactory.createSentence() },
+        { position: 2, content: DataFactory.createSentence() },
       ],
-      assertions: [{ content: faker.lorem.sentence() }],
+      assertions: [{ content: DataFactory.createSentence() }],
     };
     const [, created] = await api.atc.createAtc(createBody);
 
-    const updatedUnique = faker.string.alphanumeric({ length: 10, casing: 'lower' });
+    const updatedUnique = DataFactory.createSlug();
     const updateBody: AtcUpdateRequest = {
       title: `Regression update ${updatedUnique}`,
       acceptance_criterion_ids: [target.acceptanceCriterionId],
       layer: 'API',
-      steps: [{ position: 1, content: faker.lorem.sentence() }],
-      assertions: [{ content: faker.lorem.sentence() }],
+      steps: [{ position: 1, content: DataFactory.createSentence() }],
+      assertions: [{ content: DataFactory.createSentence() }],
     };
     const [, updated] = await api.atc.updateAtc(created.atc, updateBody);
 

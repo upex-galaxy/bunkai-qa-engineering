@@ -11,13 +11,13 @@
  * regression ever issues the token, the `finally` block revokes it by id.
  */
 
-import { faker } from '@faker-js/faker';
+import { DataFactory } from '@DataFactory';
 import { config, test } from '@TestFixture';
 import { recordMintedPat } from '@utils/mintedPats';
 
 test.describe('BK-1079: Zero-scope token guard (API)', { tag: ['@regression'] }, () => {
   test('BK-1231: should reject POST /api/v1/tokens with 422 and create no token when the scopes array is empty', async ({ api }) => {
-    const name = `qa-tc33-${faker.string.alphanumeric({ length: 10, casing: 'lower' })}`;
+    const name = `qa-tc33-${DataFactory.createSlug()}`;
     const sessionPatId = await api.auth.openSession(config.testUser.email, config.testUser.password);
     recordMintedPat(sessionPatId);
 

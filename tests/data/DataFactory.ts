@@ -90,6 +90,14 @@ export class DataFactory {
       ...overrides,
     };
   }
+
+  static createSlug(length = 10): string {
+    return faker.string.alphanumeric({ length, casing: 'lower' });
+  }
+
+  static createSentence(): string {
+    return faker.lorem.sentence();
+  }
 }
 
 export default DataFactory;

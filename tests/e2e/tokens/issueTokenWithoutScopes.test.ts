@@ -12,12 +12,12 @@
  * ever issues the token, the `finally` block revokes it by id.
  */
 
-import { faker } from '@faker-js/faker';
+import { DataFactory } from '@DataFactory';
 import { expect, test } from '@TestFixture';
 
 test.describe('BK-1079: Zero-scope token guard (UI)', { tag: ['@regression'] }, () => {
   test('BK-1042: should block submission, show the inline scope error and create no token when no scope is selected in the issue-token form', async ({ test: kata }) => {
-    const name = `qa-tc18-${faker.string.alphanumeric({ length: 10, casing: 'lower' })}`;
+    const name = `qa-tc18-${DataFactory.createSlug()}`;
     kata.clearAuthToken();
 
     try {
