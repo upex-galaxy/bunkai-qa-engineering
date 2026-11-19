@@ -212,3 +212,6 @@ storage-state-*.json
 !.pi/skills/
 !.pi/prompts/
 !.pi/themes/
+
+# JITSO local launch log
+.jitso/

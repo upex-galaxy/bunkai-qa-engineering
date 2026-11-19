@@ -1,0 +1,19 @@
+# Approved build, migrated field by field from the owner-approved sonnet-tester preset of the TypeScript pilot.
+id: sonnet-tester
+version: 1
+status: approved
+tier: worker
+role: operator
+type: tester
+work_kind: story-testing
+description: Manual QA of one user story end to end with sprint-testing.
+harness: claude
+model: claude-sonnet-5-5
+effort: medium
+mode_default: direct
+agents_md: full
+route_scope: [ticket-work, local-context-pbi]
+skills_first: [sprint-testing]
+mcp: [dbhub, openapi]
+requires: [ticket_key]
+budget: { tokens: 250000, usd_list_cap: 3.00 }

@@ -77,6 +77,10 @@ docs/mcp/
 .playwright/
 !.playwright/cli.config.json
 
+# JITSO local state (launch folders, the launch log, settings backups) is
+# gitignored and machine-written; jitso/ itself stays formatted.
+.jitso/
+
 # ===== Synced from boilerplate v7.0 =====
 # ----- 2026-05-31 (sync) -----
 .claude/worktrees/

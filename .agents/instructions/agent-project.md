@@ -2,7 +2,7 @@
 id: project
 title: 'Project-specific instructions'
 load_when: "anything specific to this project: Bunkai TMS under test, its staging auth and roles, the Jira instance and its migrations, this repository's git strategy and docs exception, or its own conventions"
-triggers: ['\bbunkai\b', '\bsdet\b', '\bProtectPublic\b', '\btest/[\w<>-]+-suite', '\bupexgalaxy', '\bBK-\d+', '\bapi:login\b', '\bJIRA_TEST_STATUS_FIELD\b', '\bworkspace\b', '\bdocs exception\b', '\bdirect push\b', '\badmin_bypass\b', '\baccepted_divergences\b']
+triggers: ['\bbunkai\b', '\bsdet\b', '\bProtectPublic\b', '\btest/[\w<>-]+-suite', '\bupexgalaxy', '\bBK-\d+', '\bapi:login\b', '\bJIRA_TEST_STATUS_FIELD\b', '\bworkspace\b', '\bdocs exception\b', '\bdirect push\b', '\badmin_bypass\b', '\bjitso\b', '\bworker-start\b', '\baccepted_divergences\b']
 paths: ['scripts/api-login.project.ts', 'tests/utils/jiraSync.ts']
 ---
 
@@ -16,6 +16,10 @@ One row per skill this project authored: the `<aspect>-context` skills `project-
 
 | Skill | Trigger | Purpose |
 |---|---|---|
+
+## Worker launch (JITSO)
+
+**WORKER LAUNCH = JITSO**: start every conductor or worker session with `jitso launch` from a build in `jitso/builds/` (`jitso build list` shows the launchable ones), never with `orca orchestration worker-start`, `orca agent launch`, `orca terminal create --command <harness>` or a bare `claude`. Preview each launch with `--dry-run` first. Fleet mode takes `--run <run>` and no `--task`: JITSO creates the Orca Task from the brief. The guard `jitso hook guard`, registered in `.claude/settings.json`, denies the direct verbs. This replaces only the launch step of `orca-orchestration`; everything else in that skill still applies. Flags, briefs and the launch card: the `jitso` skill. (binding: `/framework-development` mode `instructions` for any edit)
 
 ## Git Strategy (this repository)
 

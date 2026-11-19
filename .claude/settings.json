@@ -179,6 +179,36 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jitso hook guard"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*orca.*__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jitso hook guard"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jitso hook guard"
+          }
+        ]
+      }
     ]
   },
   "env": {

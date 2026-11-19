@@ -1,0 +1,29 @@
+# JITSO allowlists. A build may name only what is listed here.
+# Models are full ids, never aliases, matching the orchestration block of .agents/project.yaml.
+# MCP servers are the ones in .mcp.json. Skills are folders under .agents/skills/.
+# Tools are harness tool names; a build without a tools key gets the harness default.
+version: 1
+
+models:
+  - claude-haiku-5-5
+  - claude-sonnet-5-5
+  - claude-opus-5-5
+
+efforts: [low, medium, high]
+
+mcp: [context7, dbhub, openapi]
+
+skills:
+  - sprint-testing
+  - sprint-conductor
+  - shift-left-testing
+  - test-automation
+  - framework-development
+  - exploratory-testing
+  - orca-orchestration
+
+tools: [Read, Glob, Grep, Bash, Write, Edit]
+
+# Bunkai issue keys look like BK-123.
+fields:
+  ticket_key: '^BK-[0-9]+$'
