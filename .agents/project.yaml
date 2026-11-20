@@ -223,23 +223,21 @@ git_strategy:
     feature_merge: merge-commit # merge-commit | squash | rebase-merge | n/a — FIXED: --no-ff preserves per-ticket history (defining property of sdet)
     hotfix_policy: n/a # branch-off-prod-backmerge | via-integration | none | n/a
   policy: # how strictly protected branches are guarded (set by Strategy Setup Q4)
-    direct_push_to_protected: confirm # forbidden | confirm | allowed (sdet = confirm — trunk self-merged by maintainer; main takes only the final suite PR)
+    direct_push_to_protected: allowed # forbidden | confirm | allowed — owner decision 2026-11-20: the maintainer pushes main directly, without asking; the ruleset still blocks non-bypass contributors
     admin_bypass: true # team POLICY: may a repo admin bypass PR/protection for urgent changes? actual capability still depends on the GitHub user's role — the skill re-confirms at runtime
     require_pr_reviews: 0 # null | 0 | N — VERIFIED 2026-11-20 against ruleset ProtectPublic (id 16809542): required_approving_review_count = 0, as in upex-bunkai-tms (owner decision 2026-11-20)
     # Host divergences that are ACCEPTED, not drift. Each `field` names a `git:policy verify`
     # finding verbatim (`<branch>.<policy_field>`); verify moves matching findings from DRIFT
     # to ACCEPTED (exit 0) and warns when an entry no longer matches anything (stale entry).
     accepted_divergences:
-      - field: main.require_code_owner_review
-        enforced: true
-        accepted: 2026-09-04
+      - field: main.direct_push_to_protected
+        enforced: blocked (pull_request rule)
+        accepted: 2026-11-20
         reason: >
-          Enforced by the ProtectPublic ruleset with no CODEOWNERS file in this repo, so
-          nobody outside the bypass list could ever satisfy it. Not adding a CODEOWNERS file
-          and not applying the yaml to the host: the maintainer's admin credential merges
-          the final trunk -> main PR via the ruleset's bypass list (standing authorization —
-          see git_strategy.description). The host rule keeps protecting every non-bypass
-          contributor.
+          The ProtectPublic ruleset requires a PR on main so non-bypass contributors cannot
+          push it directly; the maintainer's admin credential is on the bypass list and
+          pushes main directly (standing authorization, owner decision 2026-11-20). Both
+          sides are correct on purpose.
   branch_prefixes:
     precedence: [feat, fix, refactor, test, docs, chore]
     naming_with_key: '{prefix}/{ISSUE-KEY}-{kebab-slug}'
