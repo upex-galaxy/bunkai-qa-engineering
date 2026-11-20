@@ -75,7 +75,8 @@
       "mcp__postman__*",
       "Skill(sprint-conductor)",
       "Skill(exploratory-testing)",
-      "Skill(evidence-artifact)"
+      "Skill(evidence-artifact)",
+      "Skill(agent-orchestration)"
     ],
     "deny": [
       "Bash(rm -rf *)",

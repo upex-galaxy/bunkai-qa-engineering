@@ -19,7 +19,7 @@ One row per skill this project authored: the `<aspect>-context` skills `project-
 
 ## Worker launch (JITSO)
 
-**WORKER LAUNCH = JITSO**: start every conductor or worker session with `jitso launch` from a build in `jitso/builds/` (`jitso build list` shows the launchable ones), never with `orca orchestration worker-start`, `orca agent launch`, `orca terminal create --command <harness>` or a bare `claude`. Preview each launch with `--dry-run` first. Fleet mode takes `--run <run>` and no `--task`: JITSO creates the Orca Task from the brief. The guard `jitso hook guard`, registered in `.claude/settings.json`, denies the direct verbs. This replaces only the launch step of `orca-orchestration`; everything else in that skill still applies. Flags, briefs and the launch card: the `jitso` skill. (binding: `/framework-development` mode `instructions` for any edit)
+**WORKER LAUNCH = JITSO**: start every conductor or worker session with `jitso launch` from a build in `jitso/builds/` (`jitso build list` shows the launchable ones), never with `orca orchestration worker-start`, `orca agent launch`, `orca terminal create --command <harness>` or a bare `claude`. Preview each launch with `--dry-run` first. Fleet mode takes `--run <run>` and no `--task`: JITSO creates the Orca Task from the brief. The guard `jitso hook guard`, registered in `.claude/settings.json`, denies the direct verbs. This replaces only the launch step of `agent-orchestration`; everything else in that skill still applies. Flags, briefs and the launch card: the `jitso` skill. (binding: `/framework-development` mode `instructions` for any edit)
 
 ## Git Strategy (this repository)
 

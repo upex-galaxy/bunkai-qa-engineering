@@ -25,7 +25,7 @@ It is specific to **this** Playwright + KATA QA boilerplate and points at the co
 - Explain in the user's language. The visual decks are Spanish (technical terms stay English); every deck also has an English twin, `<name>.en.html`, next to the Spanish file (same slides, same shell). For an English speaker, offer the twin.
 - When the goal is unclear, ask one question first (testing a ticket, or understanding the whole flow?). Someone who asked about one stage does not need all of them.
 - Name a stage by its word (Shift-Left, Planning, Execution, Reporting, Documentation, Automation, Regression, Observation), never by number. A "Stage N" in an older doc resolves through `agentic-qa-core/references/stage-gates.md`; the why behind the stages is `iql-context`.
-- When someone asks about running several sessions at once ("parallelize the sprint", "one session per story", "fleet", "launch workers"), explain the two executors in plain words (a one-shot subagent lives inside the current turn and is the default for almost everything; a supervised worker is a persistent session you keep talking to), then hand off to `/orca-orchestration`. Its deck is `packages/decks/orca-orchestration/how-it-works.es.html` (English twin: `how-it-works.en.html`).
+- When someone asks about running several sessions at once ("parallelize the sprint", "one session per story", "fleet", "launch workers"), explain the two executors in plain words (a one-shot subagent lives inside the current turn and is the default for almost everything; a supervised worker is a persistent session you keep talking to), then hand off to `/agent-orchestration`. Its deck is https://upex-galaxy.github.io/agentic-qa-boilerplate/decks/user-level-skills/agent-orchestration/how-it-works.es.html (English twin: `.en.html`).
 - Explain the concept and why it matters before any command, flag or file path.
 - Ask before opening a how-it-works deck, because it launches the user's default browser. Open exactly one, then let them come back with questions before offering the next.
 - Prefer the published GitHub Pages URL over the local file: a project scaffolded from this boilerplate may not carry the HTML. Use the local copy offline or on explicit request.
@@ -72,7 +72,7 @@ Every deck has an English twin, `<name>.en.html` in the same folder (`how-it-wor
 | Adapting KATA to the target stack | `test-framework-adaptation/how-it-works.es.html` |
 | Jira Components + instance migration | `jira-administration/how-it-works.es.html` |
 | Branches, commits, PRs, worktrees | `git-flow-master/how-it-works.es.html` |
-| Multi-session orchestration | `orca-orchestration/how-it-works.es.html` |
+| Multi-session orchestration | https://upex-galaxy.github.io/agentic-qa-boilerplate/decks/user-level-skills/agent-orchestration/how-it-works.es.html (published from the user skill) |
 | Handing a session to a fresh one | `session-handoff/how-it-works.es.html` |
 | The user-level skills the installer adds (`mkd`, `humanizer`, `grilling`, `retro` and the rest): the portal, with what each does, who calls it and a link to its own deck | `user-level-skills/how-it-works.es.html` (English twin: `.en.html`) |
 | Evolving the boilerplate itself | `framework-development/how-it-works.es.html` |
@@ -291,11 +291,11 @@ One AI session at a time is the normal way to work. A second way exists, and a n
 
 The AI has two executors. A *one-shot subagent* lives inside the current turn: it reads, verifies or maps something and reports back, and that is the default for almost all work. A *supervised worker* is a persistent session with its own scope that the conductor session keeps talking to, for work that does not fit inside a turn (a whole story tested end to end, a module automated, a cluster of CI failures chased down).
 
-`/orca-orchestration` owns the second executor: one **conductor** (the session talking to you) coordinating a **fleet** of workers in **rounds**, with a claims protocol so two workers never fight over the same test user or fixture. Each workflow skill still owns what gets done; the orchestration skill owns how sessions are launched, briefed, supervised and closed.
+`/agent-orchestration` owns the second executor: one **conductor** (the session talking to you) coordinating a **fleet** of workers in **rounds**, with a claims protocol so two workers never fight over the same test user or fixture. Each workflow skill still owns what gets done; the orchestration skill owns how sessions are launched, briefed, supervised and closed.
 
 Tell a newcomer two things. It is optional: it needs an orchestration runtime, and without one a workflow skill writes its launch file as before and you paste the lines into your own terminals. And it is not "faster QA": the dogfooded sprint (figures in ADR-0006) showed value in three sessions measuring the same environment from three angles, including a conductor instruction that a worker rightly refused because its own measurement disagreed.
 
-Visual deck: `packages/decks/orca-orchestration/how-it-works.es.html` (same opening protocol as every other deck, so ask first).
+Visual deck: https://upex-galaxy.github.io/agentic-qa-boilerplate/decks/user-level-skills/agent-orchestration/how-it-works.es.html (same opening protocol as every other deck, so ask first).
 
 ---
 
@@ -381,12 +381,13 @@ An installed skill needs a loader, or it should not be installed. An install tha
 | `grilling` | upex-galaxy/agentic-user-skills | `/shift-left-testing` (`shift-left-testing/SKILL.md`, `### The summary, the interview and the OK` of Phase 2 Refinement, step 1 of the interview), when a Story or plan has open questions to stress-test in rounds |
 | `domain-modeling` | upex-galaxy/agentic-user-skills | `/shift-left-testing` (`shift-left-testing/SKILL.md`, `### The summary, the interview and the OK` of Phase 2 Refinement, step 3 of the interview, and `shift-left-testing/references/refinement-playbook.md`), when an answer settles a domain term for `business-domain-context` |
 | `to-questionnaire` | upex-galaxy/agentic-user-skills | `/shift-left-testing` (`shift-left-testing/SKILL.md`, Phase 1 step 7, and the PO questionnaire step under `## With nobody at the keyboard`), when several open questions go to the PO or Dev as one questionnaire |
-| `retro` | upex-galaxy/agentic-user-skills | `/framework-development` (`framework-development/SKILL.md`, Phase 4 Archive, step 2) and `/orca-orchestration` (`orca-orchestration/references/coordinator-playbook.md`, the harvest at the close of a wave) |
-| `show-me-your-work` | upex-galaxy/agentic-user-skills | `/orca-orchestration` (`orca-orchestration/SKILL.md`, `## Decision log`), for a routine or a long-running worker |
+| `retro` | upex-galaxy/agentic-user-skills | `/framework-development` (`framework-development/SKILL.md`, Phase 4 Archive, step 2) and `/agent-orchestration` (its conductor cycle §9 Harvest, at the close of a wave) |
+| `show-me-your-work` | upex-galaxy/agentic-user-skills | `/agent-orchestration` (its `## Brakes and the decision log`), for a routine or a long-running worker |
 | `blast-radius` | upex-galaxy/agentic-user-skills | `/sprint-testing` (`sprint-testing/SKILL.md`, the bug risk score in the Bug mode branch; `sprint-testing/references/session-entry-points.md` Step 1.3; `sprint-testing/references/acceptance-test-planning.md` §0.2) and `/regression-testing` (`regression-testing/SKILL.md`, `## When to run each suite`, suite choice from a change). Not installed: the step runs inline |
 | `diagnosing-bugs` | upex-galaxy/agentic-user-skills | `/sprint-testing` (`sprint-testing/SKILL.md`, the bug retest Execute step; `sprint-testing/references/session-entry-points.md` Step 1.7) and `/regression-testing` (`regression-testing/SKILL.md` Step 4, and `regression-testing/references/failure-classification.md` §6), for diagnosis only. Not installed: the step runs inline |
 | `teach` | upex-galaxy/agentic-user-skills | user-invoked only. `/teach` is manual (`disable-model-invocation`), so no flow loads it; the teaching mode of this skill tells a person to type it for a multi-session course |
-| `orchestration.orchestrator_skills` | the orchestration binary | `/orca-orchestration`, ALONGSIDE it: the vendor owns the command grammar, the repo skill owns when and what |
+| `agent-orchestration` | upex-galaxy/agentic-user-skills | the `orca` row of `.agents/instructions/agent-tool-resolution.md` §6.5 and its `[ORCHESTRATION_TOOL]` row, before any orchestration command; `/sprint-conductor` boot Step 1. This repo's own fleet parts load beside it: `agentic-qa-core/references/fleet-launch-seam.md`, `fleet-provisioning.md`, `fleet-project-profile.md` |
+| `orchestration.orchestrator_skills` | the orchestration binary | `/agent-orchestration`, which loads the vendor guides by name: the vendor owns the command grammar, the user skill owns when and what |
 
 The project-level community skills (the `PROJECT_LEVEL_SKILLS` array of `cli/install.ts`) install into `.agents/skills/` and are not committed. `skill-creator`, among them, builds every skill this repo scaffolds: `/framework-development` loads it when the change is a skill, and `project-context` mode `context-skill` loads it for a consumer's `<aspect>-context`. Both scaffold from `agentic-qa-core/references/skill-scaffold.md`.
 
@@ -437,6 +438,6 @@ The tour has two waits: the one clarifying question, and the yes before a deck o
 - Run a regression suite: `/regression-testing`
 - Discover a brand-new target project: `/project-discovery`
 - Adapt the KATA test architecture to a target stack: `/test-framework-adaptation`
-- Launch or supervise several parallel sessions: `/orca-orchestration`
+- Launch or supervise several parallel sessions: `/agent-orchestration`
 
 The tour ends once the user knows which skill to call next, and the workflow skill takes over from there.
