@@ -353,3 +353,16 @@ updater:
   # Not a list of strings = ignored with a warning (fails toward MORE hooks). Read directly
   # by the updater (`readDeclinedHooks` in cli/lib/updater-settings.ts), skipped by vars:check.
   declined_hooks: [] # e.g. ['node "$CLAUDE_PROJECT_DIR/.agents/hooks/doc-contracts.mjs"']
+
+checks:
+  mcp_parity:
+    mode: strict
+    relay: {}
+    unrelayed: {}
+  hooks:
+    scope: full
+  vars_check:
+    skip_paths: []
+  docs_check:
+    include: []
+    exclude: []
