@@ -20,7 +20,7 @@ skills:
   - test-automation
   - framework-development
   - exploratory-testing
-  - orca-orchestration
+  - agent-orchestration
 
 tools: [Read, Glob, Grep, Bash, Write, Edit]
 
